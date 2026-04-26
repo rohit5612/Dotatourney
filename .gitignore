@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+dota/node_modules/
+server/node_modules/
+
+# Build output
+dist/
+dota/dist/
+build/
+coverage/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local database and temp files
+*.sqlite
+*.sqlite3
+tmp/
+temp/

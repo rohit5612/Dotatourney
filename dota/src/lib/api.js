@@ -1,0 +1,125 @@
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
+const TOKEN_KEY = "forge-admin-token";
+
+export function getAuthToken() {
+  try {
+    return window.localStorage.getItem(TOKEN_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+export function setAuthToken(token) {
+  try {
+    if (token) window.localStorage.setItem(TOKEN_KEY, token);
+    else window.localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // Ignore storage write errors.
+  }
+}
+
+async function request(path, options = {}) {
+  const token = getAuthToken();
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.message || "API request failed");
+  }
+  return response.json();
+}
+
+export const api = {
+  bootstrapState: () => request("/admin/bootstrap-state"),
+  bootstrapAdmin: (payload) =>
+    request("/admin/bootstrap", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  loginAdmin: (payload) =>
+    request("/admin/login", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  logoutAdmin: () =>
+    request("/admin/logout", {
+      method: "POST",
+    }),
+  getAdminMe: () => request("/admin/me"),
+  getAdminUsers: () => request("/admin/users"),
+  updateAdminStatus: (id, status) =>
+    request(`/admin/users/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+  createAdminInvite: (email) =>
+    request("/admin/invites", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+  getAdminInvite: (token) => request(`/admin/invites/${token}`),
+  registerAdminInvite: (token, payload) =>
+    request(`/admin/invites/${token}/register`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  getPublicTournament: (identifier = "the-forge") => request(`/public/tournaments/${identifier}`),
+  registerPlayer: (identifier, payload) =>
+    request(`/public/tournaments/${identifier}/register`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  createTournament: (payload) =>
+    request("/tournaments", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateTournament: (id, payload) =>
+    request(`/tournaments/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  getTournament: (id) => request(`/tournaments/${id}`),
+  saveTeams: (id, payload) =>
+    request(`/tournaments/${id}/teams`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  generateMatches: (id) =>
+    request(`/tournaments/${id}/generate`, {
+      method: "POST",
+    }),
+  recordResult: (id, matchId, winner) =>
+    request(`/tournaments/${id}/matches/${matchId}/result`, {
+      method: "POST",
+      body: JSON.stringify(typeof winner === "string" ? { winner } : winner),
+    }),
+  updateMatch: (id, matchId, payload) =>
+    request(`/tournaments/${id}/matches/${matchId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  saveSchedule: (id, schedule) =>
+    request(`/tournaments/${id}/schedule`, {
+      method: "POST",
+      body: JSON.stringify({ schedule }),
+    }),
+  exportTournament: (id) => request(`/tournaments/${id}/export`),
+  getRegistrations: (id) => request(`/tournaments/${id}/registrations`),
+  updateRegistration: (id, registrationId, payload) =>
+    request(`/tournaments/${id}/registrations/${registrationId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  importTournament: (id, data) =>
+    request(`/tournaments/${id}/import`, {
+      method: "POST",
+      body: JSON.stringify({ data }),
+    }),
+};
