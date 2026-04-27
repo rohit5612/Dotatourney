@@ -12,7 +12,11 @@ export function SchedulePage({ state, saveSchedule, saveCustomSchedule }) {
       return {
         id: slot?.id,
         matchId: match.id,
-        startAt: slot?.startAt ? new Date(slot.startAt).toISOString().slice(0, 16) : "",
+        startAt: slot?.startAt
+          ? new Date(slot.startAt).toISOString().slice(0, 16)
+          : match.slotAt
+            ? new Date(match.slotAt).toISOString().slice(0, 16)
+            : "",
         stream: slot?.stream || "Main",
         status: slot?.status || match.status || "upcoming",
         notes: slot?.notes || "",
@@ -31,7 +35,7 @@ export function SchedulePage({ state, saveSchedule, saveCustomSchedule }) {
     <div className="space-y-3 rounded-lg border border-border bg-card p-4">
       <div className="flex items-center justify-between">
         <h2 className="font-serif text-lg">Schedule</h2>
-        <button type="button" className="rounded-md bg-primary px-3 py-2 text-primary-foreground" onClick={saveSchedule}>
+        <button type="button" className="btn btn-primary" onClick={saveSchedule}>
           Build suggested schedule
         </button>
       </div>
@@ -68,7 +72,7 @@ export function SchedulePage({ state, saveSchedule, saveCustomSchedule }) {
       </div>
       <button
         type="button"
-        className="rounded-md bg-primary px-3 py-2 text-primary-foreground"
+        className="btn btn-primary"
         onClick={() =>
           saveCustomSchedule(
             editableSchedule

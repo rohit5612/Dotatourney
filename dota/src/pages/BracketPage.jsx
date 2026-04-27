@@ -1,19 +1,118 @@
 import { useState } from "react";
+import { BracketDiagram } from "../components/BracketDiagram";
 
-export function BracketPage({ state, activeTab, setActiveTab, groupedMatches, submitResult, updateMatch }) {
+export function BracketPage({
+  state,
+  activeTab,
+  setActiveTab,
+  groupedMatches,
+  submitResult,
+  updateMatch,
+  generateBracket,
+  setup,
+  rosters = [],
+  approvedRoster,
+  updateBracketVisibilityMode,
+  approveRoster,
+}) {
   const [scores, setScores] = useState({});
+  const [selectedRosterId, setSelectedRosterId] = useState("");
+  const [isSavingMode, setIsSavingMode] = useState(false);
   const totalMatches = (state?.matches || []).length;
   const completedMatches = (state?.matches || []).filter((match) => match.winner).length;
   const completionPct = totalMatches ? Math.round((completedMatches / totalMatches) * 100) : 0;
+  const mode = setup?.visibilityMode || "demo";
+  const requiredTeamCount = Number(setup?.teamCount) || state?.tournament?.team_count || 0;
+  const selectedRoster = rosters.find((roster) => roster.id === (selectedRosterId || approvedRoster?.id));
+  const approvedRosterSummary = rosters.find((roster) => roster.id === approvedRoster?.id);
+  const selectedRosterReady = selectedRoster && (!requiredTeamCount || selectedRoster.teamCount === requiredTeamCount);
+  const canGenerateTournament = mode === "demo" || (approvedRoster && (!requiredTeamCount || approvedRoster.teams?.length === requiredTeamCount));
+  const generationCopy =
+    mode === "demo"
+      ? `Demo mode will generate placeholder teams from the ${requiredTeamCount}-team ${setup?.format?.toUpperCase() || "configured"} format for the public bracket map.`
+      : "Tournament mode will generate real matches from the currently approved roster.";
+
+  async function changeMode(nextMode) {
+    setIsSavingMode(true);
+    try {
+      await updateBracketVisibilityMode?.(nextMode);
+    } finally {
+      setIsSavingMode(false);
+    }
+  }
+
+  function approveSelectedRoster() {
+    const rosterId = selectedRosterId || approvedRoster?.id;
+    if (!rosterId) return;
+    approveRoster?.(rosterId);
+  }
 
   return (
     <div className="space-y-4 rounded-lg border border-border bg-card p-4">
-      <div className="flex items-center justify-between">
-        <h2 className="font-serif text-lg">Bracket</h2>
-        <div className="text-sm text-muted-foreground">
-          {completedMatches}/{totalMatches} completed ({completionPct}%)
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-serif text-lg">Bracket</h2>
+          <div className="text-sm text-muted-foreground">
+            {completedMatches}/{totalMatches} completed ({completionPct}%)
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <select
+            className="rounded-md border border-input bg-background p-2 text-sm"
+            value={mode}
+            disabled={isSavingMode}
+            onChange={(event) => changeMode(event.target.value)}
+          >
+            <option value="demo">Demo mode</option>
+            <option value="tournament">Tournament mode</option>
+          </select>
+          <button type="button" className="btn btn-primary" onClick={generateBracket} disabled={!canGenerateTournament}>
+            Generate bracket
+          </button>
         </div>
       </div>
+      <section className="grid gap-3 rounded-lg border border-border bg-background p-3 md:grid-cols-[1.2fr_1fr]">
+        <div>
+          <div className="text-xs uppercase tracking-wider text-muted-foreground">Public bracket mode</div>
+          <p className="mt-1 text-sm text-muted-foreground">{generationCopy}</p>
+          {isSavingMode ? <p className="mt-2 text-xs text-secondary">Saving bracket mode...</p> : null}
+        </div>
+        <div className="space-y-2">
+          <div className="text-xs uppercase tracking-wider text-muted-foreground">Approved roster</div>
+          <div className="flex flex-wrap gap-2">
+            <select
+              className="min-w-64 rounded-md border border-input bg-card p-2 text-sm"
+              value={selectedRosterId || approvedRoster?.id || ""}
+              onChange={(event) => setSelectedRosterId(event.target.value)}
+            >
+              <option value="">Select roster</option>
+              {rosters.map((roster) => (
+                <option key={roster.id} value={roster.id}>
+                  {roster.name} - {roster.status} - {roster.teamCount} teams
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="btn btn-outline"
+              disabled={!selectedRoster || selectedRoster.status === "approved" || !selectedRosterReady}
+              onClick={approveSelectedRoster}
+            >
+              Approve selected
+            </button>
+          </div>
+          {approvedRoster ? (
+            <p className="text-sm text-secondary">
+              Active roster: {approvedRoster.name} ({approvedRoster.teams?.length || approvedRosterSummary?.teamCount || 0}/{requiredTeamCount} teams)
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">No approved roster yet. Tournament mode requires one before generation.</p>
+          )}
+          {selectedRoster && !selectedRosterReady ? (
+            <p className="text-xs text-destructive">Selected roster needs exactly {requiredTeamCount} teams before approval.</p>
+          ) : null}
+        </div>
+      </section>
       <div className="h-2 w-full overflow-hidden rounded bg-muted">
         <div className="h-full bg-primary transition-all" style={{ width: `${completionPct}%` }} />
       </div>
@@ -23,7 +122,7 @@ export function BracketPage({ state, activeTab, setActiveTab, groupedMatches, su
             key={tab.id}
             type="button"
             onClick={() => setActiveTab(tab.id)}
-            className={`rounded-md border px-3 py-1 text-sm ${activeTab === tab.id ? "border-primary text-primary" : "border-border text-muted-foreground"}`}
+            className={`btn btn-sm ${activeTab === tab.id ? "btn-primary" : "btn-outline"}`}
           >
             {tab.label}
           </button>
@@ -32,40 +131,14 @@ export function BracketPage({ state, activeTab, setActiveTab, groupedMatches, su
       <div className="rounded-md border border-border bg-background p-3 text-sm text-muted-foreground">
         Record winners to auto-propagate teams into downstream matches. Use tabs to manage upper/lower/finals or stage-specific group brackets.
       </div>
-      <div className="grid gap-3 md:grid-cols-2">
-        {(groupedMatches[activeTab] || []).map((match) => (
-          <div key={match.id} className="rounded-md border border-border bg-background p-3">
-            <div className="text-sm text-muted-foreground">Round {match.roundIndex + 1}</div>
-            <div className="mt-1 font-medium">{match.team1} vs {match.team2}</div>
-            <div className="mt-2 flex gap-2">
-              <input
-                className="w-full rounded-md border border-input bg-card p-1 text-xs"
-                placeholder="Score, e.g. 2-1"
-                value={scores[match.id] ?? match.meta?.score ?? ""}
-                onChange={(event) => setScores((prev) => ({ ...prev, [match.id]: event.target.value }))}
-              />
-              <select
-                className="rounded-md border border-input bg-card p-1 text-xs"
-                value={match.status || "upcoming"}
-                onChange={(event) => updateMatch?.(match.id, { status: event.target.value })}
-              >
-                <option value="upcoming">Upcoming</option>
-                <option value="live">Live</option>
-                <option value="finished">Finished</option>
-              </select>
-            </div>
-            <div className="mt-2 flex gap-2">
-              <button type="button" className="rounded-md border border-border px-2 py-1 text-xs" onClick={() => submitResult(match.id, { winner: match.team1, score: scores[match.id] ?? match.meta?.score ?? "" })}>
-                {match.team1} wins
-              </button>
-              <button type="button" className="rounded-md border border-border px-2 py-1 text-xs" onClick={() => submitResult(match.id, { winner: match.team2, score: scores[match.id] ?? match.meta?.score ?? "" })}>
-                {match.team2} wins
-              </button>
-            </div>
-            {match.winner ? <div className="mt-2 text-sm text-secondary">Winner: {match.winner}</div> : null}
-          </div>
-        ))}
-      </div>
+      <BracketDiagram
+        matches={groupedMatches[activeTab] || []}
+        editable
+        scores={scores}
+        setScores={setScores}
+        submitResult={submitResult}
+        updateMatch={updateMatch}
+      />
     </div>
   );
 }

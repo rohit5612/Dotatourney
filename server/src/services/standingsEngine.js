@@ -58,3 +58,22 @@ export function buildStandings(teams, matches, format) {
 
   return entries;
 }
+
+export function buildGroupedStandings(teams, matches, format) {
+  const grouped = {};
+  const leagueStages = new Set(["league", "group-stage", "group-a", "group-b", "swiss"]);
+
+  matches
+    .filter((match) => leagueStages.has(match.stageKey) || match.meta?.groupKey)
+    .forEach((match) => {
+      const key = match.meta?.groupKey ? `Group ${match.meta.groupKey}` : match.stageKey;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(match);
+    });
+
+  return Object.entries(grouped).map(([label, groupMatches]) => ({
+    id: label.toLowerCase().replaceAll(" ", "-"),
+    label,
+    rows: buildStandings(teams, groupMatches, format),
+  }));
+}

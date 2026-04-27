@@ -1,4 +1,21 @@
-import { formatDetails, seriesOptions, seriesRuleTemplates } from "../constants/tournament";
+import { useState } from "react";
+import { buildDefaultSeriesRules, formatDetails, seriesOptions, seriesRuleTemplates } from "../constants/tournament";
+
+function normalizeAnnouncements(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    return value
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+  }
+  if (value && typeof value === "object") {
+    return Object.values(value)
+      .map((item) => String(item || "").trim())
+      .filter(Boolean);
+  }
+  return [];
+}
 
 export function SetupPage({
   setup,
@@ -6,27 +23,140 @@ export function SetupPage({
   selectedFormat,
   onFormatChange,
   bootstrapTournament,
-  generateBracket,
   exportData,
   importData,
   state,
+  tournaments = [],
+  selectTournament,
+  publishTournament,
+  unpublishTournament,
+  deleteTournament,
+  startNewTournament,
 }) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const teamCount = Number(setup.teamCount) || 0;
   const isPowerOfTwo = teamCount > 0 && (teamCount & (teamCount - 1)) === 0;
   const estimatedLeagueMatches = Math.max(0, Math.floor((teamCount * (teamCount - 1)) / 2));
   const estimatedBracketRounds = teamCount > 1 ? Math.ceil(Math.log2(teamCount)) : 0;
   const currentSeriesTemplates = seriesRuleTemplates[setup.format] || [];
+  const announcementLines = normalizeAnnouncements(setup.announcements);
+
+  function resetDraft() {
+    setSetup({
+      name: "The Forge",
+      slug: "the-forge",
+      format: "dse",
+      seriesType: "bo3",
+      teamCount: 8,
+      seriesRules: buildDefaultSeriesRules("dse", "bo3"),
+      description: "",
+      prizePool: "",
+      entryFee: "",
+      startDate: "",
+      endDate: "",
+      registrationDeadline: "",
+      discordUrl: "https://discord.gg/NmC2Xqnb",
+      rulebook: "",
+      announcements: [],
+      visibilityMode: "demo",
+      status: "draft",
+    });
+  }
+
+  async function saveDraft() {
+    setIsSaving(true);
+    try {
+      await bootstrapTournament();
+      setIsModalOpen(false);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function editTournament(id) {
+    await selectTournament?.(id);
+    setIsModalOpen(true);
+  }
+
+  function confirmDelete(tournament) {
+    const confirmed = window.confirm(`Delete draft tournament "${tournament.name}"? This will archive the draft and remove it from this list.`);
+    if (confirmed) deleteTournament?.(tournament.id);
+  }
 
   return (
-    <div className="space-y-4 rounded-lg border border-border bg-card p-4">
-      <div>
-        <h2 className="font-serif text-lg tracking-wide">Tournament Setup</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Configure event basics, choose a format, and generate a bracket structure tailored for your tournament flow.
-        </p>
-      </div>
+    <div className="space-y-4">
+      <section className="rounded-lg border border-border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-serif text-lg tracking-wide">Tournament Setup</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Create draft tournaments, edit settings, and publish exactly one tournament to the public site.</p>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              startNewTournament?.();
+              resetDraft();
+              setIsModalOpen(true);
+            }}
+          >
+            Create tournament
+          </button>
+        </div>
+      </section>
 
-      <div className="grid gap-3 md:grid-cols-5">
+      <section className="space-y-2 rounded-lg border border-border bg-card p-4">
+        <h3 className="font-serif text-lg">Drafts and tournaments</h3>
+        {(tournaments || []).map((tournament) => (
+          <div key={tournament.id} className="grid gap-3 rounded-md border border-border bg-background p-3 text-sm lg:grid-cols-[1fr_auto]">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium">{tournament.name}</span>
+                <span className="rounded border border-border px-2 py-0.5 text-xs capitalize text-muted-foreground">{tournament.status}</span>
+                {tournament.is_published ? <span className="rounded bg-primary px-2 py-0.5 text-xs text-primary-foreground">Published</span> : null}
+              </div>
+              <div className="mt-1 text-muted-foreground">
+                {formatDetails[tournament.format]?.name || tournament.format} - {tournament.team_count} teams - Starts {tournament.start_date || "TBA"}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className="btn btn-outline btn-sm" onClick={() => editTournament(tournament.id)}>
+                Edit
+              </button>
+              <button type="button" className="btn btn-outline btn-sm" onClick={() => publishTournament?.(tournament.id)}>
+                Approve + publish
+              </button>
+              {tournament.is_published ? (
+                <button type="button" className="btn btn-outline btn-sm" onClick={() => unpublishTournament?.(tournament.id)}>
+                  Unpublish
+                </button>
+              ) : null}
+              {tournament.status === "draft" && !tournament.is_published ? (
+                <button type="button" className="btn btn-destructive-outline btn-sm" onClick={() => confirmDelete(tournament)}>
+                  Delete draft
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ))}
+        {!tournaments?.length ? <p className="text-sm text-muted-foreground">No tournament drafts yet. Create one to begin.</p> : null}
+      </section>
+
+      {isModalOpen ? (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 p-4">
+          <div className="mx-auto max-w-6xl space-y-4 rounded-lg border border-border bg-card p-4 shadow-2xl">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="font-serif text-xl">Tournament draft</h3>
+                <p className="text-sm text-muted-foreground">Saving keeps the tournament as a draft until you approve and publish it.</p>
+              </div>
+              <button type="button" className="btn btn-outline btn-sm" onClick={() => setIsModalOpen(false)}>
+                Close
+              </button>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-5">
         <input
           className="rounded-md border border-input bg-background p-2"
           value={setup.name}
@@ -87,7 +217,7 @@ export function SetupPage({
         </select>
         <button
           type="button"
-          className="rounded-md border border-border bg-background px-3 py-2 text-sm"
+          className="btn btn-outline"
           onClick={() =>
             setSetup((prev) => ({
               ...prev,
@@ -97,9 +227,9 @@ export function SetupPage({
         >
           Reset to 8 teams
         </button>
-      </div>
+            </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-2">
         <textarea
           className="min-h-28 rounded-md border border-input bg-background p-2"
           value={setup.description || ""}
@@ -120,43 +250,41 @@ export function SetupPage({
         />
         <input
           className="rounded-md border border-input bg-background p-2"
+          value={setup.entryFee || ""}
+          onChange={(event) => setSetup((prev) => ({ ...prev, entryFee: event.target.value }))}
+          placeholder="Entry fee"
+        />
+        <input
+          className="rounded-md border border-input bg-background p-2"
           value={setup.discordUrl || ""}
           onChange={(event) => setSetup((prev) => ({ ...prev, discordUrl: event.target.value }))}
           placeholder="Discord invite URL"
         />
-        <input
-          type="date"
-          className="rounded-md border border-input bg-background p-2"
-          value={setup.startDate || ""}
-          onChange={(event) => setSetup((prev) => ({ ...prev, startDate: event.target.value }))}
-        />
-        <input
-          type="date"
-          className="rounded-md border border-input bg-background p-2"
-          value={setup.endDate || ""}
-          onChange={(event) => setSetup((prev) => ({ ...prev, endDate: event.target.value }))}
-        />
-        <input
-          type="datetime-local"
-          className="rounded-md border border-input bg-background p-2"
-          value={setup.registrationDeadline || ""}
-          onChange={(event) => setSetup((prev) => ({ ...prev, registrationDeadline: event.target.value }))}
-        />
-        <select
-          className="rounded-md border border-input bg-background p-2"
-          value={setup.visibilityMode || "demo"}
-          onChange={(event) => setSetup((prev) => ({ ...prev, visibilityMode: event.target.value }))}
-        >
-          <option value="demo">Demo mode</option>
-          <option value="tournament">Tournament mode</option>
-        </select>
-      </div>
+        <label className="text-sm text-muted-foreground">
+          Start date
+          <input
+            type="date"
+            className="mt-1 w-full rounded-md border border-input bg-background p-2 text-foreground"
+            value={setup.startDate || ""}
+            onChange={(event) => setSetup((prev) => ({ ...prev, startDate: event.target.value }))}
+          />
+        </label>
+        <label className="text-sm text-muted-foreground">
+          Finish date
+          <input
+            type="date"
+            className="mt-1 w-full rounded-md border border-input bg-background p-2 text-foreground"
+            value={setup.endDate || ""}
+            onChange={(event) => setSetup((prev) => ({ ...prev, endDate: event.target.value }))}
+          />
+        </label>
+            </div>
 
-      <label className="block text-sm">
+            <label className="block text-sm">
         Public announcements, one per line
         <textarea
           className="mt-1 min-h-24 w-full rounded-md border border-input bg-background p-2"
-          value={(setup.announcements || []).join("\n")}
+          value={announcementLines.join("\n")}
           onChange={(event) =>
             setSetup((prev) => ({
               ...prev,
@@ -164,9 +292,9 @@ export function SetupPage({
             }))
           }
         />
-      </label>
+            </label>
 
-      <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-3">
         <div className="rounded-md border border-border bg-background p-3">
           <div className="text-xs uppercase tracking-wider text-muted-foreground">Structure hint</div>
           <div className="mt-1 text-sm">
@@ -183,9 +311,9 @@ export function SetupPage({
           <div className="text-xs uppercase tracking-wider text-muted-foreground">Bracket depth</div>
           <div className="mt-1 text-sm">~{estimatedBracketRounds} rounds to crown a winner</div>
         </div>
-      </div>
+            </div>
 
-      <div>
+            <div>
         <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">Format Library</p>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {Object.entries(formatDetails).map(([key, format]) => {
@@ -197,10 +325,10 @@ export function SetupPage({
                 onClick={() => {
                   onFormatChange(key);
                 }}
-                className={`rounded-lg border p-3 text-left transition ${
+                className={`rounded-lg border p-3 text-left transition hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   active
                     ? "border-primary bg-primary/10"
-                    : "border-border bg-background hover:border-primary/50"
+                    : "border-border bg-background hover:border-primary hover:bg-card"
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -215,16 +343,16 @@ export function SetupPage({
             );
           })}
         </div>
-      </div>
+            </div>
 
-      <div className="rounded-lg border border-border bg-background p-3">
+            <div className="rounded-lg border border-border bg-background p-3">
         <p className="text-sm text-muted-foreground">
           <span className="font-medium text-foreground">Why format choice matters:</span> it impacts bracket fairness, upset probability,
           stream pacing, and how meaningful standings become across rounds.
         </p>
-      </div>
+            </div>
 
-      <div className="rounded-lg border border-border bg-background p-3">
+            <div className="rounded-lg border border-border bg-background p-3">
         <div className="mb-2 flex items-center justify-between">
           <p className="text-sm font-medium">Series setup by stage</p>
           <p className="text-xs text-muted-foreground">
@@ -257,36 +385,36 @@ export function SetupPage({
             </label>
           ))}
         </div>
-      </div>
+            </div>
 
-      <div className="rounded-lg border border-border bg-background p-3 text-sm text-muted-foreground">
+            <div className="rounded-lg border border-border bg-background p-3 text-sm text-muted-foreground">
         <p>
           <span className="font-medium text-foreground">Operational note:</span> these series rules are stored with tournament config and are meant to drive match
           pacing, stream time planning, and stage difficulty. You can tune them before each major phase.
         </p>
-      </div>
+            </div>
 
-      {state?.tournament?.id ? (
+            {state?.tournament?.id ? (
         <div className="rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">
           Tournament ID: <span className="font-mono text-foreground">{state.tournament.id}</span>
         </div>
-      ) : null}
+            ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        <button type="button" className="rounded-md bg-primary px-4 py-2 text-primary-foreground" onClick={bootstrapTournament}>
-          Save setup
+            <div className="flex flex-wrap gap-2">
+        <button type="button" className="btn btn-primary" onClick={saveDraft} disabled={isSaving}>
+          {isSaving ? "Saving..." : "Save draft"}
         </button>
-        <button type="button" className="rounded-md border border-border px-4 py-2" onClick={generateBracket}>
-          Generate bracket
-        </button>
-        <button type="button" className="rounded-md border border-border px-4 py-2" onClick={exportData}>
+        <button type="button" className="btn btn-outline" onClick={exportData}>
           Export JSON
         </button>
-        <label className="rounded-md border border-border px-4 py-2">
+        <label className="btn btn-outline cursor-pointer">
           Import JSON
           <input type="file" accept="application/json" className="hidden" onChange={importData} />
         </label>
-      </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

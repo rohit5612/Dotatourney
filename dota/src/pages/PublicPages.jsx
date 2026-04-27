@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AppFooter } from "../components/AppFooter";
+import { BracketDiagram } from "../components/BracketDiagram";
 import { roles } from "../constants/tournament";
 import { api } from "../lib/api";
 
 const tournamentSlug = "the-forge";
 const defaultTournamentStart = "2026-05-22T00:00:00+05:30";
+const discordInviteUrl = "https://discord.gg/NmC2Xqnb";
 
 function formatDate(value) {
   if (!value) return "TBA";
@@ -64,6 +67,7 @@ function PublicHeader({ path, navigate }) {
     ["/tournament", "Tournament"],
     ["/schedule", "Bracket & schedule"],
     ["/register", "Register"],
+    ["/rules", "Rules"],
   ];
 
   useEffect(() => {
@@ -81,12 +85,12 @@ function PublicHeader({ path, navigate }) {
     >
       <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-3 px-4 py-3 md:grid-cols-[1fr_auto_1fr] md:py-4">
         <button type="button" className="group flex w-fit items-center gap-3 text-left transition-transform duration-300 hover:-translate-y-0.5" onClick={() => navigate("/")}>
-          <span className="grid h-10 w-10 place-items-center rounded-xl border border-primary/40 bg-primary/10 font-serif text-lg text-primary transition-colors duration-300 group-hover:bg-primary group-hover:text-primary-foreground">
-            F
+          <span className="grid h-10 w-10 place-items-center rounded-xl border border-primary/40 bg-primary/10 p-2 transition-colors duration-300 group-hover:bg-primary/20">
+            <img className="h-full w-full object-contain" src="/dota.svg" alt="The Forge logo" />
           </span>
           <span>
             <h1 className="font-serif text-xl tracking-wide text-primary transition-colors duration-300 group-hover:text-red-400">The Forge</h1>
-            <p className="text-xs text-muted-foreground transition-colors duration-300 group-hover:text-foreground">Dota tournament platform</p>
+            <p className="text-xs text-muted-foreground transition-colors duration-300 group-hover:text-foreground">The Dota 2 tournament</p>
           </span>
         </button>
         <nav
@@ -126,10 +130,12 @@ function PublicHeader({ path, navigate }) {
 }
 
 function EventShell({ path, navigate, children }) {
+  const contentClass = path === "/schedule" ? "mx-auto max-w-7xl space-y-6 px-4 pb-10 pt-28" : "mx-auto max-w-6xl space-y-6 px-4 pb-10 pt-28";
   return (
     <main className="min-h-screen bg-background text-foreground">
       <PublicHeader path={path} navigate={navigate} />
-      <section className={path === "/" ? "space-y-20" : "mx-auto max-w-6xl space-y-6 px-4 pb-10 pt-28"}>{children}</section>
+      <section className={path === "/" ? "space-y-20" : contentClass}>{children}</section>
+      <AppFooter />
     </main>
   );
 }
@@ -156,7 +162,15 @@ export function PublicApp({ path, navigate }) {
   if (path === "/register") {
     return (
       <EventShell path={path} navigate={navigate}>
-        <RegistrationPage event={event} setEvent={setEvent} message={message} setMessage={setMessage} />
+        <RegistrationPage event={event} navigate={navigate} message={message} setMessage={setMessage} />
+      </EventShell>
+    );
+  }
+
+  if (path === "/rules") {
+    return (
+      <EventShell path={path} navigate={navigate}>
+        <GeneralRulesPage />
       </EventShell>
     );
   }
@@ -187,12 +201,16 @@ export function PublicApp({ path, navigate }) {
 function LandingPage({ event, navigate, message }) {
   const tournament = event?.tournament;
   const announcements = normalizeAnnouncements(tournament?.announcements);
+  const discordUrl = tournament?.discord_url || discordInviteUrl;
+  const formatLabel = `${getFormatName(tournament?.format)} ${tournament?.team_count || "TBA"} Teams`;
   return (
     <>
       {message ? <p className="mx-auto mt-4 max-w-6xl rounded-md border border-border bg-card p-2 text-sm text-secondary">{message}</p> : null}
       <section className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-16 md:py-0">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,#b8141433_0%,transparent_55%)]" />
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,transparent_0%,#09090c_100%)]" />
+        <video className="absolute inset-0 h-full w-full object-cover" src="/herobg.mp4" autoPlay muted loop playsInline aria-hidden="true" />
+        <div className="pointer-events-none absolute inset-0 bg-black/30" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,#b8141455_0%,transparent_55%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(9,9,12,0.35)_0%,#09090c_100%)]" />
         <div className="relative mx-auto flex w-full max-w-4xl flex-col items-center gap-6 text-center">
           <p className="text-xs uppercase tracking-[0.25em] text-secondary sm:tracking-[0.35em]">Dota 2 community tournament</p>
           <h2 className="font-serif text-5xl tracking-wide text-primary sm:text-6xl md:text-7xl">The Forge</h2>
@@ -204,14 +222,12 @@ function LandingPage({ event, navigate, message }) {
             <AnimatedPrizePool value={tournament?.prize_pool || "TBA"} />
           </div>
           <div className="flex flex-wrap items-center justify-center gap-3">
-            <button type="button" className="w-full rounded-md bg-primary px-6 py-3 text-base text-primary-foreground shadow-lg sm:w-auto" onClick={() => navigate("/register")}>
+            <button type="button" className="btn btn-primary w-full px-6 py-3 text-base shadow-lg sm:w-auto" onClick={() => navigate("/register")}>
               Register now
             </button>
-            {tournament?.discord_url ? (
-              <a className="w-full rounded-md border border-border px-6 py-3 text-center text-base sm:w-auto" href={tournament.discord_url} target="_blank" rel="noreferrer">
-                Join Discord
-              </a>
-            ) : null}
+            <a className="btn btn-outline w-full px-6 py-3 text-base sm:w-auto" href={discordUrl} target="_blank" rel="noreferrer">
+              Join Discord
+            </a>
           </div>
         </div>
       </section>
@@ -227,8 +243,8 @@ function LandingPage({ event, navigate, message }) {
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Metric label="Dates" value={`${formatDate(tournament?.start_date)} - ${formatDate(tournament?.end_date)}`} />
-            <Metric label="Format" value={getFormatName(tournament?.format)} />
-            <Metric label="Teams" value={tournament?.team_count || "TBA"} />
+            <Metric label="Format" value={formatLabel} />
+            <Metric label="Entry fee" value={tournament?.entry_fee || "TBA"} />
           </div>
         </section>
       </RevealSection>
@@ -300,18 +316,9 @@ function LandingPage({ event, navigate, message }) {
             <p className="mx-auto mt-2 max-w-2xl text-muted-foreground">
               Match-day communication, payment confirmation, announcements, and support happen in our Discord server.
             </p>
-            {tournament?.discord_url ? (
-              <a
-                className="mt-6 inline-flex rounded-md bg-primary px-6 py-3 text-primary-foreground"
-                href={tournament.discord_url}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Join Discord
-              </a>
-            ) : (
-              <p className="mt-6 text-sm text-muted-foreground">Discord link will appear once configured by admins.</p>
-            )}
+            <a className="btn btn-primary mt-6 px-6 py-3" href={discordUrl} target="_blank" rel="noreferrer">
+              Join Discord
+            </a>
           </div>
         </section>
       </RevealSection>
@@ -414,8 +421,8 @@ function TournamentInfo({ event, message, compact = false }) {
           {tournament?.description || "Tournament details are being forged. Check Discord for live communications."}
         </p>
         <div className="grid gap-3 md:grid-cols-3">
-          <Metric label="Format" value={tournament?.format?.toUpperCase() || "TBA"} />
-          <Metric label="Teams" value={tournament?.team_count || "TBA"} />
+          <Metric label="Format" value={`${getFormatName(tournament?.format)} ${tournament?.team_count || "TBA"} Teams`} />
+          <Metric label="Entry fee" value={tournament?.entry_fee || "TBA"} />
           <Metric label="Registration closes" value={formatDate(tournament?.registration_deadline)} />
         </div>
       </section>
@@ -475,7 +482,7 @@ function PublicSchedule({ event, message }) {
     });
     return groups;
   }, [event]);
-  const activeTab = event?.tabs?.[0]?.id;
+  const stageTabs = event?.tabs?.length ? event.tabs : Object.keys(groupedMatches).map((id) => ({ id, label: id }));
 
   return (
     <div className="space-y-4">
@@ -488,15 +495,30 @@ function PublicSchedule({ event, message }) {
             : "Live tournament mode is active. Match names, scores, and standings reflect the current tournament state."}
         </p>
       </section>
-      <div className="grid gap-3 md:grid-cols-2">
-        {(groupedMatches[activeTab] || event?.matches || []).map((match) => (
-          <div key={match.id} className="rounded-md border border-border bg-card p-3">
-            <div className="text-xs uppercase tracking-wider text-muted-foreground">{match.stageKey} round {match.roundIndex + 1}</div>
-            <div className="mt-1 font-medium">{match.team1} vs {match.team2}</div>
-            <div className="mt-1 text-sm text-muted-foreground">{match.meta?.score ? `Score: ${match.meta.score}` : "Score TBA"}</div>
-            {match.winner ? <div className="mt-1 text-sm text-secondary">Winner: {match.winner}</div> : null}
+      {(event?.groupedStandings || []).length ? (
+        <section className="space-y-3 rounded-lg border border-border bg-card p-4">
+          <h3 className="font-serif text-lg">Group standings</h3>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {event.groupedStandings.map((group) => (
+              <StandingsTable key={group.id} title={group.label} rows={group.rows} />
+            ))}
           </div>
-        ))}
+        </section>
+      ) : null}
+      <div className="space-y-6">
+        {stageTabs.map((tab) => {
+          const matches = groupedMatches[tab.id] || [];
+          if (!matches.length) return null;
+          return (
+            <section key={tab.id} className="space-y-3 rounded-lg border border-border bg-card p-4">
+              <div>
+                <h3 className="font-serif text-xl">{tab.label}</h3>
+                <p className="text-sm text-muted-foreground">Best-of labels and match state are shown on each card.</p>
+              </div>
+              <BracketDiagram matches={matches} />
+            </section>
+          );
+        })}
       </div>
       <section className="space-y-2 rounded-lg border border-border bg-card p-4">
         <h3 className="font-serif text-lg">Scheduled matches</h3>
@@ -515,18 +537,70 @@ function PublicSchedule({ event, message }) {
   );
 }
 
-function RegistrationPage({ event, setMessage }) {
+function StandingsTable({ title, rows = [] }) {
+  return (
+    <div className="overflow-hidden rounded-md border border-border bg-background">
+      <div className="border-b border-border px-3 py-2 font-medium">{title}</div>
+      <div className="grid grid-cols-[1fr_3rem_3rem_3rem] gap-2 px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground">
+        <span>Team</span>
+        <span>W</span>
+        <span>L</span>
+        <span>P</span>
+      </div>
+      {rows.map((row) => (
+        <div key={row.team} className="grid grid-cols-[1fr_3rem_3rem_3rem] gap-2 border-t border-border px-3 py-2 text-sm">
+          <span className="truncate">{row.team}</span>
+          <span>{row.wins}</span>
+          <span>{row.losses}</span>
+          <span>{row.played}</span>
+        </div>
+      ))}
+      {!rows.length ? <p className="border-t border-border px-3 py-2 text-sm text-muted-foreground">No results yet.</p> : null}
+    </div>
+  );
+}
+
+function GeneralRulesPage() {
+  return (
+    <section className="space-y-4 rounded-2xl border border-border bg-card p-6">
+      <div>
+        <p className="text-xs uppercase tracking-widest text-secondary">The Forge</p>
+        <h2 className="font-serif text-3xl text-primary">General Rules & Player Conduct</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          These rules cover player behavior, eligibility, communication, and fair-play expectations for every Forge event.
+        </p>
+      </div>
+      {[
+        ["Eligibility", "Players must submit accurate identity, Discord, Steam, and contact details. Admins may reject unverifiable registrations."],
+        ["Conduct", "Harassment, hate speech, threats, griefing, abuse, or targeted toxicity can lead to removal without refund."],
+        ["Fair Play", "Cheating, account sharing, smurfing, match fixing, stream sniping, or exploiting tournament systems is prohibited."],
+        ["Communication", "Players must be reachable through Discord during tournament operations and must follow admin instructions."],
+        ["Payments", "Entry/payment proof must be valid and reviewable by admins. Fraudulent screenshots or chargebacks may lead to bans."],
+        ["Admin Decisions", "Admins may make final calls on disputes, scheduling, rule interpretation, and emergency tournament operations."],
+      ].map(([title, body]) => (
+        <div key={title} className="rounded-lg border border-border bg-background p-4">
+          <h3 className="font-serif text-lg">{title}</h3>
+          <p className="mt-1 text-sm text-muted-foreground">{body}</p>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function RegistrationPage({ event, navigate, message, setMessage }) {
+  const discordUrl = event?.tournament?.discord_url || discordInviteUrl;
   const [form, setForm] = useState({
     name: "",
-    location: "",
+    phoneNumber: "",
     roles: ["Carry"],
     mmr: "",
     steamName: "",
     steamProfile: "",
     discordHandle: "",
-    notes: "",
+    paymentScreenshot: "",
   });
   const [submitted, setSubmitted] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   function toggleRole(role) {
     setForm((prev) => ({
@@ -535,29 +609,60 @@ function RegistrationPage({ event, setMessage }) {
     }));
   }
 
-  async function submit(eventSubmit) {
+  async function readScreenshot(file) {
+    if (!file) {
+      setForm((prev) => ({ ...prev, paymentScreenshot: "" }));
+      return;
+    }
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    setForm((prev) => ({ ...prev, paymentScreenshot: dataUrl }));
+  }
+
+  function submit(eventSubmit) {
     eventSubmit.preventDefault();
+    if (!form.roles.length) {
+      setMessage("Select at least one role.");
+      return;
+    }
+    if (!form.paymentScreenshot) {
+      setMessage("Upload a payment screenshot before submitting.");
+      return;
+    }
+    setShowConfirm(true);
+  }
+
+  async function confirmSubmit() {
     const payload = {
       ...form,
-      mmr: form.mmr ? Number(form.mmr) : null,
+      mmr: Number(form.mmr),
     };
     await api.registerPlayer(tournamentSlug, payload);
     setSubmitted(true);
+    setShowConfirm(false);
     setMessage("Registration submitted. Complete payment in Discord and admins will approve it manually.");
   }
 
   return (
-    <form className="space-y-4 rounded-lg border border-border bg-card p-4" onSubmit={submit}>
+    <form className="space-y-4 rounded-lg border border-border bg-muted/50 p-4 shadow-xl" onSubmit={submit}>
       <div>
         <h2 className="font-serif text-2xl">Register for {event?.tournament?.name || "The Forge"}</h2>
-        <p className="text-sm text-muted-foreground">Submit accurate Steam details so admins can verify the same player is competing throughout.</p>
+        <p className="text-sm text-muted-foreground">All fields are mandatory. Submit accurate player, Steam, Discord, and payment details.</p>
+        <a className="btn btn-outline mt-3" href={discordUrl} target="_blank" rel="noreferrer">
+          Join Discord for payment and match updates
+        </a>
       </div>
+      {message ? <p className="rounded-md border border-border bg-background p-3 text-sm text-secondary">{message}</p> : null}
       {submitted ? <p className="rounded-md border border-border bg-background p-3 text-sm text-secondary">Registration received.</p> : null}
       <div className="grid gap-3 md:grid-cols-2">
-        <Input label="Player name" value={form.name} onChange={(name) => setForm((prev) => ({ ...prev, name }))} required />
-        <Input label="Location / place" value={form.location} onChange={(location) => setForm((prev) => ({ ...prev, location }))} />
-        <Input label="MMR" type="number" value={form.mmr} onChange={(mmr) => setForm((prev) => ({ ...prev, mmr }))} />
-        <Input label="Discord handle" value={form.discordHandle} onChange={(discordHandle) => setForm((prev) => ({ ...prev, discordHandle }))} />
+        <Input label="Name" value={form.name} onChange={(name) => setForm((prev) => ({ ...prev, name }))} required />
+        <Input label="Phone number" type="tel" value={form.phoneNumber} onChange={(phoneNumber) => setForm((prev) => ({ ...prev, phoneNumber }))} required />
+        <Input label="Discord ID" value={form.discordHandle} onChange={(discordHandle) => setForm((prev) => ({ ...prev, discordHandle }))} required />
+        <Input label="MMR" type="number" value={form.mmr} onChange={(mmr) => setForm((prev) => ({ ...prev, mmr }))} required />
         <Input label="Steam name" value={form.steamName} onChange={(steamName) => setForm((prev) => ({ ...prev, steamName }))} required />
         <Input label="Steam ID / profile link" value={form.steamProfile} onChange={(steamProfile) => setForm((prev) => ({ ...prev, steamProfile }))} required />
       </div>
@@ -569,7 +674,7 @@ function RegistrationPage({ event, setMessage }) {
               key={role}
               type="button"
               onClick={() => toggleRole(role)}
-              className={`rounded-md border px-3 py-1 text-sm ${form.roles.includes(role) ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}
+              className={`btn btn-sm ${form.roles.includes(role) ? "btn-primary" : "btn-outline"}`}
             >
               {role}
             </button>
@@ -577,12 +682,43 @@ function RegistrationPage({ event, setMessage }) {
         </div>
       </div>
       <label className="block text-sm">
-        Notes
-        <textarea className="mt-1 min-h-24 w-full rounded-md border border-input bg-background p-2" value={form.notes} onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))} />
+        Payment screenshot
+        <input
+          required
+          type="file"
+          accept="image/*"
+          className="mt-1 w-full rounded-md border border-input bg-background p-2"
+          onChange={(event) => readScreenshot(event.target.files?.[0])}
+        />
       </label>
-      <button type="submit" className="rounded-md bg-primary px-4 py-2 text-primary-foreground">
+      {form.paymentScreenshot ? (
+        <img src={form.paymentScreenshot} alt="Payment screenshot preview" className="max-h-48 rounded-md border border-border object-contain" />
+      ) : null}
+      <button type="submit" className="btn btn-primary">
         Submit registration
       </button>
+      {showConfirm ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-lg space-y-4 rounded-lg border border-border bg-card p-5 shadow-2xl">
+            <h3 className="font-serif text-xl text-primary">Confirm registration</h3>
+            <p className="text-sm text-muted-foreground">
+              On clicking submit, you agree to have read and comply with{" "}
+              <button type="button" className="text-primary underline" onClick={() => navigate("/rules")}>
+                Rules of The Forge
+              </button>
+              .
+            </p>
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn btn-outline" onClick={() => setShowConfirm(false)}>
+                Cancel
+              </button>
+              <button type="button" className="btn btn-primary" onClick={confirmSubmit}>
+                Submit and agree
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </form>
   );
 }

@@ -72,7 +72,7 @@ export function AdminAuthPage({ onAuthed, inviteToken }) {
           Password
           <input className="mt-1 w-full rounded-md border border-input bg-background p-2" type="password" value={form.password} onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))} required minLength={8} />
         </label>
-        <button type="submit" className="w-full rounded-md bg-primary px-4 py-2 text-primary-foreground">
+        <button type="submit" className="btn btn-primary btn-block">
           {title}
         </button>
       </form>

@@ -58,7 +58,7 @@ export function AdminUsersPage({ currentUser }) {
         <h2 className="font-serif text-lg">Invite admin</h2>
         <div className="mt-3 flex flex-wrap gap-2">
           <input className="min-w-72 rounded-md border border-input bg-background p-2" type="email" placeholder="admin@email.com" value={email} onChange={(event) => setEmail(event.target.value)} required />
-          <button type="submit" className="rounded-md bg-primary px-4 py-2 text-primary-foreground">
+          <button type="submit" className="btn btn-primary">
             Generate invite
           </button>
         </div>
@@ -79,10 +79,10 @@ export function AdminUsersPage({ currentUser }) {
             </div>
             {user.role !== "superadmin" ? (
               <div className="flex gap-2">
-                <button type="button" className="rounded-md border border-border px-3 py-1" onClick={() => updateStatus(user.id, "approved")}>
+                <button type="button" className="btn btn-outline btn-sm" onClick={() => updateStatus(user.id, "approved")}>
                   Approve
                 </button>
-                <button type="button" className="rounded-md border border-border px-3 py-1" onClick={() => updateStatus(user.id, "revoked")}>
+                <button type="button" className="btn btn-destructive-outline btn-sm" onClick={() => updateStatus(user.id, "revoked")}>
                   Revoke
                 </button>
               </div>

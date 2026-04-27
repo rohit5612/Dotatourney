@@ -1,0 +1,3 @@
+ALTER TABLE player_registrations
+ADD COLUMN IF NOT EXISTS phone_number TEXT NOT NULL DEFAULT '',
+ADD COLUMN IF NOT EXISTS payment_screenshot TEXT NOT NULL DEFAULT '';

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { AdminAuthPage } from "./pages/AdminAuthPage";
 import { AdminUsersPage } from "./pages/AdminUsersPage";
+import { AppFooter } from "./components/AppFooter";
 import { AppHeader } from "./components/AppHeader";
-import { buildDefaultSeriesRules, pages, roles } from "./constants/tournament";
+import { buildDefaultSeriesRules, roles } from "./constants/tournament";
 import { api, getAuthToken, setAuthToken } from "./lib/api";
 import { BracketPage } from "./pages/BracketPage";
 import { PublicApp } from "./pages/PublicPages";
@@ -11,11 +12,11 @@ import { SchedulePage } from "./pages/SchedulePage";
 import { SetupPage } from "./pages/SetupPage";
 import { StandingsPage } from "./pages/StandingsPage";
 import { TeamsPage } from "./pages/TeamsPage";
-import { createId } from "./utils/client";
+import { createId, getInitialDarkMode } from "./utils/client";
 
 function App() {
   const [path, setPath] = useState(() => window.location.pathname);
-  const [activePage, setActivePage] = useState("setup");
+  const [activePage, setActivePage] = useState("registrations");
   const [tournamentId, setTournamentId] = useState("");
   const [state, setState] = useState(null);
   const [activeTab, setActiveTab] = useState("upper");
@@ -29,21 +30,44 @@ function App() {
     slug: "the-forge",
     description: "",
     prizePool: "",
+    entryFee: "",
     startDate: "",
     endDate: "",
     registrationDeadline: "",
-    discordUrl: "",
+    discordUrl: "https://discord.gg/NmC2Xqnb",
     rulebook: "",
     announcements: [],
     visibilityMode: "demo",
   });
   const [teamDraft, setTeamDraft] = useState([]);
   const [poolDraft, setPoolDraft] = useState([]);
+  const [rosters, setRosters] = useState([]);
+  const [approvedRoster, setApprovedRoster] = useState(null);
+  const [activeRosterId, setActiveRosterId] = useState("");
+  const [isTeamPaneActive, setIsTeamPaneActive] = useState(false);
   const [registrations, setRegistrations] = useState([]);
+  const [tournamentList, setTournamentList] = useState([]);
   const [adminUser, setAdminUser] = useState(null);
   const [newCaptain, setNewCaptain] = useState({ captain: "", team: "" });
   const [newPlayer, setNewPlayer] = useState({ name: "", role: "Carry" });
+  const [darkMode, setDarkMode] = useState(getInitialDarkMode);
   const [message, setMessage] = useState("");
+
+  function normalizeAnnouncements(value) {
+    if (Array.isArray(value)) return value;
+    if (typeof value === "string") {
+      return value
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+    }
+    if (value && typeof value === "object") {
+      return Object.values(value)
+        .map((item) => String(item || "").trim())
+        .filter(Boolean);
+    }
+    return [];
+  }
 
   function navigate(nextPath) {
     window.history.pushState({}, "", nextPath);
@@ -57,8 +81,17 @@ function App() {
   }, []);
 
   useEffect(() => {
-    document.documentElement.classList.add("dark");
-  }, []);
+    if (!path.startsWith("/admin")) {
+      document.documentElement.classList.add("dark");
+      return;
+    }
+    document.documentElement.classList.toggle("dark", darkMode);
+    try {
+      window.localStorage.setItem("theme", darkMode ? "dark" : "light");
+    } catch {
+      // Ignore storage write errors.
+    }
+  }, [darkMode, path]);
 
   useEffect(() => {
     async function loadAdmin() {
@@ -74,7 +107,25 @@ function App() {
     loadAdmin();
   }, [path]);
 
-  async function refreshTournament(id = tournamentId) {
+  useEffect(() => {
+    if (adminUser && path.startsWith("/admin")) {
+      loadTournaments().catch((error) => setMessage(error.message));
+    }
+    // Initial admin hydration only; subsequent tournament mutations refresh explicitly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminUser, path]);
+
+  async function loadTournaments() {
+    const payload = await api.getTournaments();
+    setTournamentList(payload.tournaments || []);
+    const published = payload.tournaments?.find((tournament) => tournament.is_published);
+    const nextId = tournamentId || published?.id || payload.tournaments?.[0]?.id;
+    if (nextId && nextId !== tournamentId) {
+      await refreshTournament(nextId);
+    }
+  }
+
+  async function refreshTournament(id = tournamentId, options = {}) {
     if (!id) return;
     const payload = await api.getTournament(id);
     setState(payload);
@@ -92,6 +143,7 @@ function App() {
             : prev.seriesRules,
         description: payload.tournament.description ?? prev.description,
         prizePool: payload.tournament.prize_pool ?? prev.prizePool,
+        entryFee: payload.tournament.entry_fee ?? prev.entryFee,
         startDate: payload.tournament.start_date ? String(payload.tournament.start_date).slice(0, 10) : prev.startDate,
         endDate: payload.tournament.end_date ? String(payload.tournament.end_date).slice(0, 10) : prev.endDate,
         registrationDeadline: payload.tournament.registration_deadline
@@ -111,10 +163,16 @@ function App() {
       teamId: payload.teamPlayers?.find((record) => record.player_id === player.id)?.team_id || null,
     }));
     setPoolDraft(linkedPlayers);
+    setApprovedRoster(payload.approvedRoster || null);
+    if (!options.keepTeamPane) {
+      setActiveRosterId("");
+      setIsTeamPaneActive(false);
+    }
     if (payload.tabs?.[0]?.id) {
       setActiveTab(payload.tabs[0].id);
     }
     await refreshRegistrations(payload.tournament?.id || id);
+    await refreshRosters(payload.tournament?.id || id);
   }
 
   async function refreshRegistrations(id = tournamentId) {
@@ -123,23 +181,95 @@ function App() {
     setRegistrations(payload.registrations);
   }
 
-  async function bootstrapTournament() {
-    const payload = {
+  async function refreshRosters(id = tournamentId) {
+    if (!id) {
+      setRosters([]);
+      setApprovedRoster(null);
+      return;
+    }
+    const payload = await api.getRosters(id);
+    setRosters(payload.rosters || []);
+    setApprovedRoster(payload.approvedRoster || null);
+  }
+
+  function buildTournamentPayload(overrides = {}) {
+    return {
       ...setup,
+      ...overrides,
       teamCount: Number(setup.teamCount),
       darkMode: true,
+      announcements: normalizeAnnouncements(overrides.announcements ?? setup.announcements),
     };
+  }
+
+  async function bootstrapTournament() {
+    const payload = buildTournamentPayload();
     if (!tournamentId) {
       const response = await api.createTournament(payload);
       setTournamentId(response.tournament.id);
       setMessage("Tournament created.");
       await refreshTournament(response.tournament.id);
+      await loadTournaments();
       setSelectedFormat(payload.format);
       return;
     }
     await api.updateTournament(tournamentId, payload);
     await refreshTournament(tournamentId);
+    await loadTournaments();
     setMessage("Tournament updated.");
+  }
+
+  async function updateBracketVisibilityMode(nextMode) {
+    if (!tournamentId) {
+      setSetup((prev) => ({ ...prev, visibilityMode: nextMode }));
+      setMessage("Create tournament first.");
+      return;
+    }
+
+    try {
+      const payload = buildTournamentPayload({ visibilityMode: nextMode });
+      await api.updateTournament(tournamentId, payload);
+      setSetup((prev) => ({ ...prev, visibilityMode: nextMode }));
+      await refreshTournament(tournamentId, { keepTeamPane: true });
+      await loadTournaments();
+      setMessage(nextMode === "demo" ? "Demo bracket mode saved." : "Tournament bracket mode saved.");
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function publishCurrentTournament(id = tournamentId) {
+    if (!id) return;
+    await api.publishTournament(id);
+    await loadTournaments();
+    await refreshTournament(id);
+    setMessage("Tournament approved and published.");
+  }
+
+  async function unpublishCurrentTournament(id = tournamentId) {
+    if (!id) return;
+    await api.unpublishTournament(id);
+    await loadTournaments();
+    await refreshTournament(id);
+    setMessage("Tournament unpublished.");
+  }
+
+  async function deleteDraftTournament(id) {
+    if (!id) return;
+    await api.deleteTournament(id);
+    if (id === tournamentId) {
+      setTournamentId("");
+      setState(null);
+      setTeamDraft([]);
+      setPoolDraft([]);
+      setRosters([]);
+      setApprovedRoster(null);
+      setActiveRosterId("");
+      setIsTeamPaneActive(false);
+      setRegistrations([]);
+    }
+    await loadTournaments();
+    setMessage("Draft tournament deleted.");
   }
 
   async function generateBracket() {
@@ -147,18 +277,56 @@ function App() {
       setMessage("Create tournament first.");
       return;
     }
-    await api.generateMatches(tournamentId);
-    await refreshTournament();
-    setActivePage("bracket");
-    setMessage("Bracket generated.");
+    const isDemoMode = setup.visibilityMode === "demo";
+    if (isDemoMode) {
+      try {
+        await api.generateMatches(tournamentId);
+        await refreshTournament(tournamentId, { keepTeamPane: true });
+        setActivePage("bracketSchedule");
+        setMessage("Demo bracket generated with placeholder teams.");
+      } catch (error) {
+        setMessage(error.message);
+      }
+      return;
+    }
+
+    const bracketTeams = approvedRoster?.teams || [];
+    const bracketPlayers = approvedRoster?.players || [];
+    const bracketTeamPlayers = approvedRoster?.teamPlayers || [];
+    if (!approvedRoster) {
+      setMessage("Approve a tournament roster before generating the bracket.");
+      return;
+    }
+    if (bracketTeams.length !== Number(setup.teamCount)) {
+      setMessage(`Finalize exactly ${setup.teamCount} teams before generating the bracket.`);
+      return;
+    }
+    const invalidTeam = bracketTeams.find((team) => {
+      const assignedPlayerIds = new Set(
+        bracketTeamPlayers.filter((record) => record.team_id === team.id).map((record) => record.player_id),
+      );
+      return !bracketPlayers.some((player) => assignedPlayerIds.has(player.id) && player.isCaptain);
+    });
+    if (invalidTeam) {
+      setMessage(`Assign a registered captain for ${invalidTeam.name} before generating the bracket.`);
+      return;
+    }
+    try {
+      await api.generateMatches(tournamentId);
+      await refreshTournament(tournamentId, { keepTeamPane: true });
+      setActivePage("bracketSchedule");
+      setMessage("Bracket generated.");
+    } catch (error) {
+      setMessage(error.message);
+    }
   }
 
   function addCaptain() {
-    if (!newCaptain.captain.trim()) return;
+    if (!newCaptain.team.trim()) return;
     const team = {
       id: createId(),
       name: newCaptain.team.trim() || `${newCaptain.captain.trim()}'s Team`,
-      captain: newCaptain.captain.trim(),
+      captain: "",
       abbr: (newCaptain.team || newCaptain.captain)
         .split(" ")
         .map((word) => word[0] || "")
@@ -180,7 +348,7 @@ function App() {
     setNewPlayer((prev) => ({ ...prev, name: "" }));
   }
 
-  function addRegistrationPlayer(registration) {
+  function addRegistrationPlayer(registration, teamId = null) {
     setPoolDraft((prev) => [
       ...prev,
       {
@@ -194,18 +362,41 @@ function App() {
         steamProfile: registration.steamProfile,
         discordHandle: registration.discordHandle,
         location: registration.location,
-        teamId: null,
+        teamId,
         isCaptain: false,
       },
     ]);
+  }
+
+  function updateTeam(teamId, patch) {
+    setTeamDraft((prev) => prev.map((team) => (team.id === teamId ? { ...team, ...patch } : team)));
+  }
+
+  function deleteTeam(teamId) {
+    setTeamDraft((prev) => prev.filter((team) => team.id !== teamId));
+    setPoolDraft((prev) => prev.map((player) => (player.teamId === teamId ? { ...player, teamId: null, isCaptain: false } : player)));
   }
 
   function assignPlayer(playerId, teamId) {
     setPoolDraft((prev) => prev.map((player) => (player.id === playerId ? { ...player, teamId } : player)));
   }
 
+  function removePlayerFromTeam(playerId) {
+    setPoolDraft((prev) =>
+      prev.map((player) => (player.id === playerId ? { ...player, teamId: null, isCaptain: false } : player)),
+    );
+    setMessage("Player moved back to the available pool.");
+  }
+
   function markCaptain(playerId, isCaptain) {
-    setPoolDraft((prev) => prev.map((player) => (player.id === playerId ? { ...player, isCaptain } : player)));
+    setPoolDraft((prev) => {
+      const selected = prev.find((player) => player.id === playerId);
+      return prev.map((player) => {
+        if (player.id === playerId) return { ...player, isCaptain };
+        if (isCaptain && selected?.teamId && player.teamId === selected.teamId) return { ...player, isCaptain: false };
+        return player;
+      });
+    });
   }
 
   function autoAssign() {
@@ -233,9 +424,131 @@ function App() {
       setMessage("Create tournament first.");
       return;
     }
-    await api.saveTeams(tournamentId, { teams: teamDraft, players: poolDraft });
-    await refreshTournament();
+    const teamsWithCaptains = teamDraft.map((team) => {
+      const captain = poolDraft.find((player) => player.teamId === team.id && player.isCaptain);
+      return {
+        ...team,
+        captain: captain?.name || "",
+      };
+    });
+    await api.saveTeams(tournamentId, { teams: teamsWithCaptains, players: poolDraft });
+    await refreshTournament(tournamentId, { keepTeamPane: true });
+    await refreshRosters();
     setMessage("Teams saved.");
+  }
+
+  async function saveRosterSnapshot(name) {
+    if (!tournamentId) {
+      setMessage("Create tournament first.");
+      return;
+    }
+    if (!getAuthToken()) {
+      setMessage("Admin session expired. Please log in again before saving rosters.");
+      return;
+    }
+    try {
+      await saveTeams();
+      const response = await api.createRoster(tournamentId, { name });
+      setActiveRosterId(response.roster?.id || "");
+      setIsTeamPaneActive(true);
+      await refreshRosters();
+      setMessage(`Roster "${name}" saved.`);
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function renameRoster(rosterId, name) {
+    if (!getAuthToken()) {
+      setMessage("Admin session expired. Please log in again before editing rosters.");
+      return;
+    }
+    try {
+      await api.updateRoster(tournamentId, rosterId, { name });
+      await refreshRosters();
+      setMessage(`Roster renamed to "${name}".`);
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function replaceRosterFromCurrent(rosterId, name) {
+    if (!getAuthToken()) {
+      setMessage("Admin session expired. Please log in again before saving rosters.");
+      return;
+    }
+    try {
+      await saveTeams();
+      await api.updateRoster(tournamentId, rosterId, { name, replaceFromCurrent: true });
+      await refreshRosters();
+      setMessage(`Roster "${name}" updated from current teams. Approve it to use it for brackets.`);
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function approveRoster(rosterId) {
+    const token = getAuthToken();
+    if (!token) {
+      setMessage("Admin session expired. Please log in again before approving rosters.");
+      return;
+    }
+    try {
+      await api.approveRoster(tournamentId, rosterId);
+      await refreshRosters();
+      await refreshTournament(tournamentId, { keepTeamPane: true });
+      setMessage("Tournament roster approved for bracket and schedule generation.");
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function deleteRoster(rosterId, name) {
+    if (!getAuthToken()) {
+      setMessage("Admin session expired. Please log in again before deleting rosters.");
+      return;
+    }
+    try {
+      await api.deleteRoster(tournamentId, rosterId);
+      if (activeRosterId === rosterId) {
+        setTeamDraft([]);
+        setPoolDraft([]);
+        setActiveRosterId("");
+        setIsTeamPaneActive(false);
+      }
+      await refreshRosters();
+      setMessage(`Roster "${name}" deleted.`);
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function loadRosterForEditing(rosterId) {
+    try {
+      const payload = await api.getRoster(tournamentId, rosterId);
+      const roster = payload.roster;
+      setTeamDraft(roster.teams || []);
+      setPoolDraft(
+        (roster.players || []).map((player) => ({
+          ...player,
+          role: player.role || player.roles?.[0] || roles[0],
+          teamId: roster.teamPlayers?.find((record) => record.player_id === player.id)?.team_id || null,
+        })),
+      );
+      setActiveRosterId(roster.id);
+      setIsTeamPaneActive(true);
+      setMessage(`Loaded roster "${roster.name}".`);
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  function createNewRosterDraft() {
+    setTeamDraft([]);
+    setPoolDraft([]);
+    setActiveRosterId("");
+    setIsTeamPaneActive(true);
+    setMessage("Started a new roster draft.");
   }
 
   async function submitResult(matchId, winner) {
@@ -318,11 +631,17 @@ function App() {
     return <AdminAuthPage inviteToken={inviteToken} onAuthed={setAdminUser} />;
   }
 
-  const adminPages = [...pages, "registrations", "users"];
+  const adminPages = ["registrations", "teams", "setup", "bracketSchedule", "standings", "users"];
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <AppHeader pages={adminPages} activePage={activePage} setActivePage={setActivePage} />
+      <AppHeader
+        pages={adminPages}
+        activePage={activePage}
+        setActivePage={setActivePage}
+        darkMode={darkMode}
+        setDarkMode={setDarkMode}
+      />
 
       <section className="mx-auto max-w-6xl space-y-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card p-3 text-sm">
@@ -330,10 +649,10 @@ function App() {
             Signed in as <span className="font-medium">{adminUser.name}</span> ({adminUser.role})
           </div>
           <div className="flex gap-2">
-            <button type="button" className="rounded-md border border-border px-3 py-1" onClick={() => navigate("/")}>
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => navigate("/")}>
               View public site
             </button>
-            <button type="button" className="rounded-md border border-border px-3 py-1" onClick={logout}>
+            <button type="button" className="btn btn-outline btn-sm" onClick={logout}>
               Logout
             </button>
           </div>
@@ -354,10 +673,26 @@ function App() {
               }));
             }}
             bootstrapTournament={bootstrapTournament}
-            generateBracket={generateBracket}
             exportData={exportData}
             importData={importData}
             state={state}
+            tournaments={tournamentList}
+            refreshTournaments={loadTournaments}
+            selectTournament={(id) => refreshTournament(id)}
+            startNewTournament={() => {
+              setTournamentId("");
+              setState(null);
+              setTeamDraft([]);
+              setPoolDraft([]);
+              setRosters([]);
+              setApprovedRoster(null);
+              setActiveRosterId("");
+              setIsTeamPaneActive(false);
+              setRegistrations([]);
+            }}
+            publishTournament={publishCurrentTournament}
+            unpublishTournament={unpublishCurrentTournament}
+            deleteTournament={deleteDraftTournament}
           />
         )}
 
@@ -377,23 +712,45 @@ function App() {
             registrations={registrations}
             addRegistrationPlayer={addRegistrationPlayer}
             markCaptain={markCaptain}
+            updateTeam={updateTeam}
+            deleteTeam={deleteTeam}
+            removePlayerFromTeam={removePlayerFromTeam}
+            rosters={rosters}
+            approvedRoster={approvedRoster}
+            requiredTeamCount={Number(setup.teamCount)}
+            activeRosterId={activeRosterId}
+            isTeamPaneActive={isTeamPaneActive}
+            loadRosterForEditing={loadRosterForEditing}
+            createNewRosterDraft={createNewRosterDraft}
+            saveRosterSnapshot={saveRosterSnapshot}
+            renameRoster={renameRoster}
+            replaceRosterFromCurrent={replaceRosterFromCurrent}
+            approveRoster={approveRoster}
+            deleteRoster={deleteRoster}
           />
         )}
 
-        {activePage === "bracket" && (
-          <BracketPage
-            state={state}
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            groupedMatches={groupedMatches}
-            submitResult={submitResult}
-            updateMatch={updateMatch}
-          />
+        {activePage === "bracketSchedule" && (
+          <div className="space-y-4">
+            <BracketPage
+              state={state}
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              groupedMatches={groupedMatches}
+              submitResult={submitResult}
+              updateMatch={updateMatch}
+              generateBracket={generateBracket}
+              setup={setup}
+              rosters={rosters}
+              approvedRoster={approvedRoster}
+              updateBracketVisibilityMode={updateBracketVisibilityMode}
+              approveRoster={approveRoster}
+            />
+            <SchedulePage state={state} saveSchedule={saveSchedule} saveCustomSchedule={saveCustomSchedule} />
+          </div>
         )}
 
         {activePage === "standings" && <StandingsPage standings={state?.standings} />}
-
-        {activePage === "schedule" && <SchedulePage state={state} saveSchedule={saveSchedule} saveCustomSchedule={saveCustomSchedule} />}
 
         {activePage === "registrations" && (
           <RegistrationCrmPage
@@ -405,6 +762,7 @@ function App() {
 
         {activePage === "users" && <AdminUsersPage currentUser={adminUser} />}
       </section>
+      <AppFooter />
     </main>
   );
 }

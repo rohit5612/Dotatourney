@@ -10,7 +10,8 @@ ADD COLUMN IF NOT EXISTS rulebook TEXT NOT NULL DEFAULT '',
 ADD COLUMN IF NOT EXISTS announcements JSONB NOT NULL DEFAULT '[]'::jsonb,
 ADD COLUMN IF NOT EXISTS visibility_mode TEXT NOT NULL DEFAULT 'demo';
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_tournaments_slug ON tournaments(slug) WHERE slug IS NOT NULL;
+DROP INDEX IF EXISTS idx_tournaments_slug;
+CREATE INDEX IF NOT EXISTS idx_tournaments_slug_lookup ON tournaments(slug) WHERE slug IS NOT NULL;
 
 ALTER TABLE players
 ADD COLUMN IF NOT EXISTS registration_id UUID,

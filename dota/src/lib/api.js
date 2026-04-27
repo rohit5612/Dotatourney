@@ -30,6 +30,9 @@ async function request(path, options = {}) {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      setAuthToken("");
+    }
     throw new Error(body.message || "API request failed");
   }
   return response.json();
@@ -69,7 +72,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  getPublicTournament: (identifier = "the-forge") => request(`/public/tournaments/${identifier}`),
+  getPublicTournament: () => request("/public/tournament"),
   registerPlayer: (identifier, payload) =>
     request(`/public/tournaments/${identifier}/register`, {
       method: "POST",
@@ -85,11 +88,44 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(payload),
     }),
+  getTournaments: () => request("/tournaments"),
+  publishTournament: (id) =>
+    request(`/tournaments/${id}/publish`, {
+      method: "POST",
+    }),
+  unpublishTournament: (id) =>
+    request(`/tournaments/${id}/unpublish`, {
+      method: "POST",
+    }),
+  deleteTournament: (id) =>
+    request(`/tournaments/${id}`, {
+      method: "DELETE",
+    }),
   getTournament: (id) => request(`/tournaments/${id}`),
   saveTeams: (id, payload) =>
     request(`/tournaments/${id}/teams`, {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+  getRosters: (id) => request(`/tournaments/${id}/rosters`),
+  getRoster: (id, rosterId) => request(`/tournaments/${id}/rosters/${rosterId}`),
+  createRoster: (id, payload) =>
+    request(`/tournaments/${id}/rosters`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateRoster: (id, rosterId, payload) =>
+    request(`/tournaments/${id}/rosters/${rosterId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  approveRoster: (id, rosterId) =>
+    request(`/tournaments/${id}/rosters/${rosterId}/approve`, {
+      method: "POST",
+    }),
+  deleteRoster: (id, rosterId) =>
+    request(`/tournaments/${id}/rosters/${rosterId}`, {
+      method: "DELETE",
     }),
   generateMatches: (id) =>
     request(`/tournaments/${id}/generate`, {
@@ -116,6 +152,11 @@ export const api = {
     request(`/tournaments/${id}/registrations/${registrationId}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
+    }),
+  archiveRegistration: (id, registrationId, reason) =>
+    request(`/tournaments/${id}/registrations/${registrationId}/archive`, {
+      method: "PATCH",
+      body: JSON.stringify({ reason }),
     }),
   importTournament: (id, data) =>
     request(`/tournaments/${id}/import`, {
