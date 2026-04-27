@@ -13,6 +13,7 @@ export function BracketPage({
   rosters = [],
   approvedRoster,
   updateBracketVisibilityMode,
+  updateBracketActivation,
   approveRoster,
 }) {
   const [scores, setScores] = useState({});
@@ -22,11 +23,12 @@ export function BracketPage({
   const completedMatches = (state?.matches || []).filter((match) => match.winner).length;
   const completionPct = totalMatches ? Math.round((completedMatches / totalMatches) * 100) : 0;
   const mode = setup?.visibilityMode || "demo";
+  const bracketActive = Boolean(setup?.bracketActive);
   const requiredTeamCount = Number(setup?.teamCount) || state?.tournament?.team_count || 0;
   const selectedRoster = rosters.find((roster) => roster.id === (selectedRosterId || approvedRoster?.id));
   const approvedRosterSummary = rosters.find((roster) => roster.id === approvedRoster?.id);
   const selectedRosterReady = selectedRoster && (!requiredTeamCount || selectedRoster.teamCount === requiredTeamCount);
-  const canGenerateTournament = mode === "demo" || (approvedRoster && (!requiredTeamCount || approvedRoster.teams?.length === requiredTeamCount));
+  const canGenerateTournament = mode === "demo" || (!bracketActive && approvedRoster && (!requiredTeamCount || approvedRoster.teams?.length === requiredTeamCount));
   const generationCopy =
     mode === "demo"
       ? `Demo mode will generate placeholder teams from the ${requiredTeamCount}-team ${setup?.format?.toUpperCase() || "configured"} format for the public bracket map.`
@@ -75,6 +77,20 @@ export function BracketPage({
         <div>
           <div className="text-xs uppercase tracking-wider text-muted-foreground">Public bracket mode</div>
           <p className="mt-1 text-sm text-muted-foreground">{generationCopy}</p>
+          {mode === "tournament" ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className={`btn btn-sm ${bracketActive ? "btn-destructive-outline" : "btn-primary"}`}
+                onClick={() => updateBracketActivation?.(!bracketActive)}
+              >
+                {bracketActive ? "Deactivate bracket" : "Activate bracket"}
+              </button>
+              <span className={bracketActive ? "text-xs text-secondary" : "text-xs text-muted-foreground"}>
+                {bracketActive ? "Live bracket locked. Tournament regeneration is disabled." : "Activate once the tournament bracket is final."}
+              </span>
+            </div>
+          ) : null}
           {isSavingMode ? <p className="mt-2 text-xs text-secondary">Saving bracket mode...</p> : null}
         </div>
         <div className="space-y-2">

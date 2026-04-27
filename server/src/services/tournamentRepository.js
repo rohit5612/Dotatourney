@@ -1,15 +1,74 @@
 import { randomUUID } from "node:crypto";
 import { pool } from "../db/pool.js";
 
+function parseMeta(raw) {
+  if (raw == null) return {};
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return {};
+    }
+  }
+  if (typeof raw === "object") {
+    return { ...raw };
+  }
+  return {};
+}
+
+/** @param {unknown} value */
+function pickIntScore(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.trunc(n);
+}
+
+export function hydrateMatchRow(row) {
+  if (!row) return null;
+  const { team1_score, team2_score, meta: rawMeta, ...rest } = row;
+  const m = parseMeta(rawMeta);
+  const t1 = team1_score != null ? team1_score : pickIntScore(m.team1Score);
+  const t2 = team2_score != null ? team2_score : pickIntScore(m.team2Score);
+  const scoreStr =
+    typeof m.score === "string" && m.score.length > 0
+      ? m.score
+      : t1 != null && t2 != null
+        ? `${t1}-${t2}`
+        : m.score || "";
+  return {
+    ...rest,
+    meta: {
+      ...m,
+      team1Score: t1 != null ? t1 : m.team1Score ?? null,
+      team2Score: t2 != null ? t2 : m.team2Score ?? null,
+      score: scoreStr,
+    },
+  };
+}
+
+function scoresFromUpdateMeta(update) {
+  const m = parseMeta(update.meta);
+  return {
+    t1: pickIntScore(m.team1Score),
+    t2: pickIntScore(m.team2Score),
+  };
+}
+
+function serializePrizePoolBreakdown(value) {
+  if (Array.isArray(value)) return JSON.stringify(value);
+  return value || "";
+}
+
 export async function createTournament(payload) {
   const id = randomUUID();
   const query = `
     INSERT INTO tournaments (
       id, name, slug, format, series_type, team_count, dark_mode, series_rules,
-      description, prize_pool, entry_fee, start_date, end_date, registration_deadline,
-      discord_url, rulebook, announcements, visibility_mode, status
+      description, prize_pool, prize_pool_breakdown, entry_fee, start_date, end_date, registration_deadline,
+      discord_url, rulebook, announcements, visibility_mode, bracket_active, status
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 'draft')
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, 'draft')
     RETURNING *;
   `;
   const values = [
@@ -23,14 +82,16 @@ export async function createTournament(payload) {
     payload.seriesRules || {},
     payload.description || "",
     payload.prizePool || "",
+    serializePrizePoolBreakdown(payload.prizePoolBreakdown),
     payload.entryFee || "",
     payload.startDate || null,
     payload.endDate || null,
     payload.registrationDeadline || null,
     payload.discordUrl || "",
     payload.rulebook || "",
-    payload.announcements || [],
+    JSON.stringify(payload.announcements || []),
     payload.visibilityMode || "demo",
+    Boolean(payload.bracketActive),
   ];
   const { rows } = await pool.query(query, values);
   return rows[0];
@@ -48,15 +109,17 @@ export async function updateTournament(tournamentId, payload) {
         series_rules = $8,
         description = $9,
         prize_pool = $10,
-        entry_fee = $11,
-        start_date = $12,
-        end_date = $13,
-        registration_deadline = $14,
-        discord_url = $15,
-        rulebook = $16,
-        announcements = $17,
-        visibility_mode = $18,
-        status = CASE WHEN is_published THEN status ELSE COALESCE($19, status) END,
+        prize_pool_breakdown = $11,
+        entry_fee = $12,
+        start_date = $13,
+        end_date = $14,
+        registration_deadline = $15,
+        discord_url = $16,
+        rulebook = $17,
+        announcements = $18,
+        visibility_mode = $19,
+        bracket_active = $20,
+        status = CASE WHEN is_published THEN status ELSE COALESCE($21, status) END,
         updated_at = NOW()
     WHERE id = $1
     RETURNING *;
@@ -72,14 +135,16 @@ export async function updateTournament(tournamentId, payload) {
     payload.seriesRules || {},
     payload.description || "",
     payload.prizePool || "",
+    serializePrizePoolBreakdown(payload.prizePoolBreakdown),
     payload.entryFee || "",
     payload.startDate || null,
     payload.endDate || null,
     payload.registrationDeadline || null,
     payload.discordUrl || "",
     payload.rulebook || "",
-    payload.announcements || [],
+    JSON.stringify(payload.announcements || []),
     payload.visibilityMode || "demo",
+    Boolean(payload.bracketActive),
     payload.status || "draft",
   ];
   const { rows } = await pool.query(query, values);
@@ -89,7 +154,7 @@ export async function updateTournament(tournamentId, payload) {
 export async function listTournaments() {
   const { rows } = await pool.query(
     `SELECT id, name, slug, format, series_type, team_count, status, is_published,
-            published_at, start_date, end_date, registration_deadline, prize_pool, entry_fee,
+            published_at, start_date, end_date, registration_deadline, prize_pool, prize_pool_breakdown, entry_fee,
             visibility_mode, updated_at, created_at
      FROM tournaments
      WHERE status <> 'archived'
@@ -121,7 +186,7 @@ export async function getTournament(tournamentId) {
     [tournamentId],
   );
   const matchesResult = await pool.query(
-    "SELECT id, stage_key AS \"stageKey\", round_index AS \"roundIndex\", match_index AS \"matchIndex\", team1, team2, winner, status, stream, slot_at AS \"slotAt\", meta FROM matches WHERE tournament_id = $1 ORDER BY stage_key ASC, round_index ASC, match_index ASC",
+    "SELECT id, stage_key AS \"stageKey\", round_index AS \"roundIndex\", match_index AS \"matchIndex\", team1, team2, winner, status, stream, slot_at AS \"slotAt\", meta, team1_score, team2_score FROM matches WHERE tournament_id = $1 ORDER BY stage_key ASC, round_index ASC, match_index ASC",
     [tournamentId],
   );
   const scheduleResult = await pool.query(
@@ -134,7 +199,7 @@ export async function getTournament(tournamentId) {
     teams: teamsResult.rows,
     players: playersResult.rows,
     teamPlayers: teamPlayersResult.rows,
-    matches: matchesResult.rows,
+    matches: matchesResult.rows.map((row) => hydrateMatchRow(row)),
     schedule: scheduleResult.rows,
     approvedRoster: await getApprovedRosterSnapshot(tournamentId),
   };
@@ -513,8 +578,11 @@ export async function deleteDraftTournament(tournamentId) {
 export async function replaceMatches(tournamentId, matches) {
   await pool.query("DELETE FROM matches WHERE tournament_id = $1", [tournamentId]);
   for (const match of matches) {
+    const meta = match.meta ?? {};
+    const t1 = pickIntScore(meta.team1Score);
+    const t2 = pickIntScore(meta.team2Score);
     await pool.query(
-      "INSERT INTO matches (id, tournament_id, stage_key, round_index, match_index, team1, team2, winner, status, stream, slot_at, meta) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+      "INSERT INTO matches (id, tournament_id, stage_key, round_index, match_index, team1, team2, winner, status, stream, slot_at, meta, team1_score, team2_score) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
       [
         match.id,
         tournamentId,
@@ -527,28 +595,25 @@ export async function replaceMatches(tournamentId, matches) {
         match.status,
         match.stream,
         match.slotAt,
-        match.meta ?? {},
+        meta,
+        t1,
+        t2,
       ],
     );
   }
 }
 
 export async function updateMatch(tournamentId, matchId, update) {
+  const meta = parseMeta(update.meta);
+  const { t1, t2 } = scoresFromUpdateMeta(update);
   const { rows } = await pool.query(
-    "UPDATE matches SET winner = $3, status = $4, stream = $5, slot_at = $6, team1 = $7, team2 = $8, meta = $9, updated_at = NOW() WHERE tournament_id = $1 AND id = $2 RETURNING *",
-    [
-      tournamentId,
-      matchId,
-      update.winner,
-      update.status,
-      update.stream,
-      update.slotAt,
-      update.team1,
-      update.team2,
-      update.meta ?? {},
-    ],
+    "UPDATE matches SET winner = $3, status = $4, stream = $5, slot_at = $6, team1 = $7, team2 = $8, meta = $9::jsonb, team1_score = $10, team2_score = $11, updated_at = NOW() WHERE tournament_id = $1::uuid AND id = $2::uuid RETURNING *",
+    [tournamentId, matchId, update.winner, update.status, update.stream, update.slotAt, update.team1, update.team2, meta, t1, t2],
   );
-  return rows[0];
+  if (!rows[0]) {
+    return null;
+  }
+  return hydrateMatchRow(rows[0]);
 }
 
 export async function replaceSchedule(tournamentId, schedule) {

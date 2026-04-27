@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
 
 export function RegistrationCrmPage({ tournamentId, registrations, refreshRegistrations }) {
@@ -15,6 +15,8 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
   const [editingId, setEditingId] = useState("");
   const [editDrafts, setEditDrafts] = useState({});
   const [message, setMessage] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const filtered = useMemo(() => {
     return (registrations || [])
@@ -39,6 +41,19 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
       })
       .sort((a, b) => (Number(b.mmr) || 0) - (Number(a.mmr) || 0));
   }, [registrations, roleFilter, statusFilter, paymentFilter, minMmr, maxMmr, search, showArchived]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * pageSize;
+  const paginated = filtered.slice(pageStart, pageStart + pageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [roleFilter, statusFilter, paymentFilter, minMmr, maxMmr, search, showArchived, pageSize]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   async function updateRegistration(registrationId, payload) {
     try {
@@ -144,8 +159,44 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
           </div>
         </div>
       </section>
+      <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-3 text-sm">
+        <div className="text-muted-foreground">
+          Showing {filtered.length ? pageStart + 1 : 0}-{Math.min(pageStart + pageSize, filtered.length)} of {filtered.length} registrations
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-muted-foreground">
+            Per page
+            <select
+              className="rounded-md border border-input bg-background p-2 text-foreground"
+              value={pageSize}
+              onChange={(event) => setPageSize(Number(event.target.value))}
+            >
+              {[5, 10, 20, 50].map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="button" className="btn btn-outline btn-sm" onClick={() => setPage(1)} disabled={currentPage === 1}>
+            First
+          </button>
+          <button type="button" className="btn btn-outline btn-sm" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={currentPage === 1}>
+            Previous
+          </button>
+          <span className="rounded-md border border-border px-3 py-2 text-muted-foreground">
+            Page {currentPage} of {totalPages}
+          </span>
+          <button type="button" className="btn btn-outline btn-sm" onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages}>
+            Next
+          </button>
+          <button type="button" className="btn btn-outline btn-sm" onClick={() => setPage(totalPages)} disabled={currentPage === totalPages}>
+            Last
+          </button>
+        </div>
+      </section>
       <div className="grid gap-3">
-        {filtered.map((registration) => {
+        {paginated.map((registration) => {
           const ready = isReady(registration);
           const editing = editingId === registration.id;
           const locked = Boolean(registration.archivedAt) || (ready && !editing);
@@ -279,6 +330,11 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
           </div>
           );
         })}
+        {!paginated.length ? (
+          <div className="rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground">
+            No registrations match the current filters.
+          </div>
+        ) : null}
       </div>
       {confirmReady ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import express from "express";
 import { z } from "zod";
-import { generateMatches, stageTabsForFormat } from "../services/formatGenerator.js";
+import { generateMatches, getFormatTeamCountMessage, stageTabsForFormat } from "../services/formatGenerator.js";
 import { applyProgression } from "../services/progressionEngine.js";
 import { archivePlayerRegistration, listPlayerRegistrations, updatePlayerRegistration } from "../services/registrationRepository.js";
 import { buildGroupedStandings, buildStandings } from "../services/standingsEngine.js";
@@ -38,6 +38,19 @@ const tournamentSchema = z.object({
   darkMode: z.boolean().optional(),
   description: z.string().optional().default(""),
   prizePool: z.string().optional().default(""),
+  prizePoolBreakdown: z
+    .union([
+      z.string(),
+      z.array(
+        z.object({
+          placement: z.number().int().min(1),
+          label: z.string().optional().default(""),
+          amount: z.string().optional().default(""),
+        }),
+      ),
+    ])
+    .optional()
+    .default([]),
   entryFee: z.string().optional().default(""),
   startDate: z.string().nullable().optional(),
   endDate: z.string().nullable().optional(),
@@ -46,6 +59,7 @@ const tournamentSchema = z.object({
   rulebook: z.string().optional().default(""),
   announcements: z.array(z.string()).optional().default([]),
   visibilityMode: z.enum(["demo", "tournament"]).optional().default("demo"),
+  bracketActive: z.boolean().optional().default(false),
   status: z.enum(["draft", "approved", "published", "archived"]).optional().default("draft"),
 });
 
@@ -333,7 +347,14 @@ router.post("/:id/generate", async (req, res, next) => {
     }
 
     let names = Array.from({ length: data.tournament.team_count }, (_, index) => `Team ${index + 1}`);
+    const teamCountMessage = getFormatTeamCountMessage(data.tournament.format, names.length);
+    if (teamCountMessage) {
+      return res.status(400).json({ message: teamCountMessage });
+    }
     if (data.tournament.visibility_mode !== "demo") {
+      if (data.tournament.bracket_active) {
+        return res.status(400).json({ message: "Deactivate the live bracket before regenerating tournament matches" });
+      }
       if (!data.approvedRoster) {
         return res.status(400).json({ message: "Approve a tournament roster before generating the bracket" });
       }
@@ -356,34 +377,48 @@ router.post("/:id/matches/:matchId/result", async (req, res, next) => {
       .object({
         winner: z.string().min(1),
         score: z.string().optional().default(""),
-        team1Score: z.number().int().min(0).nullable().optional(),
-        team2Score: z.number().int().min(0).nullable().optional(),
+        team1Score: z.preprocess(
+          (v) => (typeof v === "string" && /^\d+$/.test(String(v).trim()) ? Number(String(v).trim()) : v),
+          z.number().int().min(0).nullable().optional(),
+        ),
+        team2Score: z.preprocess(
+          (v) => (typeof v === "string" && /^\d+$/.test(String(v).trim()) ? Number(String(v).trim()) : v),
+          z.number().int().min(0).nullable().optional(),
+        ),
       })
       .parse(req.body);
     const snapshot = await getTournament(req.params.id);
     if (!snapshot) {
       return res.status(404).json({ message: "Tournament not found" });
     }
-    const changed = snapshot.matches.find((match) => match.id === req.params.matchId);
+    const resMatchId = String(req.params.matchId);
+    const changed = snapshot.matches.find((m) => String(m.id) === resMatchId);
     if (!changed) {
       return res.status(404).json({ message: "Match not found" });
     }
 
+    const prev = changed.meta || {};
     const updatedMatch = {
       ...changed,
       winner: payload.winner,
       status: "finished",
       meta: {
-        ...(changed.meta || {}),
-        score: payload.score || [payload.team1Score, payload.team2Score].filter((value) => value !== undefined && value !== null).join("-"),
-        team1Score: payload.team1Score ?? changed.meta?.team1Score ?? null,
-        team2Score: payload.team2Score ?? changed.meta?.team2Score ?? null,
+        ...prev,
+        score:
+          payload.score ||
+          [payload.team1Score, payload.team2Score].filter((value) => value !== undefined && value !== null).join("-"),
+        team1Score: "team1Score" in payload ? payload.team1Score : (prev.team1Score ?? null),
+        team2Score: "team2Score" in payload ? payload.team2Score : (prev.team2Score ?? null),
       },
     };
-    const progressed = applyProgression(snapshot.matches, updatedMatch);
+    const baseMatches = snapshot.matches.map((m) => (String(m.id) === resMatchId ? updatedMatch : m));
+    const progressed = applyProgression(baseMatches, updatedMatch);
 
     for (const match of progressed) {
-      await updateMatch(req.params.id, match.id, match);
+      const saved = await updateMatch(req.params.id, String(match.id), match);
+      if (!saved) {
+        return res.status(500).json({ message: "Failed to save match result" });
+      }
     }
 
     const standingsTeams = snapshot.approvedRoster?.teams || snapshot.teams;
@@ -406,25 +441,35 @@ router.patch("/:id/matches/:matchId", async (req, res, next) => {
         stream: z.string().nullable().optional(),
         slotAt: z.string().nullable().optional(),
         score: z.string().optional(),
-        team1Score: z.number().int().min(0).nullable().optional(),
-        team2Score: z.number().int().min(0).nullable().optional(),
+        team1Score: z.preprocess(
+          (v) => (typeof v === "string" && /^\d+$/.test(v.trim()) ? Number(v.trim()) : v),
+          z.number().int().min(0).nullable().optional(),
+        ),
+        team2Score: z.preprocess(
+          (v) => (typeof v === "string" && /^\d+$/.test(v.trim()) ? Number(v.trim()) : v),
+          z.number().int().min(0).nullable().optional(),
+        ),
       })
       .parse(req.body);
     const snapshot = await getTournament(req.params.id);
     if (!snapshot) return res.status(404).json({ message: "Tournament not found" });
-    const match = snapshot.matches.find((entry) => entry.id === req.params.matchId);
+    const matchIdParam = String(req.params.matchId);
+    const match = snapshot.matches.find((entry) => String(entry.id) === matchIdParam);
     if (!match) return res.status(404).json({ message: "Match not found" });
 
-    const updated = await updateMatch(req.params.id, req.params.matchId, {
+    const nextMeta = { ...(match.meta || {}) };
+    if ("team1Score" in payload) nextMeta.team1Score = payload.team1Score;
+    if ("team2Score" in payload) nextMeta.team2Score = payload.team2Score;
+    if ("score" in payload) nextMeta.score = payload.score;
+
+    const updated = await updateMatch(req.params.id, matchIdParam, {
       ...match,
       ...payload,
-      meta: {
-        ...(match.meta || {}),
-        score: payload.score ?? match.meta?.score ?? "",
-        team1Score: payload.team1Score ?? match.meta?.team1Score ?? null,
-        team2Score: payload.team2Score ?? match.meta?.team2Score ?? null,
-      },
+      meta: nextMeta,
     });
+    if (!updated) {
+      return res.status(404).json({ message: "Match not found or could not be updated" });
+    }
     return res.json({ match: updated });
   } catch (error) {
     return next(error);

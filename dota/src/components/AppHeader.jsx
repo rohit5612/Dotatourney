@@ -3,6 +3,7 @@ export function AppHeader({ pages, activePage, setActivePage, darkMode, setDarkM
     registrations: "Registrations",
     teams: "Teams",
     setup: "Setup",
+    announcements: "Announcements",
     bracketSchedule: "Bracket & Schedule",
     standings: "Standings",
     users: "Users",
@@ -12,7 +13,7 @@ export function AppHeader({ pages, activePage, setActivePage, darkMode, setDarkM
     <header className="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
         <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-xl border border-primary/40 bg-primary/10 p-2">
+          <span className="grid h-9 w-9 place-items-center rounded-xl border border-primary/40 bg-primary/10 p-1.5">
             <img className="h-full w-full object-contain" src="/dota.svg" alt="Dota Tournament Organizer logo" />
           </span>
           <div>
@@ -35,10 +36,12 @@ export function AppHeader({ pages, activePage, setActivePage, darkMode, setDarkM
           ))}
           <button
             type="button"
-            className="btn btn-outline btn-sm"
+            className="btn btn-outline btn-sm h-9 w-9 px-0"
             onClick={() => setDarkMode?.((prev) => !prev)}
+            title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+            aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
           >
-            {darkMode ? "Light" : "Dark"}
+            {darkMode ? "☀" : "☾"}
           </button>
         </div>
       </div>

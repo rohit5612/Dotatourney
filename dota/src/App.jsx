@@ -3,8 +3,10 @@ import { AdminAuthPage } from "./pages/AdminAuthPage";
 import { AdminUsersPage } from "./pages/AdminUsersPage";
 import { AppFooter } from "./components/AppFooter";
 import { AppHeader } from "./components/AppHeader";
+import { ScrollToTopButton } from "./components/ScrollToTopButton";
 import { buildDefaultSeriesRules, roles } from "./constants/tournament";
 import { api, getAuthToken, setAuthToken } from "./lib/api";
+import { AnnouncementsPage } from "./pages/AnnouncementsPage";
 import { BracketPage } from "./pages/BracketPage";
 import { PublicApp } from "./pages/PublicPages";
 import { RegistrationCrmPage } from "./pages/RegistrationCrmPage";
@@ -13,6 +15,8 @@ import { SetupPage } from "./pages/SetupPage";
 import { StandingsPage } from "./pages/StandingsPage";
 import { TeamsPage } from "./pages/TeamsPage";
 import { createId, getInitialDarkMode } from "./utils/client";
+
+const adminPages = ["registrations", "teams", "setup", "announcements", "bracketSchedule", "standings", "users"];
 
 function App() {
   const [path, setPath] = useState(() => window.location.pathname);
@@ -30,6 +34,7 @@ function App() {
     slug: "the-forge",
     description: "",
     prizePool: "",
+    prizePoolBreakdown: [{ placement: 1, label: "1st place", amount: "" }],
     entryFee: "",
     startDate: "",
     endDate: "",
@@ -38,6 +43,7 @@ function App() {
     rulebook: "",
     announcements: [],
     visibilityMode: "demo",
+    bracketActive: false,
   });
   const [teamDraft, setTeamDraft] = useState([]);
   const [poolDraft, setPoolDraft] = useState([]);
@@ -74,11 +80,27 @@ function App() {
     setPath(nextPath);
   }
 
+  function navigateAdminPage(page) {
+    setActivePage(page);
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }
+
   useEffect(() => {
     const onPopState = () => setPath(window.location.pathname);
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [path]);
+
+  useEffect(() => {
+    if (path.startsWith("/admin") && path !== "/admin" && !path.startsWith("/admin/invite/")) {
+      window.history.replaceState({}, "", "/admin");
+      setPath("/admin");
+    }
+  }, [path]);
 
   useEffect(() => {
     if (!path.startsWith("/admin")) {
@@ -143,6 +165,7 @@ function App() {
             : prev.seriesRules,
         description: payload.tournament.description ?? prev.description,
         prizePool: payload.tournament.prize_pool ?? prev.prizePool,
+        prizePoolBreakdown: payload.tournament.prize_pool_breakdown ?? prev.prizePoolBreakdown,
         entryFee: payload.tournament.entry_fee ?? prev.entryFee,
         startDate: payload.tournament.start_date ? String(payload.tournament.start_date).slice(0, 10) : prev.startDate,
         endDate: payload.tournament.end_date ? String(payload.tournament.end_date).slice(0, 10) : prev.endDate,
@@ -153,6 +176,7 @@ function App() {
         rulebook: payload.tournament.rulebook ?? prev.rulebook,
         announcements: payload.tournament.announcements ?? prev.announcements,
         visibilityMode: payload.tournament.visibility_mode ?? prev.visibilityMode,
+        bracketActive: payload.tournament.bracket_active ?? prev.bracketActive,
       }));
       setTournamentId(payload.tournament.id);
     }
@@ -238,6 +262,23 @@ function App() {
     }
   }
 
+  async function updateBracketActivation(nextActive) {
+    if (!tournamentId) {
+      setSetup((prev) => ({ ...prev, bracketActive: nextActive }));
+      setMessage("Create tournament first.");
+      return;
+    }
+    try {
+      const payload = buildTournamentPayload({ bracketActive: nextActive });
+      await api.updateTournament(tournamentId, payload);
+      await refreshTournament(tournamentId);
+      await loadTournaments();
+      setMessage(nextActive ? "Tournament bracket activated." : "Tournament bracket deactivated.");
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
   async function publishCurrentTournament(id = tournamentId) {
     if (!id) return;
     await api.publishTournament(id);
@@ -293,6 +334,10 @@ function App() {
     const bracketTeams = approvedRoster?.teams || [];
     const bracketPlayers = approvedRoster?.players || [];
     const bracketTeamPlayers = approvedRoster?.teamPlayers || [];
+    if (setup.bracketActive) {
+      setMessage("Deactivate the live bracket before regenerating tournament matches.");
+      return;
+    }
     if (!approvedRoster) {
       setMessage("Approve a tournament roster before generating the bracket.");
       return;
@@ -563,12 +608,20 @@ function App() {
 
   async function saveSchedule() {
     if (!state?.matches?.length) return;
-    const schedule = state.matches.slice(0, 10).map((match, index) => ({
+    const stageOrder = Object.fromEntries((state.tabs || []).map((tab, index) => [tab.id, index]));
+    const orderedMatches = [...state.matches].sort((a, b) => {
+      const stageDiff = (stageOrder[a.stageKey] ?? 999) - (stageOrder[b.stageKey] ?? 999);
+      if (stageDiff !== 0) return stageDiff;
+      const roundDiff = (a.roundIndex ?? 0) - (b.roundIndex ?? 0);
+      if (roundDiff !== 0) return roundDiff;
+      return (a.matchIndex ?? 0) - (b.matchIndex ?? 0);
+    });
+    const schedule = orderedMatches.map((match, index) => ({
       id: createId(),
       matchId: match.id,
-      startAt: new Date(Date.now() + index * 3600_000).toISOString(),
-      stream: index % 2 === 0 ? "Main" : "Secondary",
-      status: index === 0 ? "live" : "upcoming",
+      startAt: (match.slotAt ? new Date(match.slotAt) : new Date(Date.now() + index * 3600_000)).toISOString(),
+      stream: "Main",
+      status: match.status || "upcoming",
       notes: "",
     }));
     await api.saveSchedule(tournamentId, schedule);
@@ -631,14 +684,12 @@ function App() {
     return <AdminAuthPage inviteToken={inviteToken} onAuthed={setAdminUser} />;
   }
 
-  const adminPages = ["registrations", "teams", "setup", "bracketSchedule", "standings", "users"];
-
   return (
     <main className="min-h-screen bg-background text-foreground">
       <AppHeader
         pages={adminPages}
         activePage={activePage}
-        setActivePage={setActivePage}
+        setActivePage={navigateAdminPage}
         darkMode={darkMode}
         setDarkMode={setDarkMode}
       />
@@ -730,6 +781,10 @@ function App() {
           />
         )}
 
+        {activePage === "announcements" && (
+          <AnnouncementsPage setup={setup} setSetup={setSetup} saveTournament={bootstrapTournament} />
+        )}
+
         {activePage === "bracketSchedule" && (
           <div className="space-y-4">
             <BracketPage
@@ -744,6 +799,7 @@ function App() {
               rosters={rosters}
               approvedRoster={approvedRoster}
               updateBracketVisibilityMode={updateBracketVisibilityMode}
+              updateBracketActivation={updateBracketActivation}
               approveRoster={approveRoster}
             />
             <SchedulePage state={state} saveSchedule={saveSchedule} saveCustomSchedule={saveCustomSchedule} />
@@ -762,7 +818,8 @@ function App() {
 
         {activePage === "users" && <AdminUsersPage currentUser={adminUser} />}
       </section>
-      <AppFooter />
+      <AppFooter navigate={navigateAdminPage} mode="admin" />
+      <ScrollToTopButton />
     </main>
   );
 }

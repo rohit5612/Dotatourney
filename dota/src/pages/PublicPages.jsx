@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppFooter } from "../components/AppFooter";
 import { BracketDiagram } from "../components/BracketDiagram";
+import { ScrollToTopButton } from "../components/ScrollToTopButton";
 import { roles } from "../constants/tournament";
 import { api } from "../lib/api";
 
 const tournamentSlug = "the-forge";
 const defaultTournamentStart = "2026-05-22T00:00:00+05:30";
 const discordInviteUrl = "https://discord.gg/NmC2Xqnb";
+const publicPaths = ["/", "/tournament", "/schedule", "/register", "/rules"];
 
 function formatDate(value) {
   if (!value) return "TBA";
@@ -135,7 +137,8 @@ function EventShell({ path, navigate, children }) {
     <main className="min-h-screen bg-background text-foreground">
       <PublicHeader path={path} navigate={navigate} />
       <section className={path === "/" ? "space-y-20" : contentClass}>{children}</section>
-      <AppFooter />
+      <AppFooter navigate={navigate} />
+      <ScrollToTopButton />
     </main>
   );
 }
@@ -158,6 +161,16 @@ export function PublicApp({ path, navigate }) {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [path]);
+
+  useEffect(() => {
+    if (!publicPaths.includes(path)) {
+      navigate("/");
+    }
+  }, [navigate, path]);
 
   if (path === "/register") {
     return (
@@ -200,7 +213,6 @@ export function PublicApp({ path, navigate }) {
 
 function LandingPage({ event, navigate, message }) {
   const tournament = event?.tournament;
-  const announcements = normalizeAnnouncements(tournament?.announcements);
   const discordUrl = tournament?.discord_url || discordInviteUrl;
   const formatLabel = `${getFormatName(tournament?.format)} ${tournament?.team_count || "TBA"} Teams`;
   return (
@@ -294,17 +306,6 @@ function LandingPage({ event, navigate, message }) {
               </p>
             </div>
           </div>
-        </section>
-      </RevealSection>
-
-      <RevealSection>
-        <section className="mx-auto max-w-6xl space-y-2 px-4">
-          <h3 className="font-serif text-2xl">Announcements</h3>
-          {(announcements.length ? announcements : ["Announcements will appear here."]).map((item, index) => (
-            <div key={`${item}-${index}`} className="rounded-md border border-border bg-card p-4 text-sm text-muted-foreground">
-              {item}
-            </div>
-          ))}
         </section>
       </RevealSection>
 
@@ -409,37 +410,126 @@ function CountdownUnit({ label, value }) {
   );
 }
 
-function TournamentInfo({ event, message, compact = false }) {
+function normalizeBreakdown(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string" && value.trim().startsWith("[")) {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      return [];
+    }
+  }
+  return String(value || "")
+    .split("\n")
+    .map((line, index) => {
+      const text = line.trim();
+      return text ? { placement: index + 1, label: `${index + 1}`, amount: text } : null;
+    })
+    .filter(Boolean);
+}
+
+function TournamentInfo({ event, message }) {
   const tournament = event?.tournament;
   const announcements = normalizeAnnouncements(tournament?.announcements);
+  const prizeBreakdown = normalizeBreakdown(tournament?.prize_pool_breakdown);
+  const tournamentMode = tournament?.visibility_mode !== "demo";
+  const groupedStandings = event?.groupedStandings || [];
+  const standings = event?.standings || [];
+  const teams = event?.teams || [];
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
-      {message ? <p className="rounded-md border border-border bg-card p-2 text-sm text-secondary lg:col-span-2">{message}</p> : null}
-      <section className="space-y-3 rounded-lg border border-border bg-card p-4">
-        <h2 className="font-serif text-2xl">{tournament?.name || "The Forge"}</h2>
-        <p className="text-muted-foreground">
-          {tournament?.description || "Tournament details are being forged. Check Discord for live communications."}
-        </p>
-        <div className="grid gap-3 md:grid-cols-3">
-          <Metric label="Format" value={`${getFormatName(tournament?.format)} ${tournament?.team_count || "TBA"} Teams`} />
-          <Metric label="Entry fee" value={tournament?.entry_fee || "TBA"} />
-          <Metric label="Registration closes" value={formatDate(tournament?.registration_deadline)} />
+    <div className="space-y-6">
+      {message ? <p className="rounded-md border border-border bg-card p-2 text-sm text-secondary">{message}</p> : null}
+
+      <section className="relative left-1/2 flex min-h-[60vh] w-screen -translate-x-1/2 items-center overflow-hidden border-y border-border bg-card px-4 py-10 shadow-2xl sm:px-6">
+        <img
+          className="absolute inset-0 h-full w-full object-cover opacity-35"
+          src="https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1800&q=80"
+          alt=""
+          aria-hidden="true"
+        />
+        <div className="absolute inset-0 bg-linear-to-br from-background via-background/75 to-background/30" />
+        <div className="relative mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+          <div>
+            <p className="text-xs uppercase tracking-[0.25em] text-secondary">Tournament hub</p>
+            <h2 className="mt-3 font-serif text-4xl text-primary md:text-6xl">{tournament?.name || "The Forge"}</h2>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground md:text-base">
+              {tournament?.description || "Tournament details are being forged. Check Discord for live communications."}
+            </p>
+          </div>
+          <div className="rounded-xl border border-primary/30 bg-card/80 p-4 backdrop-blur">
+            <p className="text-xs uppercase tracking-widest text-muted-foreground">Tournament starts</p>
+            <p className="mt-2 font-serif text-2xl text-primary">{formatDate(tournament?.start_date || defaultTournamentStart)}</p>
+            <div className="mt-4">
+              <CountdownTimer targetDate={tournament?.start_date || defaultTournamentStart} />
+            </div>
+          </div>
         </div>
       </section>
-      <section className="space-y-3 rounded-lg border border-border bg-card p-4">
-        <h3 className="font-serif text-lg">Rule book</h3>
-        <p className="whitespace-pre-line text-sm text-muted-foreground">
-          {tournament?.rulebook || "Rules will be published here before the tournament starts."}
-        </p>
+
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <Metric label="Format" value={`${getFormatName(tournament?.format)} ${tournament?.team_count || "TBA"} Teams`} />
+        <Metric label="Registration fee" value={tournament?.entry_fee || "TBA"} />
+        <Metric label="Prize pool" value={tournament?.prize_pool || "TBA"} />
+        <Metric label="Registration closes" value={formatDate(tournament?.registration_deadline)} />
       </section>
-      {!compact ? (
-        <section className="space-y-2 rounded-lg border border-border bg-card p-4 lg:col-span-2">
-          <h3 className="font-serif text-lg">Announcements</h3>
-          {(announcements.length ? announcements : ["Announcements will appear here."]).map((item, index) => (
-            <div key={`${item}-${index}`} className="rounded-md border border-border bg-background p-3 text-sm text-muted-foreground">
-              {item}
+
+      <section className="rounded-xl border border-border bg-card p-4">
+        <h3 className="font-serif text-xl text-primary">Prize Pool Breakdown</h3>
+        <div className="mt-3 grid gap-2 md:grid-cols-2">
+          {(prizeBreakdown.length ? prizeBreakdown : [{ label: "Prize breakdown", amount: "Breakdown will be announced soon." }]).map((item, index) => (
+            <div key={`${item.label || item}-${index}`} className="rounded-md border border-border bg-background p-3 text-sm">
+              <p className="text-xs uppercase tracking-wider text-secondary">{item.label || `${index + 1}`}</p>
+              <p className="mt-1 font-serif text-lg text-primary">{item.amount || "TBA"}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="space-y-3 rounded-xl border border-border bg-card p-4">
+        <h3 className="font-serif text-xl text-primary">Standings</h3>
+        {groupedStandings.length ? (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {groupedStandings.map((group) => (
+              <StandingsTable key={group.id} title={group.label} rows={group.rows} />
+            ))}
+          </div>
+        ) : (
+          <StandingsTable title="Overall standings" rows={standings} />
+        )}
+      </section>
+
+      <section className="space-y-3 rounded-xl border border-border bg-card p-4">
+        <h3 className="font-serif text-xl text-primary">Announcements</h3>
+        {(announcements.length ? announcements : ["Announcements will appear here."]).map((item, index) => (
+          <article key={`${item}-${index}`} className="rounded-xl border border-border bg-background p-4">
+            <p className="text-xs uppercase tracking-wider text-secondary">Update {index + 1}</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{item}</p>
+          </article>
+        ))}
+      </section>
+
+      {tournamentMode && teams.length ? (
+        <section className="space-y-3 rounded-xl border border-border bg-card p-4">
+          <h3 className="font-serif text-xl text-primary">Teams</h3>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {teams.map((team) => (
+              <article key={team.id || team.name} className="overflow-hidden rounded-xl border border-border bg-background">
+                <div className="border-b border-border bg-card px-4 py-3">
+                  <h4 className="font-serif text-xl text-primary">{team.name}</h4>
+                  <p className="text-xs text-secondary">{team.captain ? `Captain: ${team.captain}` : "Captain TBA"}</p>
+                </div>
+                <div className="divide-y divide-border">
+                  {(team.players?.length ? team.players : [{ name: "Roster TBA", roles: [] }]).map((player) => (
+                    <div key={player.id || player.name} className="grid grid-cols-[1fr_auto] gap-2 px-4 py-2 text-sm">
+                      <span className="font-medium">{player.name}</span>
+                      <span className="text-xs text-muted-foreground">{Array.isArray(player.roles) ? player.roles.join(", ") : player.role || "Player"}</span>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
         </section>
       ) : null}
     </div>
@@ -483,6 +573,8 @@ function PublicSchedule({ event, message }) {
     return groups;
   }, [event]);
   const stageTabs = event?.tabs?.length ? event.tabs : Object.keys(groupedMatches).map((id) => ({ id, label: id }));
+  const stageLabels = Object.fromEntries(stageTabs.map((tab) => [tab.id, tab.label]));
+  const sortedSchedule = [...(event?.schedule || [])].sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
 
   return (
     <div className="space-y-4">
@@ -522,16 +614,27 @@ function PublicSchedule({ event, message }) {
       </div>
       <section className="space-y-2 rounded-lg border border-border bg-card p-4">
         <h3 className="font-serif text-lg">Scheduled matches</h3>
-        {(event?.schedule || []).map((slot) => {
+        {sortedSchedule.map((slot) => {
           const match = event?.matches?.find((entry) => entry.id === slot.matchId);
+          const stageLabel = stageLabels[match?.stageKey] || match?.stageKey || "Bracket";
           return (
-            <div key={slot.id} className="rounded-md border border-border bg-background p-3 text-sm">
-              <div className="font-medium">{match ? `${match.team1} vs ${match.team2}` : slot.matchId}</div>
-              <div className="text-muted-foreground">{new Date(slot.startAt).toLocaleString()} - {slot.stream}</div>
-              <div className="capitalize text-secondary">{slot.status}</div>
+            <div key={slot.id} className="grid gap-3 rounded-md border border-border bg-background p-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
+              <div>
+                <div className="font-medium">{match ? `${match.team1} vs ${match.team2}` : slot.matchId}</div>
+                <div className="text-muted-foreground">{new Date(slot.startAt).toLocaleString()} - {slot.stream}</div>
+                <div className="capitalize text-secondary">{slot.status}</div>
+              </div>
+              <div className="rounded-md border border-border bg-card px-3 py-2 text-right">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">Bracket</div>
+                <div className="font-medium">{stageLabel}</div>
+                <div className="text-xs text-muted-foreground">
+                  Round {(match?.roundIndex ?? 0) + 1} - Match {(match?.matchIndex ?? 0) + 1}
+                </div>
+              </div>
             </div>
           );
         })}
+        {!sortedSchedule.length ? <p className="rounded-md border border-border bg-background p-3 text-sm text-muted-foreground">No scheduled matches yet.</p> : null}
       </section>
     </div>
   );
@@ -589,6 +692,8 @@ function GeneralRulesPage() {
 
 function RegistrationPage({ event, navigate, message, setMessage }) {
   const discordUrl = event?.tournament?.discord_url || discordInviteUrl;
+  const registrationDeadline = event?.tournament?.registration_deadline;
+  const registrationClosed = registrationDeadline ? new Date(registrationDeadline) <= new Date() : false;
   const [form, setForm] = useState({
     name: "",
     phoneNumber: "",
@@ -625,6 +730,10 @@ function RegistrationPage({ event, navigate, message, setMessage }) {
 
   function submit(eventSubmit) {
     eventSubmit.preventDefault();
+    if (registrationClosed) {
+      setMessage("Registration is closed for this tournament.");
+      return;
+    }
     if (!form.roles.length) {
       setMessage("Select at least one role.");
       return;
@@ -652,6 +761,11 @@ function RegistrationPage({ event, navigate, message, setMessage }) {
       <div>
         <h2 className="font-serif text-2xl">Register for {event?.tournament?.name || "The Forge"}</h2>
         <p className="text-sm text-muted-foreground">All fields are mandatory. Submit accurate player, Steam, Discord, and payment details.</p>
+        {registrationDeadline ? (
+          <p className={`mt-2 rounded-md border border-border bg-background p-2 text-sm ${registrationClosed ? "text-destructive" : "text-secondary"}`}>
+            Registration {registrationClosed ? "closed" : "closes"} on {new Date(registrationDeadline).toLocaleString()}.
+          </p>
+        ) : null}
         <a className="btn btn-outline mt-3" href={discordUrl} target="_blank" rel="noreferrer">
           Join Discord for payment and match updates
         </a>
@@ -694,8 +808,8 @@ function RegistrationPage({ event, navigate, message, setMessage }) {
       {form.paymentScreenshot ? (
         <img src={form.paymentScreenshot} alt="Payment screenshot preview" className="max-h-48 rounded-md border border-border object-contain" />
       ) : null}
-      <button type="submit" className="btn btn-primary">
-        Submit registration
+      <button type="submit" className="btn btn-primary" disabled={registrationClosed}>
+        {registrationClosed ? "Registration closed" : "Submit registration"}
       </button>
       {showConfirm ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">

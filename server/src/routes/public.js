@@ -30,6 +30,7 @@ function fallbackTournament(identifier) {
     team_count: 8,
     description: "A Dota 2 community tournament platform. Full event details will appear here once admins publish the setup.",
     prize_pool: "TBA",
+    prize_pool_breakdown: "",
     entry_fee: "TBA",
     start_date: null,
     end_date: null,
@@ -67,7 +68,14 @@ function publicPayload(data, fallbackIdentifier = "the-forge") {
 
   const visibilityMode = data.tournament.visibility_mode || "demo";
   const matches = data.matches.map((match) => publicMatch(match, visibilityMode));
-  const publicTeams = data.approvedRoster?.teams || data.teams;
+  const publicTeams = data.approvedRoster
+    ? data.approvedRoster.teams.map((team) => ({
+        ...team,
+        players: data.approvedRoster.players.filter((player) =>
+          data.approvedRoster.teamPlayers.some((record) => record.team_id === team.id && record.player_id === player.id),
+        ),
+      }))
+    : data.teams;
   const standingsTeams =
     visibilityMode === "demo"
       ? Array.from({ length: data.tournament.team_count }, (_, index) => ({ name: `Team ${index + 1}` }))
@@ -104,6 +112,9 @@ router.post("/tournaments/:identifier/register", async (req, res, next) => {
     const data = await getPublishedTournament();
     if (!data) {
       return res.status(404).json({ message: "No tournament is currently published for registration" });
+    }
+    if (data.tournament.registration_deadline && new Date(data.tournament.registration_deadline) <= new Date()) {
+      return res.status(403).json({ message: "Registration is closed for this tournament" });
     }
     const payload = registrationSchema.parse(req.body);
     const registration = await createPlayerRegistration(data.tournament.id, payload);

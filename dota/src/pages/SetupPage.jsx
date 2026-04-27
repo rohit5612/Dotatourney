@@ -1,20 +1,85 @@
 import { useState } from "react";
 import { buildDefaultSeriesRules, formatDetails, seriesOptions, seriesRuleTemplates } from "../constants/tournament";
 
-function normalizeAnnouncements(value) {
+const formatTeamGuidance = {
+  se: { min: 2, recommended: "4, 8, 16, 32", odd: "Odd counts use byes to avoid fake teams." },
+  dse: { min: 4, recommended: "4, 8, 16", odd: "Odd counts use upper-bracket byes, then feed real losers into lower bracket." },
+  rr: { min: 3, recommended: "4-10", odd: "Odd counts create round byes." },
+  gsl: { min: 4, recommended: "8 or 16", odd: "Odd counts split into uneven groups." },
+  swiss: { min: 4, recommended: "8, 16, 32", odd: "Odd counts create round byes." },
+  hybrid: { min: 4, recommended: "8 or 16", odd: "Odd counts split into uneven groups before playoffs." },
+};
+
+function normalizePrizePoolBreakdown(value) {
   if (Array.isArray(value)) return value;
+  if (typeof value === "string" && value.trim().startsWith("[")) {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      return [];
+    }
+  }
   if (typeof value === "string") {
     return value
       .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-  }
-  if (value && typeof value === "object") {
-    return Object.values(value)
-      .map((item) => String(item || "").trim())
+      .map((line, index) => line.trim() && { placement: index + 1, label: `${index + 1}${index === 0 ? "st" : index === 1 ? "nd" : index === 2 ? "rd" : "th"} place`, amount: line.trim() })
       .filter(Boolean);
   }
   return [];
+}
+
+function placementLabel(index) {
+  const placement = index + 1;
+  const suffix = placement === 1 ? "st" : placement === 2 ? "nd" : placement === 3 ? "rd" : "th";
+  return `${placement}${suffix} place`;
+}
+
+function getSetupInsights(format, teamCount, isPowerOfTwo, selectedGuidance) {
+  const count = Math.max(0, Number(teamCount) || 0);
+  const leagueMatches = Math.max(0, Math.floor((count * (count - 1)) / 2));
+  const bracketRounds = count > 1 ? Math.ceil(Math.log2(count)) : 0;
+  const structureValue =
+    count < selectedGuidance.min
+      ? `Minimum ${selectedGuidance.min} teams required for ${formatDetails[format]?.name || "this format"}.`
+      : isPowerOfTwo
+        ? "Great: this count maps cleanly to standard elimination rounds."
+        : selectedGuidance.odd;
+
+  const formatMap = {
+    se: [
+      { label: "Structure hint", value: structureValue },
+      { label: "Bye handling", value: isPowerOfTwo ? "No byes needed." : "Highest seeds advance through byes before live rounds." },
+      { label: "Bracket depth", value: `~${bracketRounds} rounds to crown a winner` },
+    ],
+    dse: [
+      { label: "Structure hint", value: structureValue },
+      { label: "Lower bracket", value: count >= 4 ? "Losers feed into a lower bracket, including 4-team events." : "Needs 4 teams to create lower bracket flow." },
+      { label: "Bracket depth", value: `~${Math.max(2, bracketRounds + 1)} rounds across upper, lower, and final` },
+    ],
+    rr: [
+      { label: "Structure hint", value: structureValue },
+      { label: "Round robin workload", value: `${leagueMatches} league matches (single round robin)` },
+      { label: "Playoff depth", value: count >= 3 ? "Top teams feed into a final playoff bracket." : "Needs 3 teams for standings." },
+    ],
+    gsl: [
+      { label: "Structure hint", value: structureValue },
+      { label: "Group workload", value: `~${Math.max(0, Math.floor(leagueMatches / 2))} group matches before playoffs` },
+      { label: "Playoff depth", value: "Top group finishers move into elimination playoffs." },
+    ],
+    swiss: [
+      { label: "Structure hint", value: structureValue },
+      { label: "Swiss workload", value: `${Math.min(3, Math.max(1, count - 1))} pairing rounds before playoffs` },
+      { label: "Playoff depth", value: "Top Swiss finishers move into qualification playoffs." },
+    ],
+    hybrid: [
+      { label: "Structure hint", value: structureValue },
+      { label: "Group workload", value: `~${Math.max(0, Math.floor(leagueMatches / 2))} group matches before playoffs` },
+      { label: "Bracket depth", value: "Group standings feed into playoff stages." },
+    ],
+  };
+
+  return formatMap[format] || formatMap.dse;
 }
 
 export function SetupPage({
@@ -37,10 +102,40 @@ export function SetupPage({
   const [isSaving, setIsSaving] = useState(false);
   const teamCount = Number(setup.teamCount) || 0;
   const isPowerOfTwo = teamCount > 0 && (teamCount & (teamCount - 1)) === 0;
-  const estimatedLeagueMatches = Math.max(0, Math.floor((teamCount * (teamCount - 1)) / 2));
-  const estimatedBracketRounds = teamCount > 1 ? Math.ceil(Math.log2(teamCount)) : 0;
   const currentSeriesTemplates = seriesRuleTemplates[setup.format] || [];
-  const announcementLines = normalizeAnnouncements(setup.announcements);
+  const selectedGuidance = formatTeamGuidance[setup.format] || formatTeamGuidance.dse;
+  const teamCountTooLow = teamCount < selectedGuidance.min;
+  const quantityTooltip = `${formatDetails[setup.format]?.name || "Selected format"} requires minimum ${selectedGuidance.min} teams. Recommended: ${selectedGuidance.recommended}. ${selectedGuidance.odd}`;
+  const setupInsights = getSetupInsights(setup.format, teamCount, isPowerOfTwo, selectedGuidance);
+  const prizeBreakdown = normalizePrizePoolBreakdown(setup.prizePoolBreakdown);
+  const prizeEligibleCount = Math.min(teamCount || 1, Math.max(1, prizeBreakdown.length || 1));
+
+  function setPrizeBreakdownCount(nextCount) {
+    const count = Math.max(1, Math.min(teamCount || 1, Number(nextCount) || 1));
+    setSetup((prev) => {
+      const current = normalizePrizePoolBreakdown(prev.prizePoolBreakdown);
+      const next = Array.from({ length: count }, (_, index) => ({
+        placement: index + 1,
+        label: current[index]?.label || placementLabel(index),
+        amount: current[index]?.amount || "",
+      }));
+      return { ...prev, prizePoolBreakdown: next };
+    });
+  }
+
+  function updatePrizeBreakdown(index, patch) {
+    setSetup((prev) => {
+      const current = normalizePrizePoolBreakdown(prev.prizePoolBreakdown);
+      const count = Math.max(prizeEligibleCount, index + 1);
+      const next = Array.from({ length: count }, (_, itemIndex) => ({
+        placement: itemIndex + 1,
+        label: current[itemIndex]?.label || placementLabel(itemIndex),
+        amount: current[itemIndex]?.amount || "",
+      }));
+      next[index] = { ...next[index], ...patch };
+      return { ...prev, prizePoolBreakdown: next };
+    });
+  }
 
   function resetDraft() {
     setSetup({
@@ -52,6 +147,7 @@ export function SetupPage({
       seriesRules: buildDefaultSeriesRules("dse", "bo3"),
       description: "",
       prizePool: "",
+      prizePoolBreakdown: [{ placement: 1, label: "1st place", amount: "" }],
       entryFee: "",
       startDate: "",
       endDate: "",
@@ -60,6 +156,7 @@ export function SetupPage({
       rulebook: "",
       announcements: [],
       visibilityMode: "demo",
+      bracketActive: false,
       status: "draft",
     });
   }
@@ -169,20 +266,33 @@ export function SetupPage({
           onChange={(event) => setSetup((prev) => ({ ...prev, slug: event.target.value }))}
           placeholder="Public slug"
         />
-        <input
-          type="number"
-          min={2}
-          max={64}
-          className="rounded-md border border-input bg-background p-2"
-          value={setup.teamCount}
-          onChange={(event) =>
-            setSetup((prev) => ({
-              ...prev,
-              teamCount: Math.max(2, Math.min(64, Number(event.target.value) || 2)),
-            }))
-          }
-          placeholder="Team count"
-        />
+        <label className="relative block">
+          <span className="sr-only">Team quantity</span>
+          <input
+            type="number"
+            min={selectedGuidance.min}
+            max={64}
+            title={quantityTooltip}
+            className={`w-full rounded-md border bg-background p-2 pr-9 ${
+              teamCountTooLow ? "border-destructive" : "border-input"
+            }`}
+            value={setup.teamCount}
+            onChange={(event) =>
+              setSetup((prev) => ({
+                ...prev,
+                teamCount: Math.max(selectedGuidance.min, Math.min(64, Number(event.target.value) || selectedGuidance.min)),
+              }))
+            }
+            placeholder="Team count"
+          />
+          <span
+            className="absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full border border-border text-xs text-muted-foreground"
+            title={quantityTooltip}
+            aria-label={quantityTooltip}
+          >
+            ?
+          </span>
+        </label>
         <select
           className="rounded-md border border-input bg-background p-2"
           value={setup.seriesType}
@@ -206,7 +316,13 @@ export function SetupPage({
           className="rounded-md border border-input bg-background p-2"
           value={setup.format}
           onChange={(event) => {
-            onFormatChange(event.target.value);
+            const nextFormat = event.target.value;
+            const nextGuidance = formatTeamGuidance[nextFormat] || formatTeamGuidance.dse;
+            onFormatChange(nextFormat);
+            setSetup((prev) => ({
+              ...prev,
+              teamCount: Math.max(nextGuidance.min, Number(prev.teamCount) || nextGuidance.min),
+            }));
           }}
         >
           {Object.entries(formatDetails).map(([key, value]) => (
@@ -278,39 +394,68 @@ export function SetupPage({
             onChange={(event) => setSetup((prev) => ({ ...prev, endDate: event.target.value }))}
           />
         </label>
+        <label className="text-sm text-muted-foreground">
+          Registration finish date
+          <input
+            type="datetime-local"
+            className="mt-1 w-full rounded-md border border-input bg-background p-2 text-foreground"
+            value={setup.registrationDeadline || ""}
+            onChange={(event) => setSetup((prev) => ({ ...prev, registrationDeadline: event.target.value }))}
+          />
+        </label>
             </div>
 
-            <label className="block text-sm">
-        Public announcements, one per line
-        <textarea
-          className="mt-1 min-h-24 w-full rounded-md border border-input bg-background p-2"
-          value={announcementLines.join("\n")}
-          onChange={(event) =>
-            setSetup((prev) => ({
-              ...prev,
-              announcements: event.target.value.split("\n").map((line) => line.trim()).filter(Boolean),
-            }))
-          }
-        />
-            </label>
+            <section className="space-y-3 rounded-lg border border-border bg-background p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Prize pool distribution</p>
+                  <p className="text-xs text-muted-foreground">Choose how many placements are eligible, then assign each payout manually.</p>
+                </div>
+                <label className="text-sm text-muted-foreground">
+                  Paid placements
+                  <select
+                    className="ml-2 rounded-md border border-input bg-card p-2 text-foreground"
+                    value={prizeEligibleCount}
+                    onChange={(event) => setPrizeBreakdownCount(event.target.value)}
+                  >
+                    {Array.from({ length: Math.max(1, teamCount || 1) }, (_, index) => (
+                      <option key={index + 1} value={index + 1}>
+                        Top {index + 1}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="grid gap-2 md:grid-cols-2">
+                {Array.from({ length: prizeEligibleCount }, (_, index) => {
+                  const row = prizeBreakdown[index] || { placement: index + 1, label: placementLabel(index), amount: "" };
+                  return (
+                    <div key={index} className="grid gap-2 rounded-md border border-border bg-card p-3 sm:grid-cols-[1fr_1fr]">
+                      <input
+                        className="rounded-md border border-input bg-background p-2 text-sm"
+                        value={row.label || placementLabel(index)}
+                        onChange={(event) => updatePrizeBreakdown(index, { label: event.target.value })}
+                        placeholder={placementLabel(index)}
+                      />
+                      <input
+                        className="rounded-md border border-input bg-background p-2 text-sm"
+                        value={row.amount || ""}
+                        onChange={(event) => updatePrizeBreakdown(index, { amount: event.target.value })}
+                        placeholder="Amount"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
 
             <div className="grid gap-3 md:grid-cols-3">
-        <div className="rounded-md border border-border bg-background p-3">
-          <div className="text-xs uppercase tracking-wider text-muted-foreground">Structure hint</div>
-          <div className="mt-1 text-sm">
-            {isPowerOfTwo
-              ? "Great: this count maps cleanly to standard elimination rounds."
-              : "Non power-of-two count: byes/play-in rounds may be required for clean brackets."}
+        {setupInsights.map((insight) => (
+          <div key={insight.label} className="rounded-md border border-border bg-background p-3">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">{insight.label}</div>
+            <div className="mt-1 text-sm">{insight.value}</div>
           </div>
-        </div>
-        <div className="rounded-md border border-border bg-background p-3">
-          <div className="text-xs uppercase tracking-wider text-muted-foreground">Round robin workload</div>
-          <div className="mt-1 text-sm">{estimatedLeagueMatches} league matches (single round robin)</div>
-        </div>
-        <div className="rounded-md border border-border bg-background p-3">
-          <div className="text-xs uppercase tracking-wider text-muted-foreground">Bracket depth</div>
-          <div className="mt-1 text-sm">~{estimatedBracketRounds} rounds to crown a winner</div>
-        </div>
+        ))}
             </div>
 
             <div>
@@ -339,6 +484,9 @@ export function SetupPage({
                 </div>
                 <p className="mt-2 text-sm text-muted-foreground">{format.description}</p>
                 <p className="mt-2 text-xs text-secondary">{format.guidance}</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Min {formatTeamGuidance[key]?.min || 2} teams. Recommended: {formatTeamGuidance[key]?.recommended || "4, 8, 16"}.
+                </p>
               </button>
             );
           })}

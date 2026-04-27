@@ -6,7 +6,17 @@ export function SchedulePage({ state, saveSchedule, saveCustomSchedule }) {
   const upcomingCount = (state?.schedule || []).filter((slot) => slot.status === "upcoming").length;
   const finishedCount = (state?.schedule || []).filter((slot) => slot.status === "finished").length;
   const editableSchedule = useMemo(() => {
-    if (draft.length) return draft;
+    const stageOrder = Object.fromEntries((state?.tabs || []).map((tab, index) => [tab.id, index]));
+    const byStageRound = (a, b) => {
+      const matchA = state?.matches?.find((entry) => entry.id === a.matchId) || a;
+      const matchB = state?.matches?.find((entry) => entry.id === b.matchId) || b;
+      const stageDiff = (stageOrder[matchA.stageKey] ?? 999) - (stageOrder[matchB.stageKey] ?? 999);
+      if (stageDiff !== 0) return stageDiff;
+      const roundDiff = (matchA.roundIndex ?? 0) - (matchB.roundIndex ?? 0);
+      if (roundDiff !== 0) return roundDiff;
+      return (matchA.matchIndex ?? 0) - (matchB.matchIndex ?? 0);
+    };
+    if (draft.length) return [...draft].sort(byStageRound);
     return (state?.matches || []).map((match) => {
       const slot = state?.schedule?.find((entry) => entry.matchId === match.id);
       return {
@@ -21,8 +31,13 @@ export function SchedulePage({ state, saveSchedule, saveCustomSchedule }) {
         status: slot?.status || match.status || "upcoming",
         notes: slot?.notes || "",
       };
-    });
+    }).sort(byStageRound);
   }, [draft, state]);
+
+  const stageLabels = useMemo(
+    () => Object.fromEntries((state?.tabs || []).map((tab) => [tab.id, tab.label])),
+    [state?.tabs],
+  );
 
   function updateSlot(matchId, patch) {
     setDraft((prev) => {
@@ -56,11 +71,29 @@ export function SchedulePage({ state, saveSchedule, saveCustomSchedule }) {
       <div className="space-y-2">
         {editableSchedule.map((slot) => {
           const match = state?.matches?.find((entry) => entry.id === slot.matchId);
+          const stageLabel = stageLabels[match?.stageKey] || match?.stageKey || "Bracket";
           return (
-            <div key={slot.matchId} className="grid gap-2 rounded-md border border-border bg-background p-3 text-sm md:grid-cols-[1.4fr_1fr_0.8fr_0.8fr]">
-              <div className="font-medium">{match ? `${match.team1} vs ${match.team2}` : slot.matchId}</div>
-              <input type="datetime-local" className="rounded-md border border-input bg-card p-1" value={slot.startAt} onChange={(event) => updateSlot(slot.matchId, { startAt: event.target.value })} />
-              <input className="rounded-md border border-input bg-card p-1" value={slot.stream} onChange={(event) => updateSlot(slot.matchId, { stream: event.target.value })} />
+            <div key={slot.matchId} className="grid gap-2 rounded-md border border-border bg-background p-3 text-sm xl:grid-cols-[0.9fr_0.7fr_1.5fr_1fr_0.8fr_0.8fr]">
+              <div>
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">Bracket</div>
+                <div className="font-medium">{stageLabel}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">Round</div>
+                <div className="font-medium">R{(match?.roundIndex ?? 0) + 1} M{(match?.matchIndex ?? 0) + 1}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">Teams</div>
+                <div className="font-medium">{match ? `${match.team1} vs ${match.team2}` : slot.matchId}</div>
+              </div>
+              <input
+                type="datetime-local"
+                className="rounded-md border border-input bg-card p-1"
+                value={slot.startAt}
+                onChange={(event) => updateSlot(slot.matchId, { startAt: event.target.value })}
+                aria-label="Match date and time"
+              />
+              <input className="rounded-md border border-input bg-card p-1" value={slot.stream} onChange={(event) => updateSlot(slot.matchId, { stream: event.target.value })} aria-label="Stream" />
               <select className="rounded-md border border-input bg-card p-1 capitalize" value={slot.status} onChange={(event) => updateSlot(slot.matchId, { status: event.target.value })}>
                 <option value="upcoming">Upcoming</option>
                 <option value="live">Live</option>
