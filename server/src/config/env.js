@@ -7,6 +7,22 @@ function toNumber(value, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function parseCorsOrigin(raw) {
+  const fallback = "http://localhost:5173";
+  if (!raw?.trim()) return fallback;
+  const parts = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (parts.length === 0) return fallback;
+  if (parts.length === 1) return parts[0];
+  return parts;
+}
+
+const inviteHours = toNumber(process.env.ADMIN_INVITE_EXPIRY_HOURS, 4);
+const emailUser = process.env.EMAIL_USER?.trim() || "";
+const emailPass = process.env.EMAIL_PASS?.trim() || "";
+
 export const env = {
   port: toNumber(process.env.PORT, 3000),
   dbHost: process.env.DB_HOST || "localhost",
@@ -15,8 +31,20 @@ export const env = {
   dbUser: process.env.DB_USER || "",
   dbPassword: process.env.DB_PASSWORD || "",
   databaseUrl: process.env.DATABASE_URL || "",
-  corsOrigin: process.env.CORS_ORIGIN || "http://localhost:5173",
+  corsOrigin: parseCorsOrigin(process.env.CORS_ORIGIN),
+  /** Public URL of the Vite app (Render). Used in invite emails and API responses. */
   appUrl: process.env.APP_URL || "http://localhost:5173",
+  adminInviteExpiryHours: inviteHours > 0 ? inviteHours : 4,
+  smtpHost: process.env.SMTP_HOST || "smtp.gmail.com",
+  smtpPort: toNumber(process.env.SMTP_PORT, 587),
+  smtpSecure: process.env.SMTP_SECURE === "true",
+  emailUser,
+  emailPass,
+  emailFrom: process.env.EMAIL_FROM?.trim() || "",
+  emailSubjectPrefix: process.env.EMAIL_SUBJECT_PREFIX?.trim() || "",
+  /** Local/dev only: create invite but do not send email (still returns link in JSON). */
+  emailSkipSend: process.env.EMAIL_SKIP_SEND === "true",
+  smtpConfigured: Boolean(emailUser && emailPass),
 };
 
 const hasDiscreteDbCreds = Boolean(env.dbHost && env.dbName && env.dbUser);

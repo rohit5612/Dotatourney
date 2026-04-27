@@ -1,16 +1,26 @@
-# React + Vite
+# Frontend (Vite)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This app uses `VITE_API_BASE_URL` to decide where API requests are sent.
 
-Currently, two official plugins are available:
+## Environment variables
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Copy `.env.example` to `.env` and adjust values as needed.
 
-## React Compiler
+- `VITE_API_BASE_URL`
+  - Used by the frontend at runtime for every API request.
+  - Default in code is `/api`.
+  - For production hosting, set this to your backend origin plus `/api` when frontend and backend are on different domains.
+    - Example: `VITE_API_BASE_URL=https://api.example.com/api`
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- `VITE_API_PROXY_TARGET`
+  - Used only by the Vite dev server proxy.
+  - Default: `http://localhost:3000`
 
-## Expanding the ESLint configuration
+## Local development
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Keep `VITE_API_BASE_URL=/api` and run the backend on `http://localhost:3000`.
+Vite will proxy `/api` requests to the backend in development mode.
+
+## Production (e.g. Render + EC2)
+
+Set `VITE_API_BASE_URL` at **build time** on Render to your EC2 API origin, including the `/api` prefix (see `dota/.env.example`). On the server, set `CORS_ORIGIN` and `APP_URL` to your Render site URL so admin invite links and browser CORS match.

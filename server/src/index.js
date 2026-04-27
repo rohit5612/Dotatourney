@@ -21,6 +21,7 @@ async function startServer() {
     console.log(`[startup] Port: ${env.port}`);
     console.log(`[startup] API status: running at ${apiBaseUrl}`);
     console.log(`[startup] Health: ok at ${apiBaseUrl}/health`);
+    console.log(`[startup] APP_URL (invite links): ${env.appUrl}`);
   });
 }
 

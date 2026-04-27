@@ -32,10 +32,20 @@ export function AdminUsersPage({ currentUser }) {
 
   async function createInvite(event) {
     event.preventDefault();
-    const payload = await api.createAdminInvite(email);
-    setInviteLink(payload.invite.link);
-    setEmail("");
-    setMessage("Invite generated. Send the link manually to the invited admin.");
+    setMessage("");
+    setInviteLink("");
+    try {
+      const payload = await api.createAdminInvite(email);
+      setInviteLink(payload.invite.link);
+      setEmail("");
+      if (payload.invite.emailSent) {
+        setMessage("An invitation email was sent. The registration link expires in a few hours.");
+      } else {
+        setMessage("Invite created (email not sent — dev mode). Copy the link below if needed.");
+      }
+    } catch (error) {
+      setMessage(error.message);
+    }
   }
 
   async function updateStatus(userId, status) {
@@ -59,12 +69,12 @@ export function AdminUsersPage({ currentUser }) {
         <div className="mt-3 flex flex-wrap gap-2">
           <input className="min-w-72 rounded-md border border-input bg-background p-2" type="email" placeholder="admin@email.com" value={email} onChange={(event) => setEmail(event.target.value)} required />
           <button type="submit" className="btn btn-primary">
-            Generate invite
+            Send invite
           </button>
         </div>
         {inviteLink ? (
           <div className="mt-3 rounded-md border border-border bg-background p-3 text-sm">
-            <div className="text-muted-foreground">Invite link</div>
+            <div className="text-muted-foreground">Invite link (also sent by email when configured)</div>
             <div className="break-all font-mono">{inviteLink}</div>
           </div>
         ) : null}

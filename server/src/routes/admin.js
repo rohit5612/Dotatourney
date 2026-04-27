@@ -3,6 +3,7 @@ import express from "express";
 import { z } from "zod";
 import { env } from "../config/env.js";
 import { pool } from "../db/pool.js";
+import { sendAdminInviteEmail } from "../services/emailService.js";
 import {
   createBootstrapSuperadmin,
   createSession,
@@ -111,20 +112,41 @@ router.patch("/users/:id/status", requireAdmin, requireSuperadmin, async (req, r
 
 router.post("/invites", requireAdmin, requireSuperadmin, async (req, res, next) => {
   try {
+    if (!env.emailSkipSend && !env.smtpConfigured) {
+      return res.status(503).json({
+        message:
+          "Invite email is not configured. Set EMAIL_USER and EMAIL_PASS (and optional SMTP_*), or set EMAIL_SKIP_SEND=true for local development only.",
+      });
+    }
     const payload = z.object({ email: z.string().email() }).parse(req.body);
     const id = randomUUID();
     const token = randomBytes(24).toString("hex");
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const inviteTtlMs = env.adminInviteExpiryHours * 60 * 60 * 1000;
+    const expiresAt = new Date(Date.now() + inviteTtlMs).toISOString();
+    const registerUrl = `${env.appUrl.replace(/\/$/, "")}/admin/invite/${token}`;
     const { rows } = await pool.query(
       `INSERT INTO admin_invites (id, email, token, invited_by, expires_at)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING id, email, token, status, expires_at, created_at`,
       [id, payload.email.toLowerCase(), token, req.adminUser.id, expiresAt],
     );
+    try {
+      await sendAdminInviteEmail({
+        to: payload.email.toLowerCase(),
+        registerUrl,
+        expiresAt,
+      });
+    } catch (err) {
+      await pool.query("DELETE FROM admin_invites WHERE id = $1", [id]);
+      const mailError = new Error(err?.message || "Failed to send invite email");
+      mailError.status = 502;
+      throw mailError;
+    }
     res.status(201).json({
       invite: {
         ...rows[0],
-        link: `${env.appUrl}/admin/invite/${token}`,
+        link: registerUrl,
+        emailSent: !env.emailSkipSend,
       },
     });
   } catch (error) {
