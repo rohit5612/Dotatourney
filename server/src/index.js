@@ -18,9 +18,11 @@ async function startServer() {
   }
 
   app.listen(env.port, () => {
+    const corsLabel = Array.isArray(env.corsOrigin) ? env.corsOrigin.join(", ") : env.corsOrigin;
     console.log(`[startup] Port: ${env.port}`);
     console.log(`[startup] API status: running at ${apiBaseUrl}`);
     console.log(`[startup] Health: ok at ${apiBaseUrl}/health`);
+    console.log(`[startup] CORS allowed origins: ${corsLabel}`);
     console.log(`[startup] APP_URL (invite links): ${env.appUrl}`);
   });
 }
