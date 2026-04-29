@@ -34,6 +34,9 @@ const poolConfig = env.databaseUrl
       database: env.dbName,
       user: env.dbUser,
       password: env.dbPassword,
+      ...(env.databaseSsl === true
+        ? { ssl: { rejectUnauthorized: env.databaseSslRejectUnauthorized } }
+        : {}),
     };
 
 export const pool = new Pool(poolConfig);
