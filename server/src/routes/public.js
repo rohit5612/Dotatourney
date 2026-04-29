@@ -1,7 +1,7 @@
 import express from "express";
 import { z } from "zod";
 import { createPlayerRegistration } from "../services/registrationRepository.js";
-import { getPublishedTournament, getPublicTournament } from "../services/tournamentRepository.js";
+import { getPublishedTournament, getPublishedTournamentForPublicRequest } from "../services/tournamentRepository.js";
 import { buildGroupedStandings, buildStandings } from "../services/standingsEngine.js";
 import { stageTabsForFormat } from "../services/formatGenerator.js";
 
@@ -101,7 +101,8 @@ router.get("/tournament", async (_req, res, next) => {
 
 router.get("/tournaments/:identifier", async (req, res, next) => {
   try {
-    return res.json(publicPayload((await getPublishedTournament()) || (await getPublicTournament(req.params.identifier)), req.params.identifier));
+    const data = await getPublishedTournamentForPublicRequest(req.params.identifier);
+    return res.json(publicPayload(data, req.params.identifier));
   } catch (error) {
     return next(error);
   }
@@ -109,7 +110,7 @@ router.get("/tournaments/:identifier", async (req, res, next) => {
 
 router.post("/tournaments/:identifier/register", async (req, res, next) => {
   try {
-    const data = await getPublishedTournament();
+    const data = await getPublishedTournamentForPublicRequest(req.params.identifier);
     if (!data) {
       return res.status(404).json({ message: "No tournament is currently published for registration" });
     }

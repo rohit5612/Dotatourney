@@ -6,6 +6,7 @@ import { AppHeader } from "./components/AppHeader";
 import { ScrollToTopButton } from "./components/ScrollToTopButton";
 import { buildDefaultSeriesRules, roles } from "./constants/tournament";
 import { api, getAuthToken, setAuthToken } from "./lib/api";
+import { toDateInputValue, toDatetimeLocalValue } from "./utils/datetime";
 import { AnnouncementsPage } from "./pages/AnnouncementsPage";
 import { BracketPage } from "./pages/BracketPage";
 import { PublicApp } from "./pages/PublicPages";
@@ -167,10 +168,10 @@ function App() {
         prizePool: payload.tournament.prize_pool ?? prev.prizePool,
         prizePoolBreakdown: payload.tournament.prize_pool_breakdown ?? prev.prizePoolBreakdown,
         entryFee: payload.tournament.entry_fee ?? prev.entryFee,
-        startDate: payload.tournament.start_date ? String(payload.tournament.start_date).slice(0, 10) : prev.startDate,
-        endDate: payload.tournament.end_date ? String(payload.tournament.end_date).slice(0, 10) : prev.endDate,
+        startDate: payload.tournament.start_date ? toDateInputValue(payload.tournament.start_date) : prev.startDate,
+        endDate: payload.tournament.end_date ? toDateInputValue(payload.tournament.end_date) : prev.endDate,
         registrationDeadline: payload.tournament.registration_deadline
-          ? String(payload.tournament.registration_deadline).slice(0, 16)
+          ? toDatetimeLocalValue(payload.tournament.registration_deadline)
           : prev.registrationDeadline,
         discordUrl: payload.tournament.discord_url ?? prev.discordUrl,
         rulebook: payload.tournament.rulebook ?? prev.rulebook,
@@ -685,7 +686,7 @@ function App() {
   }
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
+    <main className="min-h-screen overflow-x-hidden bg-background text-foreground">
       <AppHeader
         pages={adminPages}
         activePage={activePage}

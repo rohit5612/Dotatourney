@@ -3,7 +3,12 @@ import express from "express";
 import { z } from "zod";
 import { env } from "../config/env.js";
 import { pool } from "../db/pool.js";
-import { sendAdminInviteEmail } from "../services/emailService.js";
+import {
+  sendAdminApprovedEmail,
+  sendAdminInviteEmail,
+  sendAdminRejectedEmail,
+  sendAdminRevokedEmail,
+} from "../services/emailService.js";
 import {
   createBootstrapSuperadmin,
   createSession,
@@ -54,6 +59,12 @@ router.post("/login", async (req, res, next) => {
     if (!user || !verifyPassword(payload.password, user.password_hash)) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
+    if (user.status === "rejected") {
+      return res.status(403).json({ message: "Your admin registration was not approved." });
+    }
+    if (user.status === "revoked") {
+      return res.status(403).json({ message: "Your admin access has been revoked." });
+    }
     if (user.status !== "approved") {
       return res.status(403).json({ message: "Admin account is waiting for approval" });
     }
@@ -92,19 +103,51 @@ router.get("/users", requireAdmin, requireSuperadmin, async (_req, res, next) =>
 
 router.patch("/users/:id/status", requireAdmin, requireSuperadmin, async (req, res, next) => {
   try {
-    const payload = z.object({ status: z.enum(["approved", "pending", "revoked"]) }).parse(req.body);
+    const payload = z.object({ status: z.enum(["approved", "pending", "revoked", "rejected"]) }).parse(req.body);
+    const before = await pool.query("SELECT * FROM admin_users WHERE id = $1", [req.params.id]);
+    const prev = before.rows[0];
+    if (!prev) return res.status(404).json({ message: "Admin user not found" });
+    if (prev.role === "superadmin") {
+      return res.status(400).json({ message: "Superadmin status cannot be changed here" });
+    }
+
     const { rows } = await pool.query(
       `UPDATE admin_users
        SET status = $2,
            approved_by = CASE WHEN $2 = 'approved' THEN $3 ELSE approved_by END,
-           approved_at = CASE WHEN $2 = 'approved' THEN NOW() ELSE approved_at END,
+           approved_at = CASE
+             WHEN $2 = 'approved' THEN NOW()
+             WHEN $2 = 'rejected' THEN NULL
+             ELSE approved_at
+           END,
            updated_at = NOW()
        WHERE id = $1
        RETURNING *`,
       [req.params.id, payload.status, req.adminUser.id],
     );
-    if (!rows[0]) return res.status(404).json({ message: "Admin user not found" });
-    return res.json({ user: publicAdminUser(rows[0]) });
+    const updated = rows[0];
+    if (!updated) return res.status(404).json({ message: "Admin user not found" });
+
+    if (payload.status === "revoked") {
+      await pool.query("DELETE FROM admin_sessions WHERE admin_user_id = $1", [req.params.id]);
+    }
+
+    if (prev.status !== updated.status) {
+      const emailTo = updated.email;
+      const name = updated.name;
+      const notify = async () => {
+        if (updated.status === "approved") await sendAdminApprovedEmail({ to: emailTo, name });
+        else if (updated.status === "rejected") await sendAdminRejectedEmail({ to: emailTo, name });
+        else if (updated.status === "revoked") await sendAdminRevokedEmail({ to: emailTo, name });
+      };
+      try {
+        await notify();
+      } catch (err) {
+        console.error("[email] admin status notification failed:", err?.message || err);
+      }
+    }
+
+    return res.json({ user: publicAdminUser(updated) });
   } catch (error) {
     return next(error);
   }

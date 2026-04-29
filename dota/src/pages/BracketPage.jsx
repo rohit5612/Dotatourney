@@ -97,7 +97,7 @@ export function BracketPage({
           <div className="text-xs uppercase tracking-wider text-muted-foreground">Approved roster</div>
           <div className="flex flex-wrap gap-2">
             <select
-              className="min-w-64 rounded-md border border-input bg-card p-2 text-sm"
+              className="min-w-0 w-full max-w-full rounded-md border border-input bg-card p-2 text-sm sm:min-w-64 sm:max-w-none"
               value={selectedRosterId || approvedRoster?.id || ""}
               onChange={(event) => setSelectedRosterId(event.target.value)}
             >

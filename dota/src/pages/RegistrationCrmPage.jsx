@@ -119,14 +119,14 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
     <div className="space-y-4">
       {message ? <p className="rounded-md border border-border bg-card p-2 text-sm text-secondary">{message}</p> : null}
       <section className="rounded-lg border border-border bg-card p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <h2 className="font-serif text-lg">Registration CRM</h2>
             <p className="text-sm text-muted-foreground">Mark Discord payments manually, approve players, and use role/MMR sorting for team assignment.</p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <input
-              className="rounded-md border border-input bg-background p-2"
+              className="min-w-0 w-full rounded-md border border-input bg-background p-2 sm:w-56 sm:flex-1 md:max-w-xs lg:max-w-sm"
               placeholder="Search player, Steam, Discord"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -238,7 +238,7 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
                 {ready ? <div className="mt-1 text-xs text-muted-foreground">Locked until edited</div> : null}
               </div>
             </div>
-            <div className="mt-3 grid gap-2 md:grid-cols-[1fr_1fr_2fr_auto]">
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_2fr_auto]">
               <select
                 className="rounded-md border border-input bg-background p-2 disabled:opacity-60"
                 value={editing ? draft.paymentStatus : registration.paymentStatus}

@@ -4,8 +4,12 @@ import { api, setAuthToken } from "../lib/api";
 export function AdminAuthPage({ onAuthed, inviteToken }) {
   const [hasAdminUsers, setHasAdminUsers] = useState(true);
   const [invite, setInvite] = useState(null);
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "" });
   const [message, setMessage] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const needsRegistration = !hasAdminUsers || Boolean(inviteToken);
 
   useEffect(() => {
     async function load() {
@@ -26,9 +30,20 @@ export function AdminAuthPage({ onAuthed, inviteToken }) {
 
   async function submit(event) {
     event.preventDefault();
+    setMessage("");
+    if (needsRegistration) {
+      if (form.password !== form.confirmPassword) {
+        setMessage("Passwords do not match.");
+        return;
+      }
+    }
     try {
       if (inviteToken) {
-        await api.registerAdminInvite(inviteToken, form);
+        await api.registerAdminInvite(inviteToken, {
+          name: form.name,
+          email: form.email,
+          password: form.password,
+        });
         setMessage("Admin account created. Ask the superadmin to approve your access.");
         return;
       }
@@ -58,20 +73,75 @@ export function AdminAuthPage({ onAuthed, inviteToken }) {
         </div>
         {message ? <p className="rounded-md border border-border bg-background p-2 text-sm text-secondary">{message}</p> : null}
         {invite ? <p className="text-sm text-muted-foreground">Invite for {invite.email}</p> : null}
-        {(!hasAdminUsers || inviteToken) && (
+        {needsRegistration ? (
           <label className="block text-sm">
             Name
-            <input className="mt-1 w-full rounded-md border border-input bg-background p-2" value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} required />
+            <input
+              className="mt-1 w-full rounded-md border border-input bg-background p-2"
+              value={form.name}
+              onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+              required
+            />
           </label>
-        )}
+        ) : null}
         <label className="block text-sm">
           Email
-          <input className="mt-1 w-full rounded-md border border-input bg-background p-2" type="email" value={form.email} onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))} required />
+          <input
+            className="mt-1 w-full rounded-md border border-input bg-background p-2"
+            type="email"
+            value={form.email}
+            onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
+            required
+          />
         </label>
         <label className="block text-sm">
           Password
-          <input className="mt-1 w-full rounded-md border border-input bg-background p-2" type="password" value={form.password} onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))} required minLength={8} />
+          <div className="relative mt-1">
+            <input
+              className="w-full rounded-md border border-input bg-background py-2 pl-2 pr-14"
+              type={showPassword ? "text" : "password"}
+              value={form.password}
+              onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
+              required
+              minLength={8}
+              autoComplete={needsRegistration ? "new-password" : "current-password"}
+            />
+            <button
+              type="button"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setShowPassword((s) => !s)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              tabIndex={-1}
+            >
+              {showPassword ? "Hide" : "Show"}
+            </button>
+          </div>
         </label>
+        {needsRegistration ? (
+          <label className="block text-sm">
+            Confirm password
+            <div className="relative mt-1">
+              <input
+                className="w-full rounded-md border border-input bg-background py-2 pl-2 pr-14"
+                type={showConfirmPassword ? "text" : "password"}
+                value={form.confirmPassword}
+                onChange={(event) => setForm((prev) => ({ ...prev, confirmPassword: event.target.value }))}
+                required
+                minLength={8}
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setShowConfirmPassword((s) => !s)}
+                aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                tabIndex={-1}
+              >
+                {showConfirmPassword ? "Hide" : "Show"}
+              </button>
+            </div>
+          </label>
+        ) : null}
         <button type="submit" className="btn btn-primary btn-block">
           {title}
         </button>

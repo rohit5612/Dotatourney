@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AppFooter } from "../components/AppFooter";
 import { BracketDiagram } from "../components/BracketDiagram";
 import { ScrollToTopButton } from "../components/ScrollToTopButton";
 import { roles } from "../constants/tournament";
+import { useBodyScrollLock } from "../hooks/useBodyScrollLock.js";
 import { api } from "../lib/api";
 
 const tournamentSlug = "the-forge";
@@ -64,6 +66,7 @@ function formatNumber(value) {
 
 function PublicHeader({ path, navigate }) {
   const [scrolled, setScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const links = [
     ["/", "Home"],
     ["/tournament", "Tournament"],
@@ -72,6 +75,8 @@ function PublicHeader({ path, navigate }) {
     ["/rules", "Rules"],
   ];
 
+  useBodyScrollLock(mobileMenuOpen);
+
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
     onScroll();
@@ -79,26 +84,106 @@ function PublicHeader({ path, navigate }) {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [path]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return undefined;
+    function onKey(event) {
+      if (event.key === "Escape") setMobileMenuOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileMenuOpen]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return undefined;
+    function onResize() {
+      if (window.matchMedia("(min-width: 768px)").matches) setMobileMenuOpen(false);
+    }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [mobileMenuOpen]);
+
+  const mobileMenu =
+    mobileMenuOpen &&
+    createPortal(
+      <div
+        id="public-mobile-nav"
+        className="fixed inset-0 z-100 flex flex-col bg-background md:!hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Site navigation"
+      >
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-card/90 px-4 py-4 backdrop-blur-xl pt-[max(1rem,env(safe-area-inset-top))]">
+          <span className="min-w-0 font-serif text-lg text-primary">The Forge</span>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm shrink-0"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Close navigation menu"
+          >
+            Close
+          </button>
+        </div>
+        <nav className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+          {links.map(([href, label]) => (
+            <button
+              key={href}
+              type="button"
+              onClick={() => {
+                navigate(href);
+                setMobileMenuOpen(false);
+              }}
+              className={`btn min-h-12 w-full justify-start text-left text-base ${path === href ? "btn-primary" : "btn-outline"}`}
+            >
+              {label}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="btn btn-outline mt-auto min-h-12 w-full justify-start text-left"
+            onClick={() => {
+              navigate("/admin");
+              setMobileMenuOpen(false);
+            }}
+          >
+            Admin
+          </button>
+        </nav>
+      </div>,
+      document.body,
+    );
+
   return (
     <header
       className={`fixed left-0 right-0 top-0 z-30 transition-all duration-300 ${
         scrolled ? "border-b border-border bg-background/85 backdrop-blur-xl" : "border-b border-transparent bg-transparent"
       }`}
     >
-      <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-3 px-4 py-3 md:grid-cols-[1fr_auto_1fr] md:py-4">
-        <button type="button" className="group flex w-fit items-center gap-3 text-left transition-transform duration-300 hover:-translate-y-0.5" onClick={() => navigate("/")}>
-          <span className="grid h-10 w-10 place-items-center rounded-xl border border-primary/40 bg-primary/10 p-2 transition-colors duration-300 group-hover:bg-primary/20">
+      <div className="mx-auto grid max-w-6xl grid-cols-[1fr_auto] items-center gap-3 px-4 py-3 md:grid-cols-[1fr_auto_1fr] md:py-4">
+        <button
+          type="button"
+          className="group flex min-w-0 max-w-full items-center gap-2 text-left transition-transform duration-300 hover:-translate-y-0.5 sm:gap-3"
+          onClick={() => navigate("/")}
+        >
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-primary/40 bg-primary/10 p-2 transition-colors duration-300 group-hover:bg-primary/20">
             <img className="h-full w-full object-contain" src="/dota.svg" alt="The Forge logo" />
           </span>
-          <span>
-            <h1 className="font-serif text-xl tracking-wide text-primary transition-colors duration-300 group-hover:text-red-400">The Forge</h1>
-            <p className="text-xs text-muted-foreground transition-colors duration-300 group-hover:text-foreground">The Dota 2 tournament</p>
+          <span className="min-w-0">
+            <h1 className="truncate font-serif text-lg tracking-wide text-primary transition-colors duration-300 group-hover:text-red-400 sm:text-xl md:whitespace-normal">
+              The Forge
+            </h1>
+            <p className="truncate text-xs text-muted-foreground transition-colors duration-300 group-hover:text-foreground sm:whitespace-normal">
+              The Dota 2 tournament
+            </p>
           </span>
         </button>
         <nav
           className={`mx-auto flex w-full flex-wrap justify-center gap-1 rounded-2xl border px-2 py-1 transition-all duration-300 sm:w-fit sm:rounded-full ${
             scrolled ? "border-border bg-card/85 shadow-lg backdrop-blur-xl" : "border-transparent bg-transparent"
-          }`}
+          } hidden md:flex`}
         >
           {links.map(([href, label]) => (
             <button
@@ -115,7 +200,7 @@ function PublicHeader({ path, navigate }) {
             </button>
           ))}
         </nav>
-        <div className="flex justify-center md:justify-end">
+        <div className="hidden justify-center md:flex md:justify-end">
           <button
             type="button"
             className={`w-full rounded-full border px-5 py-2 text-sm text-muted-foreground transition-all duration-300 hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-lg sm:w-auto ${
@@ -126,7 +211,30 @@ function PublicHeader({ path, navigate }) {
             Admin
           </button>
         </div>
+        <button
+          type="button"
+          className={`btn btn-sm btn-outline inline-flex h-9 w-9 shrink-0 items-center justify-center p-0 md:!hidden ${scrolled ? "border-border bg-card/85" : ""}`}
+          onClick={() => setMobileMenuOpen(true)}
+          aria-expanded={mobileMenuOpen}
+          aria-controls="public-mobile-nav"
+          aria-label="Open navigation menu"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            aria-hidden="true"
+          >
+            <path d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
       </div>
+      {mobileMenu}
     </header>
   );
 }
@@ -225,7 +333,9 @@ function LandingPage({ event, navigate, message }) {
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(9,9,12,0.35)_0%,#09090c_100%)]" />
         <div className="relative mx-auto flex w-full max-w-4xl flex-col items-center gap-6 text-center">
           <p className="text-xs uppercase tracking-[0.25em] text-secondary sm:tracking-[0.35em]">Dota 2 community tournament</p>
-          <h2 className="font-serif text-5xl tracking-wide text-primary sm:text-6xl md:text-7xl">The Forge</h2>
+          <h2 className="wrap-break-word px-2 font-serif text-4xl tracking-wide text-primary sm:text-6xl md:text-7xl">
+            The Forge
+          </h2>
           <p className="max-w-2xl text-lg text-muted-foreground md:text-xl">
             Forge your squad, prove your coordination, and compete in a clean, high-stakes Dota tournament format.
           </p>
@@ -391,7 +501,7 @@ function CountdownTimer({ targetDate }) {
 
   return (
     <div className="w-full max-w-2xl rounded-2xl border border-border/80 bg-card/45 p-4 shadow-2xl backdrop-blur">
-      <div className="grid grid-cols-4 gap-2 text-center">
+      <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
         <CountdownUnit label="Days" value={days} />
         <CountdownUnit label="Hours" value={hours} />
         <CountdownUnit label="Minutes" value={minutes} />
@@ -642,7 +752,7 @@ function PublicSchedule({ event, message }) {
 
 function StandingsTable({ title, rows = [] }) {
   return (
-    <div className="overflow-hidden rounded-md border border-border bg-background">
+    <div className="overflow-x-auto rounded-md border border-border bg-background">
       <div className="border-b border-border px-3 py-2 font-medium">{title}</div>
       <div className="grid grid-cols-[1fr_3rem_3rem_3rem] gap-2 px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground">
         <span>Team</span>
@@ -665,7 +775,7 @@ function StandingsTable({ title, rows = [] }) {
 
 function GeneralRulesPage() {
   return (
-    <section className="space-y-4 rounded-2xl border border-border bg-card p-6">
+    <section className="space-y-4 rounded-2xl border border-border bg-card p-4 sm:p-6">
       <div>
         <p className="text-xs uppercase tracking-widest text-secondary">The Forge</p>
         <h2 className="font-serif text-3xl text-primary">General Rules & Player Conduct</h2>

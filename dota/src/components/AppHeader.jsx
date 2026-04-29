@@ -1,4 +1,9 @@
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { useBodyScrollLock } from "../hooks/useBodyScrollLock.js";
+
 export function AppHeader({ pages, activePage, setActivePage, darkMode, setDarkMode }) {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const labels = {
     registrations: "Registrations",
     teams: "Teams",
@@ -9,27 +14,102 @@ export function AppHeader({ pages, activePage, setActivePage, darkMode, setDarkM
     users: "Users",
   };
 
+  useBodyScrollLock(mobileMenuOpen);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [activePage]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return undefined;
+    function onKey(event) {
+      if (event.key === "Escape") setMobileMenuOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileMenuOpen]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return undefined;
+    function onResize() {
+      if (window.matchMedia("(min-width: 768px)").matches) setMobileMenuOpen(false);
+    }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [mobileMenuOpen]);
+
+  const mobileMenu =
+    mobileMenuOpen &&
+    createPortal(
+      <div
+        id="admin-mobile-nav"
+        className="fixed inset-0 z-100 flex flex-col bg-background md:!hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Admin navigation"
+      >
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-card/90 px-4 py-4 backdrop-blur-xl pt-[max(1rem,env(safe-area-inset-top))]">
+          <span className="min-w-0 font-serif text-lg text-primary">Immortal panel</span>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm shrink-0"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Close navigation menu"
+          >
+            Close
+          </button>
+        </div>
+        <nav className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+          {pages.map((page) => (
+            <button
+              key={page}
+              type="button"
+              onClick={() => {
+                setActivePage(page);
+                setMobileMenuOpen(false);
+              }}
+              className={`btn min-h-12 w-full justify-start text-left text-base capitalize ${
+                activePage === page ? "btn-primary" : "btn-outline"
+              }`}
+            >
+              {labels[page] || page}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="btn btn-outline mt-auto min-h-12 w-full justify-start text-left"
+            onClick={() => setDarkMode?.((prev) => !prev)}
+            title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+            aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {darkMode ? "Switch to light mode" : "Switch to dark mode"}
+          </button>
+        </nav>
+      </div>,
+      document.body,
+    );
+
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-        <div className="flex items-center gap-3">
-          <span className="grid h-9 w-9 place-items-center rounded-xl border border-primary/40 bg-primary/10 p-1.5">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-primary/40 bg-primary/10 p-1.5">
             <img className="h-full w-full object-contain" src="/dota.svg" alt="Dota Tournament Organizer logo" />
           </span>
-          <div>
-            <h1 className="font-serif text-xl tracking-wide text-primary">The Forge | Immortal panel </h1>
-            <p className="text-xs text-muted-foreground">Tournament manager Suite</p>
+          <div className="min-w-0">
+            <h1 className="font-serif text-base tracking-wide text-primary sm:text-lg md:text-xl">
+              <span className="block truncate sm:whitespace-normal">The Forge | Immortal panel</span>
+            </h1>
+            <p className="truncate text-xs text-muted-foreground sm:whitespace-normal">Tournament manager suite</p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="hidden gap-2 md:flex md:shrink-0">
           {pages.map((page) => (
             <button
               key={page}
               type="button"
               onClick={() => setActivePage(page)}
-              className={`btn btn-sm capitalize ${
-                activePage === page ? "btn-primary" : "btn-outline"
-              }`}
+              className={`btn btn-sm capitalize ${activePage === page ? "btn-primary" : "btn-outline"}`}
             >
               {labels[page] || page}
             </button>
@@ -44,7 +124,30 @@ export function AppHeader({ pages, activePage, setActivePage, darkMode, setDarkM
             {darkMode ? "☀" : "☾"}
           </button>
         </div>
+        <button
+          type="button"
+          className="btn btn-outline btn-sm inline-flex h-9 w-9 shrink-0 items-center justify-center p-0 md:!hidden"
+          onClick={() => setMobileMenuOpen(true)}
+          aria-expanded={mobileMenuOpen}
+          aria-controls="admin-mobile-nav"
+          aria-label="Open admin navigation menu"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            aria-hidden="true"
+          >
+            <path d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
       </div>
+      {mobileMenu}
     </header>
   );
 }

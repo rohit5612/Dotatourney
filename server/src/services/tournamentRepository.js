@@ -60,6 +60,40 @@ function serializePrizePoolBreakdown(value) {
   return value || "";
 }
 
+/** Fields frozen for the public site until the next publish. */
+export function buildPublishedSnapshotFromRow(row) {
+  if (!row) return null;
+  return {
+    name: row.name,
+    slug: row.slug,
+    format: row.format,
+    series_type: row.series_type,
+    team_count: row.team_count,
+    description: row.description,
+    prize_pool: row.prize_pool,
+    prize_pool_breakdown: row.prize_pool_breakdown,
+    entry_fee: row.entry_fee,
+    start_date: row.start_date,
+    end_date: row.end_date,
+    registration_deadline: row.registration_deadline,
+    discord_url: row.discord_url,
+    rulebook: row.rulebook,
+    announcements: row.announcements,
+    visibility_mode: row.visibility_mode,
+  };
+}
+
+export function applyPublishedSnapshot(data) {
+  if (!data?.tournament) return data;
+  const t = data.tournament;
+  const snap = t.published_snapshot;
+  const { published_snapshot: _snap, ...base } = t;
+  if (snap && typeof snap === "object" && !Array.isArray(snap)) {
+    return { ...data, tournament: { ...base, ...snap } };
+  }
+  return { ...data, tournament: base };
+}
+
 export async function createTournament(payload) {
   const id = randomUUID();
   const query = `
@@ -513,20 +547,26 @@ export async function deleteRosterSnapshot(tournamentId, rosterId) {
   return rows[0] || null;
 }
 
-export async function getPublicTournament(identifier = "the-forge") {
-  const result = await pool.query("SELECT * FROM tournaments WHERE slug = $1 OR id::text = $1 ORDER BY created_at DESC LIMIT 1", [
-    identifier,
-  ]);
-  const tournament = result.rows[0];
-  if (!tournament) return null;
-  return getTournament(tournament.id);
-}
-
 export async function getPublishedTournament() {
   const result = await pool.query("SELECT id FROM tournaments WHERE is_published = TRUE ORDER BY published_at DESC LIMIT 1");
   const tournament = result.rows[0];
   if (!tournament) return null;
-  return getTournament(tournament.id);
+  const data = await getTournament(tournament.id);
+  return applyPublishedSnapshot(data);
+}
+
+/** Published tournament only if `identifier` matches slug or id (prevents draft leakage). */
+export async function getPublishedTournamentForPublicRequest(identifier) {
+  const result = await pool.query(
+    "SELECT id, slug FROM tournaments WHERE is_published = TRUE ORDER BY published_at DESC LIMIT 1",
+  );
+  if (!result.rows[0]) return null;
+  const { id, slug } = result.rows[0];
+  if (identifier && slug && identifier !== slug && identifier !== id) {
+    return null;
+  }
+  const data = await getTournament(id);
+  return applyPublishedSnapshot(data);
 }
 
 export async function publishTournament(tournamentId, adminUserId) {
@@ -543,8 +583,13 @@ export async function publishTournament(tournamentId, adminUserId) {
        RETURNING *`,
       [tournamentId, adminUserId],
     );
+    const row = rows[0];
+    if (row) {
+      const snapshot = buildPublishedSnapshotFromRow(row);
+      await client.query(`UPDATE tournaments SET published_snapshot = $2::jsonb WHERE id = $1`, [tournamentId, JSON.stringify(snapshot)]);
+    }
     await client.query("COMMIT");
-    return rows[0] || null;
+    return row || null;
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -556,7 +601,8 @@ export async function publishTournament(tournamentId, adminUserId) {
 export async function unpublishTournament(tournamentId) {
   const { rows } = await pool.query(
     `UPDATE tournaments
-     SET is_published = FALSE, status = 'approved', published_at = NULL, published_by = NULL, updated_at = NOW()
+     SET is_published = FALSE, status = 'approved', published_at = NULL, published_by = NULL,
+         published_snapshot = NULL, updated_at = NOW()
      WHERE id = $1
      RETURNING *`,
     [tournamentId],
