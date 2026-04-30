@@ -80,6 +80,8 @@ export function buildPublishedSnapshotFromRow(row) {
     rulebook: row.rulebook,
     announcements: row.announcements,
     visibility_mode: row.visibility_mode,
+    registration_code_prefix: row.registration_code_prefix,
+    payment_qr_image: row.payment_qr_image,
   };
 }
 
@@ -100,9 +102,11 @@ export async function createTournament(payload) {
     INSERT INTO tournaments (
       id, name, slug, format, series_type, team_count, dark_mode, series_rules,
       description, prize_pool, prize_pool_breakdown, entry_fee, start_date, end_date, registration_deadline,
-      discord_url, rulebook, announcements, visibility_mode, bracket_active, status
+      discord_url, rulebook, announcements, visibility_mode, bracket_active, status,
+      registration_code_prefix, registration_code_seq, payment_qr_image
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, 'draft')
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, 'draft',
+      $21, $22, $23)
     RETURNING *;
   `;
   const values = [
@@ -126,6 +130,9 @@ export async function createTournament(payload) {
     JSON.stringify(payload.announcements || []),
     payload.visibilityMode || "demo",
     Boolean(payload.bracketActive),
+    (payload.registrationCodePrefix || "BPC").toString().slice(0, 12).toUpperCase().replace(/[^A-Z0-9]/g, "") || "BPC",
+    Number.isFinite(Number(payload.registrationCodeSeq)) ? Number(payload.registrationCodeSeq) : 0,
+    payload.paymentQrImage || "",
   ];
   const { rows } = await pool.query(query, values);
   return rows[0];
@@ -154,6 +161,8 @@ export async function updateTournament(tournamentId, payload) {
         visibility_mode = $19,
         bracket_active = $20,
         status = CASE WHEN is_published THEN status ELSE COALESCE($21, status) END,
+        registration_code_prefix = $22,
+        payment_qr_image = $23,
         updated_at = NOW()
     WHERE id = $1
     RETURNING *;
@@ -180,6 +189,8 @@ export async function updateTournament(tournamentId, payload) {
     payload.visibilityMode || "demo",
     Boolean(payload.bracketActive),
     payload.status || "draft",
+    (payload.registrationCodePrefix || "BPC").toString().slice(0, 12).toUpperCase().replace(/[^A-Z0-9]/g, "") || "BPC",
+    payload.paymentQrImage || "",
   ];
   const { rows } = await pool.query(query, values);
   return rows[0];

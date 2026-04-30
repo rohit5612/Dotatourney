@@ -1,5 +1,5 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
-const TOKEN_KEY = "forge-admin-token";
+const TOKEN_KEY = "bpcl-admin-token";
 
 export function getAuthToken() {
   try {
@@ -73,8 +73,23 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   getPublicTournament: () => request("/public/tournament"),
-  registerPlayer: (identifier, payload) =>
-    request(`/public/tournaments/${identifier}/register`, {
+  getRegistrationSession: (identifier, email, publicCode) => {
+    const q = new URLSearchParams({ email: String(email || "").trim() });
+    if (publicCode) q.set("code", String(publicCode).trim());
+    return request(`/public/tournaments/${encodeURIComponent(identifier)}/register/session?${q}`);
+  },
+  requestRegistrationOtp: (identifier, payload) =>
+    request(`/public/tournaments/${encodeURIComponent(identifier)}/register/request-otp`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  verifyRegistrationOtp: (identifier, payload) =>
+    request(`/public/tournaments/${encodeURIComponent(identifier)}/register/verify-otp`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  completeRegistration: (identifier, payload) =>
+    request(`/public/tournaments/${encodeURIComponent(identifier)}/register/complete`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),

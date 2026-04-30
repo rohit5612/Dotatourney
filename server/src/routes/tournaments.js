@@ -3,7 +3,8 @@ import express from "express";
 import { z } from "zod";
 import { generateMatches, getFormatTeamCountMessage, stageTabsForFormat } from "../services/formatGenerator.js";
 import { applyProgression } from "../services/progressionEngine.js";
-import { archivePlayerRegistration, listPlayerRegistrations, updatePlayerRegistration } from "../services/registrationRepository.js";
+import { archivePlayerRegistration, getPlayerRegistrationById, listPlayerRegistrations, updatePlayerRegistration } from "../services/registrationRepository.js";
+import { sendPlayerRegistrationDecisionEmail } from "../services/emailService.js";
 import { buildGroupedStandings, buildStandings } from "../services/standingsEngine.js";
 import { requireAdmin } from "../services/authService.js";
 import {
@@ -61,6 +62,8 @@ const tournamentSchema = z.object({
   visibilityMode: z.enum(["demo", "tournament"]).optional().default("demo"),
   bracketActive: z.boolean().optional().default(false),
   status: z.enum(["draft", "approved", "published", "archived"]).optional().default("draft"),
+  registrationCodePrefix: z.string().max(12).optional().default("BPC"),
+  paymentQrImage: z.string().optional().default(""),
 });
 
 async function validateRosterRegistrations(tournamentId, players) {
@@ -493,8 +496,32 @@ router.patch("/:id/registrations/:registrationId", async (req, res, next) => {
         adminNotes: z.string().optional(),
       })
       .parse(req.body);
+    const prev = await getPlayerRegistrationById(req.params.id, req.params.registrationId);
     const registration = await updatePlayerRegistration(req.params.id, req.params.registrationId, payload);
     if (!registration) return res.status(404).json({ message: "Registration not found" });
+    if (
+      prev &&
+      payload.registrationStatus &&
+      payload.registrationStatus !== prev.registrationStatus &&
+      registration.email &&
+      !registration.email.includes("@migrated.")
+    ) {
+      if (["approved", "rejected", "waitlisted"].includes(payload.registrationStatus)) {
+        try {
+          const tour = await getTournament(req.params.id);
+          const tournamentName = tour?.tournament?.name || "BPC League — Bharat Pro Circuit League";
+          await sendPlayerRegistrationDecisionEmail({
+            to: registration.email,
+            name: registration.name,
+            tournamentName,
+            publicCode: registration.publicCode || registration.id?.slice(0, 8) || "",
+            decision: payload.registrationStatus,
+          });
+        } catch (err) {
+          console.error("[email] player registration decision failed:", err?.message || err);
+        }
+      }
+    }
     return res.json({ registration });
   } catch (error) {
     return next(error);

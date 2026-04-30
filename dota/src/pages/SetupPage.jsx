@@ -139,8 +139,8 @@ export function SetupPage({
 
   function resetDraft() {
     setSetup({
-      name: "The Forge",
-      slug: "the-forge",
+      name: "BPC League — Bharat Pro Circuit League",
+      slug: "bpcl",
       format: "dse",
       seriesType: "bo3",
       teamCount: 8,
@@ -158,6 +158,8 @@ export function SetupPage({
       visibilityMode: "demo",
       bracketActive: false,
       status: "draft",
+      registrationCodePrefix: "BPC",
+      paymentQrImage: "",
     });
   }
 
@@ -402,6 +404,35 @@ export function SetupPage({
             value={setup.registrationDeadline || ""}
             onChange={(event) => setSetup((prev) => ({ ...prev, registrationDeadline: event.target.value }))}
           />
+        </label>
+        <div className="md:col-span-2 rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+          <p className="font-medium text-foreground">Player registration IDs</p>
+          <p className="mt-1 leading-relaxed">
+            After email verification, each player receives a public ID in order:{" "}
+            <span className="font-mono text-foreground">BPC-001</span>, <span className="font-mono text-foreground">BPC-002</span>,{" "}
+            <span className="font-mono text-foreground">BPC-003</span>, and so on.
+          </p>
+        </div>
+        <label className="text-sm text-muted-foreground md:col-span-2">
+          Payment QR image (shown on public registration payment step)
+          <input
+            type="file"
+            accept="image/*"
+            className="mt-1 block w-full text-sm"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (!file) {
+                setSetup((prev) => ({ ...prev, paymentQrImage: "" }));
+                return;
+              }
+              const reader = new FileReader();
+              reader.onload = () => setSetup((prev) => ({ ...prev, paymentQrImage: reader.result || "" }));
+              reader.readAsDataURL(file);
+            }}
+          />
+          {setup.paymentQrImage ? (
+            <img src={setup.paymentQrImage} alt="Payment QR preview" className="mt-2 h-32 w-32 rounded border border-border object-contain" />
+          ) : null}
         </label>
             </div>
 

@@ -67,7 +67,7 @@ export function AdminAuthPage({ onAuthed, inviteToken }) {
             {inviteToken
               ? "Register with the invited email, then wait for manual approval."
               : hasAdminUsers
-                ? "Sign in to manage The Forge."
+                ? "Sign in to manage Bharat Pro Circuit League (BPC League)."
                 : "No admins exist yet. Create the first superadmin account."}
           </p>
         </div>

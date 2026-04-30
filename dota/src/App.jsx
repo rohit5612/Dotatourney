@@ -27,12 +27,12 @@ function App() {
   const [activeTab, setActiveTab] = useState("upper");
   const [selectedFormat, setSelectedFormat] = useState("dse");
   const [setup, setSetup] = useState({
-    name: "The Dota 2 Cup",
+    name: "BPC League — Bharat Pro Circuit League",
     format: "dse",
     seriesType: "bo3",
     teamCount: 8,
     seriesRules: buildDefaultSeriesRules("dse", "bo3"),
-    slug: "the-forge",
+    slug: "bpcl",
     description: "",
     prizePool: "",
     prizePoolBreakdown: [{ placement: 1, label: "1st place", amount: "" }],
@@ -45,6 +45,9 @@ function App() {
     announcements: [],
     visibilityMode: "demo",
     bracketActive: false,
+    registrationCodePrefix: "BPC",
+    paymentQrImage: "",
+    registrationCodeSeq: 0,
   });
   const [teamDraft, setTeamDraft] = useState([]);
   const [poolDraft, setPoolDraft] = useState([]);
@@ -178,6 +181,9 @@ function App() {
         announcements: payload.tournament.announcements ?? prev.announcements,
         visibilityMode: payload.tournament.visibility_mode ?? prev.visibilityMode,
         bracketActive: payload.tournament.bracket_active ?? prev.bracketActive,
+        registrationCodePrefix: payload.tournament.registration_code_prefix ?? prev.registrationCodePrefix ?? "BPC",
+        paymentQrImage: payload.tournament.payment_qr_image ?? prev.paymentQrImage ?? "",
+        registrationCodeSeq: payload.tournament.registration_code_seq ?? prev.registrationCodeSeq ?? 0,
       }));
       setTournamentId(payload.tournament.id);
     }

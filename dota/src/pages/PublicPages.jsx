@@ -3,14 +3,19 @@ import { createPortal } from "react-dom";
 import { AppFooter } from "../components/AppFooter";
 import { BracketDiagram } from "../components/BracketDiagram";
 import { ScrollToTopButton } from "../components/ScrollToTopButton";
+import { PLAYER_RULES_SECTIONS } from "../constants/playerRules.js";
+import { COOKIE_CONSENT_KEY, VALVE_DISCLAIMER } from "../constants/legal.js";
 import { roles } from "../constants/tournament";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock.js";
 import { api } from "../lib/api";
 
-const tournamentSlug = "the-forge";
+const SITE_BRAND_SHORT = "BPC League";
+const SITE_BRAND_FULL = "Bharat Pro Circuit League";
+const SITE_BRAND_LINE = `${SITE_BRAND_SHORT} — ${SITE_BRAND_FULL}`;
+const tournamentSlug = "bpcl";
 const defaultTournamentStart = "2026-05-22T00:00:00+05:30";
 const discordInviteUrl = "https://discord.gg/NmC2Xqnb";
-const publicPaths = ["/", "/tournament", "/schedule", "/register", "/rules"];
+const publicPaths = ["/", "/tournament", "/schedule", "/register", "/rules", "/privacy", "/cookies"];
 
 function formatDate(value) {
   if (!value) return "TBA";
@@ -62,6 +67,70 @@ function parsePrizePool(value) {
 
 function formatNumber(value) {
   return Math.round(value).toLocaleString("en-IN");
+}
+
+function ValveDisclaimer({ className = "" }) {
+  return <p className={`text-xs leading-relaxed text-muted-foreground ${className}`.trim()}>{VALVE_DISCLAIMER}</p>;
+}
+
+function CookieConsentBanner({ navigate }) {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(COOKIE_CONSENT_KEY) !== "1") setVisible(true);
+    } catch {
+      setVisible(true);
+    }
+  }, []);
+
+  function accept() {
+    try {
+      window.localStorage.setItem(COOKIE_CONSENT_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    setVisible(false);
+  }
+
+  if (!visible) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-8px_32px_rgba(0,0,0,0.4)] backdrop-blur-xl"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="cookie-consent-title"
+    >
+      <div className="mx-auto flex max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+        <div className="min-w-0 flex-1 space-y-2">
+          <p id="cookie-consent-title" className="text-sm font-medium text-foreground">
+            Cookies & local storage
+          </p>
+          <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">
+            We use essential cookies and browser storage so the site can function (for example, remembering this choice). See our{" "}
+            <button type="button" className="text-secondary underline underline-offset-2 hover:text-foreground" onClick={() => navigate("/cookies")}>
+              Cookie Policy
+            </button>{" "}
+            and{" "}
+            <button type="button" className="text-secondary underline underline-offset-2 hover:text-foreground" onClick={() => navigate("/privacy")}>
+              Privacy Policy
+            </button>
+            .
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+          <button type="button" className="btn btn-outline btn-sm" onClick={() => navigate("/cookies")}>
+            Learn more
+          </button>
+          <button type="button" className="btn btn-primary btn-sm" onClick={accept}>
+            Accept
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
 }
 
 function PublicHeader({ path, navigate }) {
@@ -117,7 +186,7 @@ function PublicHeader({ path, navigate }) {
         aria-label="Site navigation"
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-card/90 px-4 py-4 backdrop-blur-xl pt-[max(1rem,env(safe-area-inset-top))]">
-          <span className="min-w-0 font-serif text-lg text-primary">The Forge</span>
+          <span className="min-w-0 font-serif text-lg font-semibold tracking-tight text-foreground">{SITE_BRAND_SHORT}</span>
           <button
             type="button"
             className="btn btn-outline btn-sm shrink-0"
@@ -168,15 +237,15 @@ function PublicHeader({ path, navigate }) {
           className="group flex min-w-0 max-w-full items-center gap-2 text-left transition-transform duration-300 hover:-translate-y-0.5 sm:gap-3"
           onClick={() => navigate("/")}
         >
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-primary/40 bg-primary/10 p-2 transition-colors duration-300 group-hover:bg-primary/20">
-            <img className="h-full w-full object-contain" src="/dota.svg" alt="The Forge logo" />
+          <span className="grid size-14 shrink-0 place-items-center rounded-xl border border-primary/35 bg-gradient-to-br from-primary/15 to-transparent p-1.5 shadow-sm ring-1 ring-white/[0.04] transition-colors duration-300 group-hover:border-primary/50 sm:size-16">
+            <img className="h-full w-full object-contain" src="/bpcl.png" alt={`${SITE_BRAND_SHORT} logo`} />
           </span>
           <span className="min-w-0">
-            <h1 className="truncate font-serif text-lg tracking-wide text-primary transition-colors duration-300 group-hover:text-red-400 sm:text-xl md:whitespace-normal">
-              The Forge
+            <h1 className="truncate font-serif text-lg font-semibold tracking-tight text-foreground transition-colors duration-300 group-hover:text-primary sm:text-xl md:whitespace-normal">
+              {SITE_BRAND_SHORT}
             </h1>
-            <p className="truncate text-xs text-muted-foreground transition-colors duration-300 group-hover:text-foreground sm:whitespace-normal">
-              The Dota 2 tournament
+            <p className="truncate text-xs leading-snug text-muted-foreground transition-colors duration-300 group-hover:text-foreground/90 sm:whitespace-normal">
+              {SITE_BRAND_FULL}
             </p>
           </span>
         </button>
@@ -246,6 +315,7 @@ function EventShell({ path, navigate, children }) {
       <PublicHeader path={path} navigate={navigate} />
       <section className={path === "/" ? "space-y-20" : contentClass}>{children}</section>
       <AppFooter navigate={navigate} />
+      <CookieConsentBanner navigate={navigate} />
       <ScrollToTopButton />
     </main>
   );
@@ -283,7 +353,7 @@ export function PublicApp({ path, navigate }) {
   if (path === "/register") {
     return (
       <EventShell path={path} navigate={navigate}>
-        <RegistrationPage event={event} navigate={navigate} message={message} setMessage={setMessage} />
+        <RegistrationPage event={event} message={message} setMessage={setMessage} />
       </EventShell>
     );
   }
@@ -292,6 +362,22 @@ export function PublicApp({ path, navigate }) {
     return (
       <EventShell path={path} navigate={navigate}>
         <GeneralRulesPage />
+      </EventShell>
+    );
+  }
+
+  if (path === "/privacy") {
+    return (
+      <EventShell path={path} navigate={navigate}>
+        <PrivacyPolicyPage />
+      </EventShell>
+    );
+  }
+
+  if (path === "/cookies") {
+    return (
+      <EventShell path={path} navigate={navigate}>
+        <CookiePolicyPage />
       </EventShell>
     );
   }
@@ -326,24 +412,30 @@ function LandingPage({ event, navigate, message }) {
   return (
     <>
       {message ? <p className="mx-auto mt-4 max-w-6xl rounded-md border border-border bg-card p-2 text-sm text-secondary">{message}</p> : null}
-      <section className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-16 md:py-0">
+      <section className="relative flex min-h-[100svh] items-center justify-center overflow-hidden px-4 py-24 md:py-16">
         <video className="absolute inset-0 h-full w-full object-cover" src="/herobg.mp4" autoPlay muted loop playsInline aria-hidden="true" />
-        <div className="pointer-events-none absolute inset-0 bg-black/30" />
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,#b8141455_0%,transparent_55%)]" />
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(9,9,12,0.35)_0%,#09090c_100%)]" />
-        <div className="relative mx-auto flex w-full max-w-4xl flex-col items-center gap-6 text-center">
-          <p className="text-xs uppercase tracking-[0.25em] text-secondary sm:tracking-[0.35em]">Dota 2 community tournament</p>
-          <h2 className="wrap-break-word px-2 font-serif text-4xl tracking-wide text-primary sm:text-6xl md:text-7xl">
-            The Forge
-          </h2>
-          <p className="max-w-2xl text-lg text-muted-foreground md:text-xl">
-            Forge your squad, prove your coordination, and compete in a clean, high-stakes Dota tournament format.
-          </p>
-          <div className="w-full max-w-sm rounded-xl border border-primary/40 bg-card/60 px-6 py-5 shadow-2xl backdrop-blur sm:px-8">
-            <p className="text-xs uppercase tracking-widest text-muted-foreground">Prize pool</p>
+        <div className="pointer-events-none absolute inset-0 bg-black/50" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_100%_75%_at_50%_-10%,rgba(233,168,74,0.2),transparent_55%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_55%_70%_at_95%_45%,rgba(94,234,212,0.1),transparent_48%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#06060a] via-[#06060a]/75 to-[#06060a]/20" />
+        <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center gap-8 text-center">
+          <div className="space-y-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-secondary sm:text-xs sm:tracking-[0.34em]">
+              A Dota 2 community tournament
+            </p>
+            <h2 className="wrap-break-word px-1 font-serif text-3xl font-semibold tracking-tight text-foreground sm:text-4xl md:text-5xl lg:text-6xl">
+              {SITE_BRAND_FULL}
+            </h2>
+            <p className="mx-auto max-w-xl text-pretty text-base leading-relaxed text-muted-foreground sm:max-w-2xl sm:text-lg md:text-xl md:leading-relaxed">
+              Assemble your roster, sharpen your strats, and compete in a high-stakes tournament format.
+            </p>
+            <ValveDisclaimer className="mx-auto max-w-lg border-t border-border/60 pt-4" />
+          </div>
+          <div className="w-full max-w-sm rounded-2xl border border-primary/25 bg-[#08080f]/90 px-6 py-5 shadow-2xl backdrop-blur-md ring-1 ring-white/[0.06] sm:px-8">
+            <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">Prize pool</p>
             <AnimatedPrizePool value={tournament?.prize_pool || "TBA"} />
           </div>
-          <div className="flex flex-wrap items-center justify-center gap-3">
+          <div className="flex w-full max-w-md flex-col items-stretch gap-3 sm:flex-row sm:justify-center">
             <button type="button" className="btn btn-primary w-full px-6 py-3 text-base shadow-lg sm:w-auto" onClick={() => navigate("/register")}>
               Register now
             </button>
@@ -356,9 +448,9 @@ function LandingPage({ event, navigate, message }) {
 
       <RevealSection>
         <section className="mx-auto max-w-6xl space-y-4 px-4">
-          <div className="mx-auto max-w-xl rounded-2xl border border-primary/30 bg-card p-5 text-center shadow-xl">
-            <p className="text-xs uppercase tracking-widest text-muted-foreground">Tournament starts</p>
-            <p className="mt-2 font-serif text-3xl text-primary">{formatDate(tournament?.start_date || defaultTournamentStart)}</p>
+          <div className="mx-auto max-w-xl rounded-2xl border border-primary/20 bg-card/95 p-5 text-center shadow-xl backdrop-blur-sm">
+            <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">Tournament starts</p>
+            <p className="mt-2 font-serif text-3xl font-semibold tracking-tight text-foreground">{formatDate(tournament?.start_date || defaultTournamentStart)}</p>
           </div>
           <div className="flex justify-center">
             <CountdownTimer targetDate={tournament?.start_date || defaultTournamentStart} />
@@ -378,10 +470,11 @@ function LandingPage({ event, navigate, message }) {
               <span>Overview</span>
               <span>⚔️</span>
             </div>
-            <h3 className="font-serif text-3xl text-primary md:text-4xl">{tournament?.name || "The Forge"}</h3>
-            <p className="mt-3 text-muted-foreground">
-              {tournament?.description || "Tournament details are being forged. Check Discord for live communications."}
+            <h3 className="font-serif text-3xl font-semibold tracking-tight text-foreground md:text-4xl">{tournament?.name || SITE_BRAND_LINE}</h3>
+            <p className="mt-3 leading-relaxed text-muted-foreground">
+              {tournament?.description || "Tournament details will appear here once admins publish the setup. Check Discord for live communications."}
             </p>
+            <ValveDisclaimer className="mt-4 border-t border-border pt-4" />
           </div>
           <div className="overflow-hidden rounded-xl border border-border bg-card">
             <img
@@ -402,16 +495,16 @@ function LandingPage({ event, navigate, message }) {
               className="h-full w-full object-cover"
             />
             <div className="absolute inset-0 bg-black/70" />
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,#b8141426_0%,transparent_60%)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(233,168,74,0.14),transparent_62%)]" />
           </div>
           <div className="relative mx-auto flex min-h-[calc(100vh-8rem)] w-full items-stretch px-4 md:px-8">
             <div className="mx-auto flex w-full flex-col rounded-2xl border border-border bg-card/70 p-5 shadow-2xl backdrop-blur sm:p-8 md:w-[80vw] md:p-10">
               <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-border bg-background/80 px-3 py-1 text-xs uppercase tracking-wider text-secondary">
-                <span>Basic Rule Book</span>
+                <span>{SITE_BRAND_SHORT} rule book</span>
                 <span>📜</span>
               </div>
-              <h3 className="font-serif text-3xl text-primary sm:text-4xl md:text-5xl">Rules Of The Forge</h3>
-              <p className="mt-5 flex-1 overflow-y-auto whitespace-pre-line pr-1 text-sm leading-7 text-muted-foreground sm:text-base md:text-lg">
+              <h3 className="font-serif text-3xl font-semibold tracking-tight text-foreground sm:text-4xl md:text-5xl">Rules — {SITE_BRAND_FULL}</h3>
+              <p className="mt-5 flex-1 overflow-y-auto whitespace-pre-line pr-1 text-sm leading-7 text-muted-foreground sm:text-base md:text-lg md:leading-8">
                 {tournament?.rulebook || "Rules will be published here before the tournament starts."}
               </p>
             </div>
@@ -423,13 +516,14 @@ function LandingPage({ event, navigate, message }) {
         <section className="mx-auto max-w-6xl px-4 pb-14">
           <div className="rounded-2xl border border-border bg-card p-8 text-center">
             <div className="mb-3 text-3xl">💬</div>
-            <h3 className="font-serif text-3xl text-primary">Join our Discord</h3>
-            <p className="mx-auto mt-2 max-w-2xl text-muted-foreground">
+            <h3 className="font-serif text-3xl font-semibold tracking-tight text-foreground">Join our Discord</h3>
+            <p className="mx-auto mt-2 max-w-2xl leading-relaxed text-muted-foreground">
               Match-day communication, payment confirmation, announcements, and support happen in our Discord server.
             </p>
             <a className="btn btn-primary mt-6 px-6 py-3" href={discordUrl} target="_blank" rel="noreferrer">
               Join Discord
             </a>
+            <ValveDisclaimer className="mx-auto mt-6 max-w-2xl px-2" />
           </div>
         </section>
       </RevealSection>
@@ -440,8 +534,8 @@ function LandingPage({ event, navigate, message }) {
 function Metric({ label, value }) {
   return (
     <div className="rounded-lg border border-border bg-background p-4">
-      <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className="mt-1 font-serif text-xl">{value}</div>
+      <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="mt-1.5 font-serif text-lg font-medium leading-snug tracking-tight text-foreground">{value}</div>
     </div>
   );
 }
@@ -470,11 +564,11 @@ function AnimatedPrizePool({ value }) {
   }, [parsed]);
 
   if (!parsed) {
-    return <p className="mt-2 font-serif text-3xl text-primary sm:text-4xl">{value || "TBA"}</p>;
+    return <p className="mt-2 font-serif text-3xl font-semibold tabular-nums tracking-tight text-primary sm:text-4xl">{value || "TBA"}</p>;
   }
 
   return (
-    <p className="mt-2 font-serif text-3xl text-primary tabular-nums sm:text-4xl">
+    <p className="mt-2 font-serif text-3xl font-semibold tabular-nums tracking-tight text-primary sm:text-4xl">
       {parsed.prefix}
       {formatNumber(displayValue)}
       {parsed.suffix}
@@ -514,7 +608,7 @@ function CountdownTimer({ targetDate }) {
 function CountdownUnit({ label, value }) {
   return (
     <div className="rounded-lg border border-border bg-background/70 p-3">
-      <div className="font-serif text-2xl text-primary tabular-nums sm:text-3xl">{String(value).padStart(2, "0")}</div>
+      <div className="font-serif text-2xl font-semibold tabular-nums tracking-tight text-primary sm:text-3xl">{String(value).padStart(2, "0")}</div>
       <div className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground sm:text-xs">{label}</div>
     </div>
   );
@@ -562,14 +656,14 @@ function TournamentInfo({ event, message }) {
         <div className="relative mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
           <div>
             <p className="text-xs uppercase tracking-[0.25em] text-secondary">Tournament hub</p>
-            <h2 className="mt-3 font-serif text-4xl text-primary md:text-6xl">{tournament?.name || "The Forge"}</h2>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground md:text-base">
-              {tournament?.description || "Tournament details are being forged. Check Discord for live communications."}
+            <h2 className="mt-3 font-serif text-4xl font-semibold tracking-tight text-foreground md:text-6xl">{tournament?.name || SITE_BRAND_LINE}</h2>
+            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base md:leading-relaxed">
+              {tournament?.description || "Tournament details will appear here once admins publish the setup. Check Discord for live communications."}
             </p>
           </div>
-          <div className="rounded-xl border border-primary/30 bg-card/80 p-4 backdrop-blur">
-            <p className="text-xs uppercase tracking-widest text-muted-foreground">Tournament starts</p>
-            <p className="mt-2 font-serif text-2xl text-primary">{formatDate(tournament?.start_date || defaultTournamentStart)}</p>
+          <div className="rounded-xl border border-primary/20 bg-card/80 p-4 shadow-lg backdrop-blur ring-1 ring-white/[0.04]">
+            <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">Tournament starts</p>
+            <p className="mt-2 font-serif text-2xl font-semibold tracking-tight text-foreground">{formatDate(tournament?.start_date || defaultTournamentStart)}</p>
             <div className="mt-4">
               <CountdownTimer targetDate={tournament?.start_date || defaultTournamentStart} />
             </div>
@@ -585,7 +679,7 @@ function TournamentInfo({ event, message }) {
       </section>
 
       <section className="rounded-xl border border-border bg-card p-4">
-        <h3 className="font-serif text-xl text-primary">Prize Pool Breakdown</h3>
+        <h3 className="font-serif text-xl font-semibold tracking-tight text-foreground">Prize Pool Breakdown</h3>
         <div className="mt-3 grid gap-2 md:grid-cols-2">
           {(prizeBreakdown.length ? prizeBreakdown : [{ label: "Prize breakdown", amount: "Breakdown will be announced soon." }]).map((item, index) => (
             <div key={`${item.label || item}-${index}`} className="rounded-md border border-border bg-background p-3 text-sm">
@@ -597,7 +691,7 @@ function TournamentInfo({ event, message }) {
       </section>
 
       <section className="space-y-3 rounded-xl border border-border bg-card p-4">
-        <h3 className="font-serif text-xl text-primary">Standings</h3>
+        <h3 className="font-serif text-xl font-semibold tracking-tight text-foreground">Standings</h3>
         {groupedStandings.length ? (
           <div className="grid gap-3 lg:grid-cols-2">
             {groupedStandings.map((group) => (
@@ -610,7 +704,7 @@ function TournamentInfo({ event, message }) {
       </section>
 
       <section className="space-y-3 rounded-xl border border-border bg-card p-4">
-        <h3 className="font-serif text-xl text-primary">Announcements</h3>
+        <h3 className="font-serif text-xl font-semibold tracking-tight text-foreground">Announcements</h3>
         {(announcements.length ? announcements : ["Announcements will appear here."]).map((item, index) => (
           <article key={`${item}-${index}`} className="rounded-xl border border-border bg-background p-4">
             <p className="text-xs uppercase tracking-wider text-secondary">Update {index + 1}</p>
@@ -621,12 +715,12 @@ function TournamentInfo({ event, message }) {
 
       {tournamentMode && teams.length ? (
         <section className="space-y-3 rounded-xl border border-border bg-card p-4">
-          <h3 className="font-serif text-xl text-primary">Teams</h3>
+          <h3 className="font-serif text-xl font-semibold tracking-tight text-foreground">Teams</h3>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {teams.map((team) => (
               <article key={team.id || team.name} className="overflow-hidden rounded-xl border border-border bg-background">
                 <div className="border-b border-border bg-card px-4 py-3">
-                  <h4 className="font-serif text-xl text-primary">{team.name}</h4>
+                  <h4 className="font-serif text-xl font-semibold tracking-tight text-foreground">{team.name}</h4>
                   <p className="text-xs text-secondary">{team.captain ? `Captain: ${team.captain}` : "Captain TBA"}</p>
                 </div>
                 <div className="divide-y divide-border">
@@ -642,6 +736,9 @@ function TournamentInfo({ event, message }) {
           </div>
         </section>
       ) : null}
+      <section className="rounded-lg border border-border bg-background/50 p-4">
+        <ValveDisclaimer className="text-center" />
+      </section>
     </div>
   );
 }
@@ -689,6 +786,7 @@ function PublicSchedule({ event, message }) {
   return (
     <div className="space-y-4">
       {message ? <p className="rounded-md border border-border bg-card p-2 text-sm text-secondary">{message}</p> : null}
+      <ValveDisclaimer className="rounded-lg border border-dashed border-border bg-card/40 p-3" />
       <section className="rounded-lg border border-border bg-card p-4">
         <h2 className="font-serif text-2xl">Bracket & Schedule</h2>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -773,49 +871,246 @@ function StandingsTable({ title, rows = [] }) {
   );
 }
 
+function PrivacyPolicyPage() {
+  return (
+    <article className="mx-auto max-w-3xl space-y-8 text-foreground">
+      <header>
+        <h1 className="font-serif text-3xl font-semibold tracking-tight">Privacy Policy</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Last updated {new Date().getFullYear()}. For {SITE_BRAND_FULL} ({SITE_BRAND_SHORT}) public website and registration.</p>
+        <ValveDisclaimer className="mt-4 rounded-lg border border-border bg-background/60 p-3" />
+      </header>
+      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
+        <h2 className="font-serif text-xl font-semibold text-foreground">Who we are</h2>
+        <p>
+          {SITE_BRAND_FULL} operates this site as a community tournament platform. This policy describes how we handle information when you use the public site or register as a player.
+        </p>
+      </section>
+      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
+        <h2 className="font-serif text-xl font-semibold text-foreground">Information we collect</h2>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong className="text-foreground">Registration:</strong> When you sign up, we collect the details you submit (such as name, email, contact information, game-related identifiers, and payment proof you choose to upload) to run the tournament and communicate with you.
+          </li>
+          <li>
+            <strong className="text-foreground">Admin access:</strong> Organizers who use the admin panel provide account credentials through that flow; those details are handled separately for access control.
+          </li>
+          <li>
+            <strong className="text-foreground">Technical data:</strong> Like most websites, our host and infrastructure may process standard technical data (for example IP address, browser type, timestamps) in server or security logs.
+          </li>
+        </ul>
+      </section>
+      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
+        <h2 className="font-serif text-xl font-semibold text-foreground">How we use information</h2>
+        <p>We use registration and contact data to verify participants, coordinate the event, send transactional emails (such as OTPs and status updates), and meet legitimate tournament operations. We do not sell your personal information.</p>
+      </section>
+      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
+        <h2 className="font-serif text-xl font-semibold text-foreground">Storage and retention</h2>
+        <p>Data is stored for as long as needed to run the tournament and for any reasonable archival period the organizers require. Archived or deleted registrations may be handled according to admin workflow on the platform.</p>
+      </section>
+      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
+        <h2 className="font-serif text-xl font-semibold text-foreground">Third parties</h2>
+        <p>
+          We may link to external services (for example Discord). Their use is governed by their own policies. Email delivery relies on your tournament organizer&apos;s configured mail provider.
+        </p>
+      </section>
+      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
+        <h2 className="font-serif text-xl font-semibold text-foreground">Your choices</h2>
+        <p>
+          You may contact tournament organizers via the channels they publish (for example Discord) to ask about your registration data. Essential cookies and storage are described in the{" "}
+          <a className="text-secondary underline underline-offset-2" href="/cookies">
+            Cookie Policy
+          </a>
+          .
+        </p>
+      </section>
+      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
+        <h2 className="font-serif text-xl font-semibold text-foreground">Disclaimer</h2>
+        <p>{VALVE_DISCLAIMER}</p>
+      </section>
+    </article>
+  );
+}
+
+function CookiePolicyPage() {
+  return (
+    <article className="mx-auto max-w-3xl space-y-8 text-foreground">
+      <header>
+        <h1 className="font-serif text-3xl font-semibold tracking-tight">Cookie Policy</h1>
+        <p className="mt-2 text-sm text-muted-foreground">How {SITE_BRAND_SHORT} uses cookies and similar technologies on this site.</p>
+        <ValveDisclaimer className="mt-4 rounded-lg border border-border bg-background/60 p-3" />
+      </header>
+      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
+        <h2 className="font-serif text-xl font-semibold text-foreground">What we use</h2>
+        <p>
+          We keep use minimal. Essential functionality may rely on <strong className="text-foreground">browser local storage</strong> (similar to cookies) for things like remembering that you accepted this notice, and for admin sign-in tokens if you use the organizer panel.
+        </p>
+      </section>
+      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
+        <h2 className="font-serif text-xl font-semibold text-foreground">Consent banner</h2>
+        <p>
+          When you click <strong className="text-foreground">Accept</strong> on the cookie notice, we store a small value in your browser so we do not show the banner again on future visits. You can clear site data in your browser settings to reset this.
+        </p>
+      </section>
+      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
+        <h2 className="font-serif text-xl font-semibold text-foreground">Analytics and ads</h2>
+        <p>This site does not include third-party advertising or analytics cookies by default. If that changes, this policy will be updated.</p>
+      </section>
+      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
+        <h2 className="font-serif text-xl font-semibold text-foreground">More information</h2>
+        <p>
+          See our{" "}
+          <a className="text-secondary underline underline-offset-2" href="/privacy">
+            Privacy Policy
+          </a>{" "}
+          for how personal data from registration is handled.
+        </p>
+      </section>
+    </article>
+  );
+}
+
 function GeneralRulesPage() {
   return (
     <section className="space-y-4 rounded-2xl border border-border bg-card p-4 sm:p-6">
       <div>
-        <p className="text-xs uppercase tracking-widest text-secondary">The Forge</p>
-        <h2 className="font-serif text-3xl text-primary">General Rules & Player Conduct</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          These rules cover player behavior, eligibility, communication, and fair-play expectations for every Forge event.
+        <p className="text-xs uppercase tracking-widest text-secondary">{SITE_BRAND_SHORT}</p>
+        <h2 className="font-serif text-3xl font-semibold tracking-tight text-foreground">General Rules & Player Conduct</h2>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          These rules cover player behavior, eligibility, communication, and fair-play expectations for every {SITE_BRAND_FULL} event.
         </p>
       </div>
-      {[
-        ["Eligibility", "Players must submit accurate identity, Discord, Steam, and contact details. Admins may reject unverifiable registrations."],
-        ["Conduct", "Harassment, hate speech, threats, griefing, abuse, or targeted toxicity can lead to removal without refund."],
-        ["Fair Play", "Cheating, account sharing, smurfing, match fixing, stream sniping, or exploiting tournament systems is prohibited."],
-        ["Communication", "Players must be reachable through Discord during tournament operations and must follow admin instructions."],
-        ["Payments", "Entry/payment proof must be valid and reviewable by admins. Fraudulent screenshots or chargebacks may lead to bans."],
-        ["Admin Decisions", "Admins may make final calls on disputes, scheduling, rule interpretation, and emergency tournament operations."],
-      ].map(([title, body]) => (
+      {PLAYER_RULES_SECTIONS.map(([title, body]) => (
         <div key={title} className="rounded-lg border border-border bg-background p-4">
-          <h3 className="font-serif text-lg">{title}</h3>
-          <p className="mt-1 text-sm text-muted-foreground">{body}</p>
+          <h3 className="font-serif text-lg font-medium text-foreground">{title}</h3>
+          <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{body}</p>
         </div>
       ))}
+      <div className="rounded-lg border border-border bg-background/60 p-4">
+        <ValveDisclaimer />
+      </div>
     </section>
   );
 }
 
-function RegistrationPage({ event, navigate, message, setMessage }) {
-  const discordUrl = event?.tournament?.discord_url || discordInviteUrl;
-  const registrationDeadline = event?.tournament?.registration_deadline;
+function RegistrationTermsModal({ open, busy, onClose, onAccept, rulebook }) {
+  useBodyScrollLock(open);
+  if (!open) return null;
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-labelledby="registration-terms-title">
+      <div className="flex max-h-[min(90vh,640px)] w-full max-w-lg flex-col rounded-lg border border-border bg-card shadow-2xl">
+        <div className="shrink-0 border-b border-border p-4">
+          <h3 id="registration-terms-title" className="font-serif text-xl font-semibold tracking-tight text-foreground">
+            Rules — {SITE_BRAND_FULL}
+          </h3>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Read and accept before we send a verification code to your email.{" "}
+            <a className="font-medium text-secondary underline underline-offset-2 hover:text-foreground" href="/rules" target="_blank" rel="noreferrer">
+              Open full rules in a new tab
+            </a>
+            .
+          </p>
+        </div>
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 text-sm">
+          {PLAYER_RULES_SECTIONS.map(([title, body]) => (
+            <div key={title} className="rounded-md border border-border bg-background p-3">
+              <h4 className="font-medium text-foreground">{title}</h4>
+              <p className="mt-1 text-muted-foreground">{body}</p>
+            </div>
+          ))}
+          {rulebook ? (
+            <div className="rounded-md border border-border bg-background p-3">
+              <h4 className="font-medium text-foreground">Tournament rulebook</h4>
+              <p className="mt-2 max-h-48 overflow-y-auto whitespace-pre-line text-muted-foreground">{rulebook}</p>
+            </div>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 justify-end gap-2 border-t border-border p-4">
+          <button type="button" className="btn btn-outline" onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+          <button type="button" className="btn btn-primary" onClick={onAccept} disabled={busy}>
+            {busy ? "Sending code…" : "I agree — send verification code"}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function RegistrationPage({ event, message, setMessage }) {
+  const tournament = event?.tournament;
+  const discordUrl = tournament?.discord_url || discordInviteUrl;
+  const registrationDeadline = tournament?.registration_deadline;
   const registrationClosed = registrationDeadline ? new Date(registrationDeadline) <= new Date() : false;
+  const qrImage = tournament?.payment_qr_image || "";
+  const rulebook = tournament?.rulebook || "";
+
+  const [step, setStep] = useState("form");
+  const [resumeLoading, setResumeLoading] = useState(true);
+  const [showTerms, setShowTerms] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
+    email: "",
     name: "",
+    location: "",
     phoneNumber: "",
     roles: ["Carry"],
     mmr: "",
     steamName: "",
     steamProfile: "",
     discordHandle: "",
-    paymentScreenshot: "",
   });
-  const [submitted, setSubmitted] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [devOtpHint, setDevOtpHint] = useState("");
+  const [publicCode, setPublicCode] = useState("");
+  const [paymentScreenshot, setPaymentScreenshot] = useState("");
+  const [paymentNotes, setPaymentNotes] = useState("");
+
+  useEffect(() => {
+    const qs = new URLSearchParams(window.location.search);
+    const email = qs.get("email")?.trim();
+    const code = qs.get("code")?.trim();
+    if (!email) {
+      setResumeLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { session } = await api.getRegistrationSession(tournamentSlug, email, code || undefined);
+        if (cancelled || !session) return;
+        setForm((prev) => ({
+          ...prev,
+          email: session.email || email,
+          name: session.name || "",
+          location: session.location || "",
+          phoneNumber: session.phoneNumber || "",
+          discordHandle: session.discordHandle || "",
+          mmr: session.mmr != null ? String(session.mmr) : "",
+          steamName: session.steamName || "",
+          steamProfile: session.steamProfile || "",
+          roles: Array.isArray(session.roles) && session.roles.length ? session.roles : prev.roles,
+        }));
+        const st = session.registrationFlowStage;
+        if (st === "awaiting_otp") setStep("otp");
+        else if (st === "awaiting_payment") {
+          setPublicCode(session.publicCode || code || "");
+          setStep("payment");
+        } else if (st === "submitted") setStep("done");
+        setMessage("");
+      } catch {
+        if (!cancelled) {
+          setMessage("Could not resume this registration. Use the link from your email (email + registration code), or start again below.");
+        }
+      } finally {
+        if (!cancelled) setResumeLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function toggleRole(role) {
     setForm((prev) => ({
@@ -824,9 +1119,9 @@ function RegistrationPage({ event, navigate, message, setMessage }) {
     }));
   }
 
-  async function readScreenshot(file) {
+  async function readPaymentFile(file) {
     if (!file) {
-      setForm((prev) => ({ ...prev, paymentScreenshot: "" }));
+      setPaymentScreenshot("");
       return;
     }
     const dataUrl = await new Promise((resolve, reject) => {
@@ -835,115 +1130,264 @@ function RegistrationPage({ event, navigate, message, setMessage }) {
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
-    setForm((prev) => ({ ...prev, paymentScreenshot: dataUrl }));
+    setPaymentScreenshot(dataUrl);
   }
 
-  function submit(eventSubmit) {
-    eventSubmit.preventDefault();
+  function validateFormForOtp() {
+    if (!form.email.trim()) return "Email is required.";
+    if (!form.name.trim()) return "Name is required.";
+    if (!form.phoneNumber.trim()) return "Phone number is required.";
+    if (!form.discordHandle.trim()) return "Discord ID is required.";
+    if (!form.steamName.trim()) return "Steam name is required.";
+    if (!form.steamProfile.trim()) return "Steam profile is required.";
+    if (form.mmr === "" || Number.isNaN(Number(form.mmr))) return "MMR is required.";
+    const m = Number(form.mmr);
+    if (!Number.isInteger(m) || m < 0 || m > 15000) return "MMR must be a whole number between 0 and 15000.";
+    if (!form.roles.length) return "Select at least one role.";
+    return "";
+  }
+
+  function onFormSubmit(e) {
+    e.preventDefault();
+    setMessage("");
     if (registrationClosed) {
       setMessage("Registration is closed for this tournament.");
       return;
     }
-    if (!form.roles.length) {
-      setMessage("Select at least one role.");
+    const err = validateFormForOtp();
+    if (err) {
+      setMessage(err);
       return;
     }
-    if (!form.paymentScreenshot) {
-      setMessage("Upload a payment screenshot before submitting.");
-      return;
-    }
-    setShowConfirm(true);
+    setDevOtpHint("");
+    setShowTerms(true);
   }
 
-  async function confirmSubmit() {
-    const payload = {
-      ...form,
-      mmr: Number(form.mmr),
-    };
-    await api.registerPlayer(tournamentSlug, payload);
-    setSubmitted(true);
-    setShowConfirm(false);
-    setMessage("Registration submitted. Complete payment in Discord and admins will approve it manually.");
+  async function acceptTermsAndRequestOtp() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const res = await api.requestRegistrationOtp(tournamentSlug, {
+        email: form.email.trim(),
+        name: form.name.trim(),
+        location: form.location.trim(),
+        roles: form.roles,
+        mmr: Number(form.mmr),
+        steamName: form.steamName.trim(),
+        steamProfile: form.steamProfile.trim(),
+        discordHandle: form.discordHandle.trim(),
+        phoneNumber: form.phoneNumber.trim(),
+        termsAcceptedAt: new Date().toISOString(),
+      });
+      if (res.devOtp) setDevOtpHint(String(res.devOtp));
+      setShowTerms(false);
+      setStep("otp");
+    } catch (err) {
+      setMessage(err.message || "Could not send verification email.");
+    } finally {
+      setBusy(false);
+    }
   }
+
+  async function onVerifyOtp(e) {
+    e.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      const res = await api.verifyRegistrationOtp(tournamentSlug, {
+        email: form.email.trim(),
+        otp: otp.trim(),
+      });
+      setPublicCode(res.publicCode);
+      const url = `/register?resume=1&email=${encodeURIComponent(form.email.trim())}&code=${encodeURIComponent(res.publicCode)}`;
+      window.history.replaceState({}, "", url);
+      setStep("payment");
+      setOtp("");
+    } catch (err) {
+      setMessage(err.message || "Invalid or expired code.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onCompletePayment(e) {
+    e.preventDefault();
+    if (!paymentScreenshot) {
+      setMessage("Upload a payment screenshot.");
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    try {
+      await api.completeRegistration(tournamentSlug, {
+        email: form.email.trim(),
+        publicCode: publicCode.trim(),
+        paymentScreenshot,
+        notes: paymentNotes.trim(),
+      });
+      setStep("done");
+    } catch (err) {
+      setMessage(err.message || "Could not submit payment.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const stepLabel =
+    step === "form"
+      ? "1. Your details"
+      : step === "otp"
+        ? "2. Email verification"
+        : step === "payment"
+          ? "3. Payment"
+          : "Submitted";
 
   return (
-    <form className="space-y-4 rounded-lg border border-border bg-muted/50 p-4 shadow-xl" onSubmit={submit}>
+    <div className="space-y-4 rounded-lg border border-border bg-muted/50 p-4 shadow-xl">
+      <RegistrationTermsModal
+        open={showTerms}
+        busy={busy}
+        onClose={() => setShowTerms(false)}
+        onAccept={acceptTermsAndRequestOtp}
+        rulebook={rulebook}
+      />
+
       <div>
-        <h2 className="font-serif text-2xl">Register for {event?.tournament?.name || "The Forge"}</h2>
-        <p className="text-sm text-muted-foreground">All fields are mandatory. Submit accurate player, Steam, Discord, and payment details.</p>
+        <h2 className="font-serif text-2xl">Register for {tournament?.name || SITE_BRAND_LINE}</h2>
+        <p className="text-sm text-muted-foreground">
+          Multi-step registration: verify your email, receive your tournament ID, then upload payment proof for admin review.
+        </p>
+        <p className="mt-2 text-xs uppercase tracking-wider text-secondary">{stepLabel}</p>
         {registrationDeadline ? (
           <p className={`mt-2 rounded-md border border-border bg-background p-2 text-sm ${registrationClosed ? "text-destructive" : "text-secondary"}`}>
             Registration {registrationClosed ? "closed" : "closes"} on {new Date(registrationDeadline).toLocaleString()}.
           </p>
         ) : null}
-        <a className="btn btn-outline mt-3" href={discordUrl} target="_blank" rel="noreferrer">
-          Join Discord for payment and match updates
+        <a className="btn btn-outline mt-3 inline-flex" href={discordUrl} target="_blank" rel="noreferrer">
+          Join Discord for match updates
         </a>
+        <ValveDisclaimer className="mt-4 border-t border-border pt-4" />
       </div>
+
+      {resumeLoading ? <p className="text-sm text-muted-foreground">Checking for a saved registration…</p> : null}
       {message ? <p className="rounded-md border border-border bg-background p-3 text-sm text-secondary">{message}</p> : null}
-      {submitted ? <p className="rounded-md border border-border bg-background p-3 text-sm text-secondary">Registration received.</p> : null}
-      <div className="grid gap-3 md:grid-cols-2">
-        <Input label="Name" value={form.name} onChange={(name) => setForm((prev) => ({ ...prev, name }))} required />
-        <Input label="Phone number" type="tel" value={form.phoneNumber} onChange={(phoneNumber) => setForm((prev) => ({ ...prev, phoneNumber }))} required />
-        <Input label="Discord ID" value={form.discordHandle} onChange={(discordHandle) => setForm((prev) => ({ ...prev, discordHandle }))} required />
-        <Input label="MMR" type="number" value={form.mmr} onChange={(mmr) => setForm((prev) => ({ ...prev, mmr }))} required />
-        <Input label="Steam name" value={form.steamName} onChange={(steamName) => setForm((prev) => ({ ...prev, steamName }))} required />
-        <Input label="Steam ID / profile link" value={form.steamProfile} onChange={(steamProfile) => setForm((prev) => ({ ...prev, steamProfile }))} required />
-      </div>
-      <div>
-        <p className="mb-2 text-sm font-medium">Roles</p>
-        <div className="flex flex-wrap gap-2">
-          {roles.map((role) => (
-            <button
-              key={role}
-              type="button"
-              onClick={() => toggleRole(role)}
-              className={`btn btn-sm ${form.roles.includes(role) ? "btn-primary" : "btn-outline"}`}
-            >
-              {role}
-            </button>
-          ))}
+
+      {step === "done" && !resumeLoading ? (
+        <div className="space-y-2 rounded-md border border-border bg-background p-4 text-sm">
+          <p className="font-medium text-foreground">Thank you — your registration is under review.</p>
+          <p className="text-muted-foreground">
+            We emailed you a confirmation. Admins will verify your payment and approve or reject your registration; you will get another email when the decision is made.
+          </p>
         </div>
-      </div>
-      <label className="block text-sm">
-        Payment screenshot
-        <input
-          required
-          type="file"
-          accept="image/*"
-          className="mt-1 w-full rounded-md border border-input bg-background p-2"
-          onChange={(event) => readScreenshot(event.target.files?.[0])}
-        />
-      </label>
-      {form.paymentScreenshot ? (
-        <img src={form.paymentScreenshot} alt="Payment screenshot preview" className="max-h-48 rounded-md border border-border object-contain" />
       ) : null}
-      <button type="submit" className="btn btn-primary" disabled={registrationClosed}>
-        {registrationClosed ? "Registration closed" : "Submit registration"}
-      </button>
-      {showConfirm ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-lg space-y-4 rounded-lg border border-border bg-card p-5 shadow-2xl">
-            <h3 className="font-serif text-xl text-primary">Confirm registration</h3>
-            <p className="text-sm text-muted-foreground">
-              On clicking submit, you agree to have read and comply with{" "}
-              <button type="button" className="text-primary underline" onClick={() => navigate("/rules")}>
-                Rules of The Forge
-              </button>
-              .
-            </p>
-            <div className="flex justify-end gap-2">
-              <button type="button" className="btn btn-outline" onClick={() => setShowConfirm(false)}>
-                Cancel
-              </button>
-              <button type="button" className="btn btn-primary" onClick={confirmSubmit}>
-                Submit and agree
-              </button>
+
+      {step === "form" && !resumeLoading ? (
+        <form className="space-y-4" onSubmit={onFormSubmit}>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Input label="Email" type="email" value={form.email} onChange={(v) => setForm((prev) => ({ ...prev, email: v }))} required />
+            <Input label="Name" value={form.name} onChange={(v) => setForm((prev) => ({ ...prev, name: v }))} required />
+            <Input label="City / region (optional)" value={form.location} onChange={(v) => setForm((prev) => ({ ...prev, location: v }))} />
+            <Input label="Phone number" type="tel" value={form.phoneNumber} onChange={(v) => setForm((prev) => ({ ...prev, phoneNumber: v }))} required />
+            <Input label="Discord ID" value={form.discordHandle} onChange={(v) => setForm((prev) => ({ ...prev, discordHandle: v }))} required />
+            <Input label="MMR" type="number" value={form.mmr} onChange={(v) => setForm((prev) => ({ ...prev, mmr: v }))} required />
+            <Input label="Steam name" value={form.steamName} onChange={(v) => setForm((prev) => ({ ...prev, steamName: v }))} required />
+            <Input label="Steam ID / profile link" value={form.steamProfile} onChange={(v) => setForm((prev) => ({ ...prev, steamProfile: v }))} required />
+          </div>
+          <div>
+            <p className="mb-2 text-sm font-medium">Roles</p>
+            <div className="flex flex-wrap gap-2">
+              {roles.map((role) => (
+                <button
+                  key={role}
+                  type="button"
+                  onClick={() => toggleRole(role)}
+                  className={`btn btn-sm ${form.roles.includes(role) ? "btn-primary" : "btn-outline"}`}
+                >
+                  {role}
+                </button>
+              ))}
             </div>
           </div>
-        </div>
+          <button type="submit" className="btn btn-primary" disabled={registrationClosed || busy}>
+            {registrationClosed ? "Registration closed" : "Continue — accept rules & verify email"}
+          </button>
+        </form>
       ) : null}
-    </form>
+
+      {step === "otp" && !resumeLoading ? (
+        <form className="space-y-4" onSubmit={onVerifyOtp}>
+          <p className="text-sm text-muted-foreground">
+            Enter the 6-digit code we sent to <span className="text-foreground">{form.email}</span>.
+          </p>
+          {devOtpHint ? (
+            <p className="rounded-md border border-dashed border-primary/40 bg-primary/5 p-2 text-sm text-muted-foreground">
+              Dev mode: use OTP <span className="font-mono text-foreground">{devOtpHint}</span> (email send skipped).
+            </p>
+          ) : null}
+          <Input label="Verification code" value={otp} onChange={setOtp} required />
+          <div className="flex flex-wrap gap-2">
+            <button type="submit" className="btn btn-primary" disabled={busy}>
+              Verify and continue
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline"
+              disabled={busy}
+              onClick={() => {
+                setStep("form");
+                setOtp("");
+                setMessage("");
+              }}
+            >
+              Edit details
+            </button>
+          </div>
+        </form>
+      ) : null}
+
+      {step === "payment" && !resumeLoading ? (
+        <form className="space-y-4" onSubmit={onCompletePayment}>
+          <div className="rounded-md border border-border bg-background p-4 text-sm">
+            <p className="text-xs uppercase tracking-wider text-secondary">Your registration ID</p>
+            <p className="mt-1 font-mono text-lg text-primary">{publicCode}</p>
+            <p className="mt-2 text-muted-foreground">Use this ID in payment notes if asked. Keep this page bookmarked until you finish payment.</p>
+          </div>
+          {qrImage ? (
+            <div>
+              <p className="text-sm font-medium">Payment QR</p>
+              <img src={qrImage} alt="Payment QR" className="mt-2 h-48 w-48 rounded-md border border-border object-contain bg-background" />
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Payment QR will appear here once the tournament publishes one. Check Discord if missing.</p>
+          )}
+          <label className="block text-sm">
+            UPI / transaction notes (optional)
+            <input
+              type="text"
+              className="mt-1 w-full rounded-md border border-input bg-background p-2"
+              value={paymentNotes}
+              onChange={(e) => setPaymentNotes(e.target.value)}
+              placeholder="Transaction reference or UPI ID"
+            />
+          </label>
+          <label className="block text-sm">
+            Payment screenshot
+            <input
+              type="file"
+              accept="image/*"
+              className="mt-1 w-full rounded-md border border-input bg-background p-2"
+              onChange={(event) => readPaymentFile(event.target.files?.[0])}
+            />
+          </label>
+          {paymentScreenshot ? (
+            <img src={paymentScreenshot} alt="Payment screenshot preview" className="max-h-48 rounded-md border border-border object-contain" />
+          ) : null}
+          <button type="submit" className="btn btn-primary" disabled={busy || registrationClosed}>
+            Submit for review
+          </button>
+        </form>
+      ) : null}
+    </div>
   );
 }
 

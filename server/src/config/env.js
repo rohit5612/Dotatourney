@@ -52,6 +52,8 @@ export const env = {
   /** Local/dev only: create invite but do not send email (still returns link in JSON). */
   emailSkipSend: process.env.EMAIL_SKIP_SEND === "true",
   smtpConfigured: Boolean(emailUser && emailPass),
+  /** Used to hash player registration OTPs. Set a strong secret in production. */
+  registrationOtpSecret: process.env.REGISTRATION_OTP_SECRET?.trim() || "",
 };
 
 const hasDiscreteDbCreds = Boolean(env.dbHost && env.dbName && env.dbUser);

@@ -93,14 +93,14 @@ export function AppHeader({ pages, activePage, setActivePage, darkMode, setDarkM
     <header className="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
         <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-primary/40 bg-primary/10 p-1.5">
-            <img className="h-full w-full object-contain" src="/dota.svg" alt="Dota Tournament Organizer logo" />
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-primary/35 bg-gradient-to-br from-primary/12 to-transparent p-1 ring-1 ring-white/[0.04] sm:h-10 sm:w-10">
+            <img className="h-full w-full object-contain" src="/bpcl.png" alt="BPC League logo" />
           </span>
           <div className="min-w-0">
-            <h1 className="font-serif text-base tracking-wide text-primary sm:text-lg md:text-xl">
-              <span className="block truncate sm:whitespace-normal">The Forge | Immortal panel</span>
+            <h1 className="font-serif text-base font-semibold tracking-tight text-foreground sm:text-lg md:text-xl">
+              <span className="block truncate sm:whitespace-normal">BPC League — Admin</span>
             </h1>
-            <p className="truncate text-xs text-muted-foreground sm:whitespace-normal">Tournament manager suite</p>
+            <p className="truncate text-xs leading-snug text-muted-foreground sm:whitespace-normal">Bharat Pro Circuit League</p>
           </div>
         </div>
         <div className="hidden gap-2 md:flex md:shrink-0">

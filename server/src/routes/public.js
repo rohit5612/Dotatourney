@@ -1,13 +1,25 @@
 import express from "express";
 import { z } from "zod";
-import { createPlayerRegistration } from "../services/registrationRepository.js";
+import { env } from "../config/env.js";
+import {
+  completeRegistrationPayment,
+  getPublicRegistrationSession,
+  requestRegistrationOtp,
+  verifyRegistrationOtp,
+} from "../services/registrationRepository.js";
 import { getPublishedTournament, getPublishedTournamentForPublicRequest } from "../services/tournamentRepository.js";
 import { buildGroupedStandings, buildStandings } from "../services/standingsEngine.js";
 import { stageTabsForFormat } from "../services/formatGenerator.js";
+import {
+  sendPlayerRegistrationOtpEmail,
+  sendPlayerRegistrationSubmittedEmail,
+  sendPlayerRegistrationVerifiedEmail,
+} from "../services/emailService.js";
 
 const router = express.Router();
 
-const registrationSchema = z.object({
+const registerFormSchema = z.object({
+  email: z.string().email(),
   name: z.string().min(1),
   location: z.string().optional().default(""),
   roles: z.array(z.string().min(1)).min(1),
@@ -16,14 +28,23 @@ const registrationSchema = z.object({
   steamProfile: z.string().min(1),
   discordHandle: z.string().min(1),
   phoneNumber: z.string().min(1),
-  paymentScreenshot: z.string().min(1),
-  notes: z.string().optional().default(""),
 });
+
+function continueRegisterUrl(identifier, email, publicCode) {
+  const base = env.appUrl.replace(/\/$/, "");
+  const e = encodeURIComponent(email);
+  const c = encodeURIComponent(publicCode);
+  return `${base}/register?resume=1&email=${e}&code=${c}`;
+}
+
+const DEFAULT_PUBLIC_TOURNAMENT_NAME = "BPC League — Bharat Pro Circuit League";
+const DEFAULT_FALLBACK_SLUG = "bpcl";
+const DEFAULT_REG_PREFIX = "BPC";
 
 function fallbackTournament(identifier) {
   return {
     id: null,
-    name: "The Forge",
+    name: DEFAULT_PUBLIC_TOURNAMENT_NAME,
     slug: identifier,
     format: "dse",
     series_type: "bo3",
@@ -39,6 +60,8 @@ function fallbackTournament(identifier) {
     rulebook: "Rules will be published before tournament lock-in.",
     announcements: ["Tournament setup is in progress."],
     visibility_mode: "demo",
+    payment_qr_image: "",
+    registration_code_prefix: DEFAULT_REG_PREFIX,
   };
 }
 
@@ -52,7 +75,7 @@ function publicMatch(match, visibilityMode) {
   };
 }
 
-function publicPayload(data, fallbackIdentifier = "the-forge") {
+function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
   if (!data) {
     return {
       tournament: fallbackTournament(fallbackIdentifier),
@@ -91,6 +114,19 @@ function publicPayload(data, fallbackIdentifier = "the-forge") {
   };
 }
 
+function assertPublishedOpen(data) {
+  if (!data) {
+    const err = new Error("No tournament is currently published for registration");
+    err.status = 404;
+    throw err;
+  }
+  if (data.tournament.registration_deadline && new Date(data.tournament.registration_deadline) <= new Date()) {
+    const err = new Error("Registration is closed for this tournament");
+    err.status = 403;
+    throw err;
+  }
+}
+
 router.get("/tournament", async (_req, res, next) => {
   try {
     return res.json(publicPayload(await getPublishedTournament()));
@@ -108,21 +144,140 @@ router.get("/tournaments/:identifier", async (req, res, next) => {
   }
 });
 
-router.post("/tournaments/:identifier/register", async (req, res, next) => {
+router.get("/tournaments/:identifier/register/session", async (req, res, next) => {
   try {
     const data = await getPublishedTournamentForPublicRequest(req.params.identifier);
-    if (!data) {
-      return res.status(404).json({ message: "No tournament is currently published for registration" });
+    assertPublishedOpen(data);
+    const email = req.query.email;
+    const code = req.query.code;
+    if (!email || typeof email !== "string") {
+      return res.status(400).json({ message: "Query parameter email is required" });
     }
-    if (data.tournament.registration_deadline && new Date(data.tournament.registration_deadline) <= new Date()) {
-      return res.status(403).json({ message: "Registration is closed for this tournament" });
-    }
-    const payload = registrationSchema.parse(req.body);
-    const registration = await createPlayerRegistration(data.tournament.id, payload);
-    return res.status(201).json({ registration });
+    const session = await getPublicRegistrationSession(data.tournament.id, email, code || "");
+    if (!session) return res.status(404).json({ message: "Registration session not found" });
+    return res.json({ session });
   } catch (error) {
     return next(error);
   }
+});
+
+router.post("/tournaments/:identifier/register/request-otp", async (req, res, next) => {
+  try {
+    if (!env.emailSkipSend && !env.smtpConfigured) {
+      return res.status(503).json({
+        message:
+          "Registration emails are not configured. Set EMAIL_USER and EMAIL_PASS (and SMTP_*), or EMAIL_SKIP_SEND=true for local development.",
+      });
+    }
+    const data = await getPublishedTournamentForPublicRequest(req.params.identifier);
+    assertPublishedOpen(data);
+    const body = registerFormSchema.extend({ termsAcceptedAt: z.string().min(1) }).parse(req.body);
+    const { registrationId, otp } = await requestRegistrationOtp(data.tournament.id, body, body.termsAcceptedAt);
+    const tournamentName = data.tournament.name || DEFAULT_PUBLIC_TOURNAMENT_NAME;
+    try {
+      await sendPlayerRegistrationOtpEmail({
+        to: body.email.toLowerCase(),
+        name: body.name,
+        tournamentName,
+        otp,
+      });
+    } catch (err) {
+      console.error("[email] OTP send failed:", err?.message || err);
+      const e = new Error(err?.message || "Failed to send verification email");
+      e.status = 502;
+      throw e;
+    }
+    const out = { ok: true, registrationId };
+    if (env.emailSkipSend) out.devOtp = otp;
+    return res.status(202).json(out);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post("/tournaments/:identifier/register/verify-otp", async (req, res, next) => {
+  try {
+    if (!env.emailSkipSend && !env.smtpConfigured) {
+      return res.status(503).json({
+        message:
+          "Registration emails are not configured. Set EMAIL_USER and EMAIL_PASS (and SMTP_*), or EMAIL_SKIP_SEND=true for local development.",
+      });
+    }
+    const data = await getPublishedTournamentForPublicRequest(req.params.identifier);
+    assertPublishedOpen(data);
+    const body = z
+      .object({
+        email: z.string().email(),
+        otp: z.string().min(4).max(8),
+      })
+      .parse(req.body);
+    const { registration, publicCode } = await verifyRegistrationOtp(data.tournament.id, body.email, body.otp);
+    const tournamentName = data.tournament.name || DEFAULT_PUBLIC_TOURNAMENT_NAME;
+    const contUrl = continueRegisterUrl(req.params.identifier, registration.email, publicCode);
+    try {
+      await sendPlayerRegistrationVerifiedEmail({
+        to: registration.email,
+        name: registration.name,
+        tournamentName,
+        registration: { ...registration, publicCode },
+        continueUrl: contUrl,
+      });
+    } catch (err) {
+      console.error("[email] verified registration mail failed:", err?.message || err);
+    }
+    return res.status(200).json({ registration, publicCode, continueUrl: contUrl });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post("/tournaments/:identifier/register/complete", async (req, res, next) => {
+  try {
+    if (!env.emailSkipSend && !env.smtpConfigured) {
+      return res.status(503).json({
+        message:
+          "Registration emails are not configured. Set EMAIL_USER and EMAIL_PASS (and SMTP_*), or EMAIL_SKIP_SEND=true for local development.",
+      });
+    }
+    const data = await getPublishedTournamentForPublicRequest(req.params.identifier);
+    assertPublishedOpen(data);
+    const body = z
+      .object({
+        email: z.string().email(),
+        publicCode: z.string().min(1),
+        paymentScreenshot: z.string().min(1),
+        notes: z.string().optional().default(""),
+      })
+      .parse(req.body);
+    const registration = await completeRegistrationPayment(
+      data.tournament.id,
+      body.email,
+      body.publicCode,
+      body.paymentScreenshot,
+      body.notes,
+    );
+    const tournamentName = data.tournament.name || DEFAULT_PUBLIC_TOURNAMENT_NAME;
+    try {
+      await sendPlayerRegistrationSubmittedEmail({
+        to: registration.email,
+        name: registration.name,
+        tournamentName,
+        publicCode: registration.publicCode,
+      });
+    } catch (err) {
+      console.error("[email] submitted registration mail failed:", err?.message || err);
+    }
+    return res.status(200).json({ registration });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post("/tournaments/:identifier/register", async (_req, res) => {
+  return res.status(410).json({
+    message:
+      "This registration endpoint is retired. Use POST .../register/request-otp, verify-otp, and complete in order.",
+  });
 });
 
 export default router;

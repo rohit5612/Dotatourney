@@ -28,6 +28,8 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
       .filter((registration) => !maxMmr || (Number(registration.mmr) || 0) <= Number(maxMmr))
       .filter((registration) => {
         const haystack = [
+          registration.email,
+          registration.publicCode,
           registration.name,
           registration.phoneNumber,
           registration.discordHandle,
@@ -127,7 +129,7 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
           <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <input
               className="min-w-0 w-full rounded-md border border-input bg-background p-2 sm:w-56 sm:flex-1 md:max-w-xs lg:max-w-sm"
-              placeholder="Search player, Steam, Discord"
+              placeholder="Search email, code, player, Steam, Discord"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
@@ -217,6 +219,16 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
                 <p className="text-sm text-muted-foreground">Phone: {registration.phoneNumber || "N/A"}</p>
                 <p className="text-sm text-muted-foreground">Steam: {registration.steamName} ({registration.steamProfile})</p>
                 <p className="text-sm text-muted-foreground">Discord: {registration.discordHandle || "N/A"} - Submitted: {new Date(registration.createdAt).toLocaleString()}</p>
+                <p className="text-sm text-muted-foreground">
+                  Email: {registration.email || "N/A"}
+                  {registration.publicCode ? (
+                    <>
+                      {" "}
+                      — ID: <span className="font-mono text-foreground">{registration.publicCode}</span>
+                    </>
+                  ) : null}
+                  {registration.registrationFlowStage ? ` — Flow: ${registration.registrationFlowStage}` : null}
+                </p>
                 {registration.paymentScreenshot ? (
                   <a
                     className="mt-2 inline-flex text-sm text-primary underline"
