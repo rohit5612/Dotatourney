@@ -5,13 +5,29 @@ import adminRouter from "./routes/admin.js";
 import publicRouter from "./routes/public.js";
 import tournamentsRouter from "./routes/tournaments.js";
 
+function buildAllowedOrigins() {
+  const fromEnv = Array.isArray(env.corsOrigin) ? env.corsOrigin : [env.corsOrigin];
+  const devDefaults = ["http://localhost:5173", "http://127.0.0.1:5173"];
+  return [...new Set([...fromEnv, ...devDefaults].filter(Boolean))];
+}
+
+const allowedOrigins = buildAllowedOrigins();
+
+const corsOptions = {
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(null, false);
+  },
+  credentials: true,
+};
+
 export const app = express();
 
-app.use(
-  cors({
-    origin: env.corsOrigin,
-  }),
-);
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use(express.json({ limit: "8mb" }));
 
 app.get("/health", (_req, res) => {
