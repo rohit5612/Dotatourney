@@ -37,9 +37,16 @@ app.use("/api/tournaments", tournamentsRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/public", publicRouter);
 
+function httpErrorStatus(err) {
+  const raw = err?.status ?? err?.statusCode;
+  const parsed = typeof raw === "number" ? raw : Number.parseInt(String(raw ?? ""), 10);
+  if (Number.isInteger(parsed) && parsed >= 100 && parsed < 600) return parsed;
+  if (err?.name === "ZodError") return 400;
+  return 500;
+}
+
 app.use((err, _req, res, _next) => {
-  const status = err?.status || (err?.name === "ZodError" ? 400 : 500);
-  res.status(status).json({
+  res.status(httpErrorStatus(err)).json({
     message: err?.message || "Unexpected server error",
     issues: err?.issues || null,
   });

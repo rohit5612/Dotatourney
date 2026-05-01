@@ -1,6 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
 
+function draftFromRegistration(registration) {
+  return {
+    paymentStatus: registration.paymentStatus,
+    registrationStatus: registration.registrationStatus,
+    adminNotes: registration.adminNotes || "",
+  };
+}
+
+function isDraftDirty(registration, draft) {
+  return (
+    draft.paymentStatus !== registration.paymentStatus ||
+    draft.registrationStatus !== registration.registrationStatus ||
+    (draft.adminNotes || "") !== (registration.adminNotes || "")
+  );
+}
+
 export function RegistrationCrmPage({ tournamentId, registrations, refreshRegistrations }) {
   const [roleFilter, setRoleFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -9,17 +25,19 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
   const [minMmr, setMinMmr] = useState("");
   const [maxMmr, setMaxMmr] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+  const [sortMode, setSortMode] = useState("date-desc");
   const [archiveDraft, setArchiveDraft] = useState(null);
-  const [confirmReady, setConfirmReady] = useState(null);
   const [actionMenuId, setActionMenuId] = useState("");
-  const [editingId, setEditingId] = useState("");
   const [editDrafts, setEditDrafts] = useState({});
   const [message, setMessage] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [savingId, setSavingId] = useState("");
+  const [lightboxSrc, setLightboxSrc] = useState("");
+  const [lightboxName, setLightboxName] = useState("");
 
   const filtered = useMemo(() => {
-    return (registrations || [])
+    const list = (registrations || [])
       .filter((registration) => (showArchived ? Boolean(registration.archivedAt) : !registration.archivedAt))
       .filter((registration) => !roleFilter || registration.roles?.includes(roleFilter))
       .filter((registration) => !statusFilter || registration.registrationStatus === statusFilter)
@@ -40,9 +58,16 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
           .join(" ")
           .toLowerCase();
         return !search || haystack.includes(search.toLowerCase());
-      })
-      .sort((a, b) => (Number(b.mmr) || 0) - (Number(a.mmr) || 0));
-  }, [registrations, roleFilter, statusFilter, paymentFilter, minMmr, maxMmr, search, showArchived]);
+      });
+
+    return [...list].sort((a, b) => {
+      if (sortMode === "date-desc") return new Date(b.createdAt) - new Date(a.createdAt);
+      if (sortMode === "date-asc") return new Date(a.createdAt) - new Date(b.createdAt);
+      if (sortMode === "updated-desc") return new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt);
+      if (sortMode === "mmr-desc") return (Number(b.mmr) || 0) - (Number(a.mmr) || 0);
+      return 0;
+    });
+  }, [registrations, roleFilter, statusFilter, paymentFilter, minMmr, maxMmr, search, showArchived, sortMode]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -51,18 +76,19 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
 
   useEffect(() => {
     setPage(1);
-  }, [roleFilter, statusFilter, paymentFilter, minMmr, maxMmr, search, showArchived, pageSize]);
+  }, [roleFilter, statusFilter, paymentFilter, minMmr, maxMmr, search, showArchived, pageSize, sortMode]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
-  async function updateRegistration(registrationId, payload) {
+  async function persistRegistration(registrationId, payload) {
     try {
       await api.updateRegistration(tournamentId, registrationId, payload);
       await refreshRegistrations();
     } catch (error) {
       setMessage(error.message);
+      throw error;
     }
   }
 
@@ -77,44 +103,41 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
     }
   }
 
-  function isReady(registration) {
-    return registration.paymentStatus === "paid" && registration.registrationStatus === "approved";
+  function updateDraft(registration, patch) {
+    setEditDrafts((prev) => {
+      const cur = prev[registration.id] ?? draftFromRegistration(registration);
+      return { ...prev, [registration.id]: { ...cur, ...patch } };
+    });
   }
 
-  function beginEdit(registration) {
-    setEditingId(registration.id);
-    setActionMenuId("");
-    setEditDrafts((prev) => ({
-      ...prev,
-      [registration.id]: {
-        paymentStatus: registration.paymentStatus,
-        registrationStatus: registration.registrationStatus,
-        adminNotes: registration.adminNotes || "",
-      },
-    }));
+  async function saveRegistration(registration) {
+    const draft = editDrafts[registration.id] ?? draftFromRegistration(registration);
+    setSavingId(registration.id);
+    setMessage("");
+    try {
+      await persistRegistration(registration.id, draft);
+      setEditDrafts((prev) => {
+        const next = { ...prev };
+        delete next[registration.id];
+        return next;
+      });
+    } finally {
+      setSavingId("");
+    }
   }
 
-  function updateDraft(registrationId, patch) {
-    setEditDrafts((prev) => ({
-      ...prev,
-      [registrationId]: {
-        ...(prev[registrationId] || {}),
-        ...patch,
-      },
-    }));
-  }
-
-  async function saveEdit(registrationId) {
-    const draft = editDrafts[registrationId];
-    if (!draft) return;
-    await updateRegistration(registrationId, draft);
-    setEditingId("");
-  }
-
-  async function markReady() {
-    if (!confirmReady) return;
-    await updateRegistration(confirmReady.id, { paymentStatus: "paid", registrationStatus: "approved" });
-    setConfirmReady(null);
+  function openScreenshot(src, playerName) {
+    if (!src?.trim()) {
+      setMessage("No payment proof available for this registration.");
+      return;
+    }
+    const trimmed = src.trim();
+    if (trimmed.startsWith("data:image") || /^https?:\/\//i.test(trimmed)) {
+      setLightboxSrc(trimmed);
+      setLightboxName(playerName || "");
+      return;
+    }
+    setMessage("Unsupported screenshot format — contact support if this persists.");
   }
 
   return (
@@ -124,7 +147,10 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="min-w-0">
             <h2 className="font-serif text-lg">Registration CRM</h2>
-            <p className="text-sm text-muted-foreground">Mark Discord payments manually, approve players, and use role/MMR sorting for team assignment.</p>
+            <p className="text-sm text-muted-foreground">
+              Review payment and player details, then click <span className="font-medium text-foreground">Save</span> to apply changes. Decision emails (approved /
+              rejected / waitlisted) send only when you save and the registration status has changed.
+            </p>
           </div>
           <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <input
@@ -133,10 +159,18 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
+            <select className="rounded-md border border-input bg-background p-2" value={sortMode} onChange={(event) => setSortMode(event.target.value)}>
+              <option value="date-desc">Date: newest first</option>
+              <option value="date-asc">Date: oldest first</option>
+              <option value="updated-desc">Last updated: newest</option>
+              <option value="mmr-desc">MMR: high to low</option>
+            </select>
             <select className="rounded-md border border-input bg-background p-2" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}>
               <option value="">All roles</option>
               {[...new Set((registrations || []).flatMap((registration) => registration.roles || []))].map((role) => (
-                <option key={role} value={role}>{role}</option>
+                <option key={role} value={role}>
+                  {role}
+                </option>
               ))}
             </select>
             <select className="rounded-md border border-input bg-background p-2" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
@@ -168,11 +202,7 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-2 text-muted-foreground">
             Per page
-            <select
-              className="rounded-md border border-input bg-background p-2 text-foreground"
-              value={pageSize}
-              onChange={(event) => setPageSize(Number(event.target.value))}
-            >
+            <select className="rounded-md border border-input bg-background p-2 text-foreground" value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
               {[5, 10, 20, 50].map((size) => (
                 <option key={size} value={size}>
                   {size}
@@ -199,170 +229,142 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
       </section>
       <div className="grid gap-3">
         {paginated.map((registration) => {
-          const ready = isReady(registration);
-          const editing = editingId === registration.id;
-          const locked = Boolean(registration.archivedAt) || (ready && !editing);
-          const draft = editDrafts[registration.id] || {
-            paymentStatus: registration.paymentStatus,
-            registrationStatus: registration.registrationStatus,
-            adminNotes: registration.adminNotes || "",
-          };
+          const archived = Boolean(registration.archivedAt);
+          const draft = editDrafts[registration.id] ?? draftFromRegistration(registration);
+          const dirty = !archived && isDraftDirty(registration, draft);
 
           return (
-          <div key={registration.id} className="rounded-lg border border-border bg-card p-4">
-            <div className="flex flex-wrap justify-between gap-3">
-              <div>
-                <h3 className="font-serif text-lg">{registration.name}</h3>
-                <p className="text-sm text-muted-foreground">
-                  {registration.roles?.join(", ") || "No roles"} - {registration.mmr || "MMR TBA"} MMR - {registration.location || "No location"}
-                </p>
-                <p className="text-sm text-muted-foreground">Phone: {registration.phoneNumber || "N/A"}</p>
-                <p className="text-sm text-muted-foreground">Steam: {registration.steamName} ({registration.steamProfile})</p>
-                <p className="text-sm text-muted-foreground">Discord: {registration.discordHandle || "N/A"} - Submitted: {new Date(registration.createdAt).toLocaleString()}</p>
-                <p className="text-sm text-muted-foreground">
-                  Email: {registration.email || "N/A"}
-                  {registration.publicCode ? (
-                    <>
-                      {" "}
-                      — ID: <span className="font-mono text-foreground">{registration.publicCode}</span>
-                    </>
-                  ) : null}
-                  {registration.registrationFlowStage ? ` — Flow: ${registration.registrationFlowStage}` : null}
-                </p>
-                {registration.paymentScreenshot ? (
-                  <a
-                    className="mt-2 inline-flex text-sm text-primary underline"
-                    href={registration.paymentScreenshot}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    View payment screenshot
-                  </a>
-                ) : (
-                  <p className="mt-2 text-sm text-muted-foreground">Payment screenshot: not uploaded or not available</p>
-                )}
-                {registration.notes ? <p className="mt-2 text-sm text-muted-foreground">Player notes: {registration.notes}</p> : null}
-                {registration.archivedAt ? <p className="mt-2 text-sm text-secondary">Archived: {registration.archivedReason || "No reason recorded"}</p> : null}
-              </div>
-              <div className="text-sm">
-                <div>Payment: <span className="capitalize text-secondary">{registration.paymentStatus}</span></div>
-                <div>Status: <span className="capitalize text-secondary">{registration.registrationStatus}</span></div>
-                {ready ? <div className="mt-1 text-xs text-muted-foreground">Locked until edited</div> : null}
-              </div>
-            </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_2fr_auto]">
-              <select
-                className="rounded-md border border-input bg-background p-2 disabled:opacity-60"
-                value={editing ? draft.paymentStatus : registration.paymentStatus}
-                disabled={locked}
-                onChange={(event) =>
-                  editing
-                    ? updateDraft(registration.id, { paymentStatus: event.target.value })
-                    : updateRegistration(registration.id, { paymentStatus: event.target.value })
-                }
-              >
-                <option value="unpaid">Unpaid</option>
-                <option value="paid">Paid</option>
-                <option value="refunded">Refunded</option>
-              </select>
-              <select
-                className="rounded-md border border-input bg-background p-2 disabled:opacity-60"
-                value={editing ? draft.registrationStatus : registration.registrationStatus}
-                disabled={locked}
-                onChange={(event) =>
-                  editing
-                    ? updateDraft(registration.id, { registrationStatus: event.target.value })
-                    : updateRegistration(registration.id, { registrationStatus: event.target.value })
-                }
-              >
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="waitlisted">Waitlisted</option>
-                <option value="rejected">Rejected</option>
-              </select>
-              <input
-                className="rounded-md border border-input bg-background p-2 disabled:opacity-60"
-                placeholder="Admin notes"
-                value={editing ? draft.adminNotes : undefined}
-                defaultValue={editing ? undefined : registration.adminNotes}
-                disabled={locked}
-                onChange={(event) => editing && updateDraft(registration.id, { adminNotes: event.target.value })}
-                onBlur={(event) => !editing && !locked && updateRegistration(registration.id, { adminNotes: event.target.value })}
-              />
-              <div className="relative">
-                <button type="button" className="btn btn-outline btn-block" onClick={() => setActionMenuId((prev) => (prev === registration.id ? "" : registration.id))}>
-                  Actions
-                </button>
-                {actionMenuId === registration.id ? (
-                  <div className="absolute right-0 z-10 mt-2 w-44 rounded-md border border-border bg-card p-1 shadow-xl">
+            <div key={registration.id} className="rounded-lg border border-border bg-card p-4">
+              <div className="flex flex-wrap justify-between gap-3">
+                <div>
+                  <h3 className="font-serif text-lg">{registration.name}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {registration.roles?.join(", ") || "No roles"} - {registration.mmr || "MMR TBA"} MMR - {registration.location || "No location"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">Phone: {registration.phoneNumber || "N/A"}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Steam: {registration.steamName} ({registration.steamProfile})
+                  </p>
+                  <p className="text-sm text-muted-foreground">Discord: {registration.discordHandle || "N/A"} - Submitted: {new Date(registration.createdAt).toLocaleString()}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Email: {registration.email || "N/A"}
+                    {registration.publicCode ? (
+                      <>
+                        {" "}
+                        — ID: <span className="font-mono text-foreground">{registration.publicCode}</span>
+                      </>
+                    ) : null}
+                    {registration.registrationFlowStage ? ` — Flow: ${registration.registrationFlowStage}` : null}
+                  </p>
+                  {registration.paymentScreenshot ? (
                     <button
                       type="button"
-                      className="btn-menu"
-                      disabled={Boolean(registration.archivedAt) || ready}
-                      onClick={() => {
-                        setConfirmReady(registration);
-                        setActionMenuId("");
-                      }}
+                      className="mt-2 text-sm text-primary underline hover:no-underline"
+                      onClick={() => openScreenshot(registration.paymentScreenshot, registration.name)}
                     >
-                      Mark ready
+                      View payment screenshot
                     </button>
-                    <button
-                      type="button"
-                      className="btn-menu"
-                      disabled={Boolean(registration.archivedAt)}
-                      onClick={() => beginEdit(registration)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-menu text-destructive hover:text-destructive"
-                      disabled={Boolean(registration.archivedAt)}
-                      onClick={() => {
-                        setArchiveDraft({ registration, confirmName: "", reason: "" });
-                        setActionMenuId("");
-                      }}
-                    >
-                      Archive
-                    </button>
+                  ) : (
+                    <p className="mt-2 text-sm text-muted-foreground">Payment screenshot: not uploaded or not available</p>
+                  )}
+                  {registration.notes ? <p className="mt-2 text-sm text-muted-foreground">Player notes: {registration.notes}</p> : null}
+                  {registration.archivedAt ? <p className="mt-2 text-sm text-secondary">Archived: {registration.archivedReason || "No reason recorded"}</p> : null}
+                </div>
+                <div className="text-sm">
+                  <div>
+                    Payment: <span className="capitalize text-secondary">{registration.paymentStatus}</span>
                   </div>
-                ) : null}
+                  <div>
+                    Status: <span className="capitalize text-secondary">{registration.registrationStatus}</span>
+                  </div>
+                  {dirty ? <div className="mt-1 text-xs text-amber-600 dark:text-amber-500">Unsaved changes</div> : null}
+                </div>
+              </div>
+              <div className="mt-3 flex flex-col gap-2 lg:flex-row lg:items-end">
+                <div className="grid flex-1 gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_2fr]">
+                  <select
+                    className="rounded-md border border-input bg-background p-2 disabled:opacity-60"
+                    value={draft.paymentStatus}
+                    disabled={archived}
+                    onChange={(event) => updateDraft(registration, { paymentStatus: event.target.value })}
+                  >
+                    <option value="unpaid">Unpaid</option>
+                    <option value="paid">Paid</option>
+                    <option value="refunded">Refunded</option>
+                  </select>
+                  <select
+                    className="rounded-md border border-input bg-background p-2 disabled:opacity-60"
+                    value={draft.registrationStatus}
+                    disabled={archived}
+                    onChange={(event) => updateDraft(registration, { registrationStatus: event.target.value })}
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="waitlisted">Waitlisted</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                  <input
+                    className="rounded-md border border-input bg-background p-2 disabled:opacity-60 sm:col-span-2 lg:col-span-1"
+                    placeholder="Admin notes"
+                    value={draft.adminNotes}
+                    disabled={archived}
+                    onChange={(event) => updateDraft(registration, { adminNotes: event.target.value })}
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2 lg:justify-end">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={archived || !dirty || savingId === registration.id}
+                    onClick={() => saveRegistration(registration)}
+                  >
+                    {savingId === registration.id ? "Saving…" : "Save"}
+                  </button>
+                  <div className="relative">
+                    <button type="button" className="btn btn-outline btn-block min-w-28" onClick={() => setActionMenuId((prev) => (prev === registration.id ? "" : registration.id))}>
+                      Actions
+                    </button>
+                    {actionMenuId === registration.id ? (
+                      <div className="absolute right-0 z-10 mt-2 w-44 rounded-md border border-border bg-card p-1 shadow-xl">
+                        <button
+                          type="button"
+                          className="btn-menu text-destructive hover:text-destructive"
+                          disabled={archived}
+                          onClick={() => {
+                            setArchiveDraft({ registration, confirmName: "", reason: "" });
+                            setActionMenuId("");
+                          }}
+                        >
+                          Archive
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
               </div>
             </div>
-            {editing ? (
-              <div className="mt-3 flex justify-end gap-2">
-                <button type="button" className="btn btn-outline" onClick={() => setEditingId("")}>
-                  Cancel edit
-                </button>
-                <button type="button" className="btn btn-primary" onClick={() => saveEdit(registration.id)}>
-                  Save changes
-                </button>
-              </div>
-            ) : null}
-          </div>
           );
         })}
         {!paginated.length ? (
-          <div className="rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground">
-            No registrations match the current filters.
-          </div>
+          <div className="rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground">No registrations match the current filters.</div>
         ) : null}
       </div>
-      {confirmReady ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-lg space-y-3 rounded-lg border border-border bg-card p-4 shadow-2xl">
-            <h3 className="font-serif text-lg">Mark registration ready?</h3>
-            <p className="text-sm text-muted-foreground">
-              This will mark <span className="font-medium text-foreground">{confirmReady.name}</span> as paid and approved, then lock the row until edited again.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button type="button" className="btn btn-outline" onClick={() => setConfirmReady(null)}>
-                Cancel
-              </button>
-              <button type="button" className="btn btn-primary" onClick={markReady}>
-                Confirm ready
+      {lightboxSrc ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={lightboxName ? `Payment screenshot — ${lightboxName}` : "Payment screenshot"}
+          onClick={() => setLightboxSrc("")}
+        >
+          <div className="relative max-h-[92vh] max-w-[min(96vw,1100px)] overflow-auto rounded-lg border border-border bg-card p-2 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="truncate text-sm font-medium text-foreground">{lightboxName ? `${lightboxName} — payment proof` : "Payment proof"}</span>
+              <button type="button" className="btn btn-outline btn-sm shrink-0" onClick={() => setLightboxSrc("")}>
+                Close
               </button>
             </div>
+            <img src={lightboxSrc} alt="Payment proof" className="mx-auto max-h-[80vh] w-auto object-contain" />
           </div>
         </div>
       ) : null}
