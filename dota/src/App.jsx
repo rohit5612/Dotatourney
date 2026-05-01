@@ -47,6 +47,7 @@ function App() {
     bracketActive: false,
     registrationCodePrefix: "BPC",
     paymentQrImage: "",
+    paymentUpiId: "",
     registrationCodeSeq: 0,
   });
   const [teamDraft, setTeamDraft] = useState([]);
@@ -183,6 +184,7 @@ function App() {
         bracketActive: payload.tournament.bracket_active ?? prev.bracketActive,
         registrationCodePrefix: payload.tournament.registration_code_prefix ?? prev.registrationCodePrefix ?? "BPC",
         paymentQrImage: payload.tournament.payment_qr_image ?? prev.paymentQrImage ?? "",
+        paymentUpiId: payload.tournament.payment_upi_id ?? prev.paymentUpiId ?? "",
         registrationCodeSeq: payload.tournament.registration_code_seq ?? prev.registrationCodeSeq ?? 0,
       }));
       setTournamentId(payload.tournament.id);

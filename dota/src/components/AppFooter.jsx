@@ -1,4 +1,4 @@
-import { VALVE_DISCLAIMER } from "../constants/legal.js";
+import { ValveDisclaimer } from "./ValveDisclaimer.jsx";
 
 export function AppFooter({ navigate, mode = "public" }) {
   const quickLinks =
@@ -89,7 +89,7 @@ export function AppFooter({ navigate, mode = "public" }) {
       </div>
       <div className="border-t border-border bg-background/40">
         <div className="mx-auto max-w-6xl px-4 py-4">
-          <p className="text-center text-[11px] leading-relaxed text-muted-foreground sm:text-xs">{VALVE_DISCLAIMER}</p>
+          <ValveDisclaimer variant="compact" className="mx-auto max-w-4xl text-center" />
         </div>
       </div>
       <div className="border-t border-border">

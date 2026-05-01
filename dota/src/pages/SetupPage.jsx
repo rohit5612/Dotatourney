@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { buildDefaultSeriesRules, formatDetails, seriesOptions, seriesRuleTemplates } from "../constants/tournament";
+import { buildDefaultSeriesRules, blastTenTeamRulebookOverview, formatDetails, seriesOptions, seriesRuleTemplates } from "../constants/tournament";
 
 const formatTeamGuidance = {
   se: { min: 2, recommended: "4, 8, 16, 32", odd: "Odd counts use byes to avoid fake teams." },
@@ -8,7 +8,21 @@ const formatTeamGuidance = {
   gsl: { min: 4, recommended: "8 or 16", odd: "Odd counts split into uneven groups." },
   swiss: { min: 4, recommended: "8, 16, 32", odd: "Odd counts create round byes." },
   hybrid: { min: 4, recommended: "8 or 16", odd: "Odd counts split into uneven groups before playoffs." },
+  blast: {
+    min: 10,
+    recommended: "10–20",
+    odd: "Minimum 10 teams. Two BO1 groups, then Last Chance → 8-slot Play-In → playoffs (group winners skip to semis).",
+  },
 };
+
+/** Mirrors server `getBlastPhaseSizes` / `blastSideBracketSizes` for UI hints only. */
+function blastSideBracketSizesUi(n) {
+  if (n < 10) return { playin: 0, lc: 0 };
+  const remainder = n - 2;
+  const lcEntrants = Math.max(4, n - 8);
+  const playin = remainder - lcEntrants;
+  return { playin, lc: lcEntrants };
+}
 
 function normalizePrizePoolBreakdown(value) {
   if (Array.isArray(value)) return value;
@@ -76,6 +90,39 @@ function getSetupInsights(format, teamCount, isPowerOfTwo, selectedGuidance) {
       { label: "Structure hint", value: structureValue },
       { label: "Group workload", value: `~${Math.max(0, Math.floor(leagueMatches / 2))} group matches before playoffs` },
       { label: "Bracket depth", value: "Group standings feed into playoff stages." },
+    ],
+    blast: [
+      { label: "Structure hint", value: structureValue },
+      {
+        label: "Group workload",
+        value: (() => {
+          if (count < 10) return "—";
+          const a = Math.ceil(count / 2);
+          const b = count - a;
+          const rr = (n) => (n * Math.max(0, n - 1)) / 2;
+          return `${rr(a) + rr(b)} BO1 group matches (round robins of ${a} and ${b})`;
+        })(),
+      },
+      {
+        label: "Elimination",
+        value: (() => {
+          if (count < 10) return "—";
+          const { playin, lc } = blastSideBracketSizesUi(count);
+          const parts = [];
+          if (lc) parts.push(`Last Chance (${lc} entrants → 2 into Play-In)`);
+          if (count === 10) {
+            parts.push(`Play-In (4 teams: ${playin} from groups + 2 from Last Chance)`);
+            parts.push("Playoffs: group 2nds in quarterfinals vs Play-In winners; group winners in semis; final");
+          } else if (count === 12) {
+            parts.push(`Play-In (8 teams: ${playin} from groups + 2 from Last Chance + byes)`);
+            parts.push("Playoffs: group 1st vs other group 2nd in semis only, then final (Play-In is separate)");
+          } else {
+            parts.push(`Play-In (8 slots: ${playin} from groups + 2 from Last Chance + byes)`);
+            parts.push("Playoffs: main QF / SF / GF (default BO3, grand final BO5 in series rules)");
+          }
+          return parts.join("; ");
+        })(),
+      },
     ],
   };
 
@@ -158,9 +205,10 @@ export function SetupPage({
       visibilityMode: "demo",
       bracketActive: false,
       status: "draft",
-      registrationCodePrefix: "BPC",
-      paymentQrImage: "",
-    });
+    registrationCodePrefix: "BPC",
+    paymentQrImage: "",
+    paymentUpiId: "",
+  });
   }
 
   async function saveDraft() {
@@ -349,17 +397,43 @@ export function SetupPage({
 
             <div className="grid gap-3 md:grid-cols-2">
         <textarea
-          className="min-h-28 rounded-md border border-input bg-background p-2"
+          className="min-h-28 w-full rounded-md border border-input bg-background p-2 md:col-span-2"
           value={setup.description || ""}
           onChange={(event) => setSetup((prev) => ({ ...prev, description: event.target.value }))}
           placeholder="Public tournament description"
         />
-        <textarea
-          className="min-h-28 rounded-md border border-input bg-background p-2"
-          value={setup.rulebook || ""}
-          onChange={(event) => setSetup((prev) => ({ ...prev, rulebook: event.target.value }))}
-          placeholder="Rule book"
-        />
+        <div className="md:col-span-2">
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground">Rule book</span>
+            {setup.format === "blast" && teamCount === 10 ? (
+              <button
+                type="button"
+                className="btn btn-outline btn-xs"
+                onClick={() => setSetup((prev) => ({ ...prev, rulebook: blastTenTeamRulebookOverview.trim() }))}
+              >
+                Insert BLAST (10 teams) overview
+              </button>
+            ) : null}
+          </div>
+          <textarea
+            className="min-h-40 w-full rounded-md border border-input bg-background p-2"
+            value={setup.rulebook || ""}
+            onChange={(event) => setSetup((prev) => ({ ...prev, rulebook: event.target.value }))}
+            placeholder={
+              setup.format === "blast" && teamCount === 10
+                ? "Optional: click “Insert BLAST (10 teams) overview” above, or paste your own rules."
+                : "Rule book (plain text or basic HTML — see note below)"
+            }
+          />
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            <span className="font-medium text-foreground">HTML:</span> You can use tags like{" "}
+            <code className="rounded bg-background px-1">&lt;p&gt;</code>, <code className="rounded bg-background px-1">&lt;br&gt;</code>,{" "}
+            <code className="rounded bg-background px-1">&lt;strong&gt;</code>, <code className="rounded bg-background px-1">&lt;h3&gt;</code>, lists, links, simple
+            tables, and <code className="rounded bg-background px-1">class</code> / <code className="rounded bg-background px-1">style</code> (e.g.{" "}
+            <code className="rounded bg-background px-1">text-align: center</code>). Plain text line breaks are kept. Scripts and unsafe markup are removed when
+            displayed publicly.
+          </p>
+        </div>
         <input
           className="rounded-md border border-input bg-background p-2"
           value={setup.prizePool || ""}
@@ -433,6 +507,14 @@ export function SetupPage({
           {setup.paymentQrImage ? (
             <img src={setup.paymentQrImage} alt="Payment QR preview" className="mt-2 h-32 w-32 rounded border border-border object-contain" />
           ) : null}
+          <input
+            type="text"
+            className="mt-3 w-full rounded-md border border-input bg-background p-2 font-mono text-sm"
+            value={setup.paymentUpiId || ""}
+            onChange={(event) => setSetup((prev) => ({ ...prev, paymentUpiId: event.target.value }))}
+            placeholder="UPI ID for players (e.g. merchant@paytm)"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">Shown on the public registration payment step below the QR (optional).</p>
         </label>
             </div>
 

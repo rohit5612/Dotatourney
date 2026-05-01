@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import express from "express";
 import { z } from "zod";
+import { applyBlastGroupSeeding } from "../services/blastSeeding.js";
 import { generateMatches, getFormatTeamCountMessage, stageTabsForFormat } from "../services/formatGenerator.js";
 import { applyProgression } from "../services/progressionEngine.js";
 import { archivePlayerRegistration, getPlayerRegistrationById, listPlayerRegistrations, updatePlayerRegistration } from "../services/registrationRepository.js";
@@ -32,7 +33,7 @@ const router = express.Router();
 const tournamentSchema = z.object({
   name: z.string().min(1),
   slug: z.string().min(1).nullable().optional(),
-  format: z.enum(["dse", "se", "gsl", "rr", "swiss", "hybrid"]),
+  format: z.enum(["dse", "se", "gsl", "rr", "swiss", "hybrid", "blast"]),
   seriesType: z.enum(["bo1", "bo2", "bo3", "bo5"]),
   teamCount: z.number().int().min(2).max(64),
   seriesRules: z.record(z.string(), z.enum(["bo1", "bo2", "bo3", "bo5"])).optional().default({}),
@@ -64,6 +65,7 @@ const tournamentSchema = z.object({
   status: z.enum(["draft", "approved", "published", "archived"]).optional().default("draft"),
   registrationCodePrefix: z.string().max(12).optional().default("BPC"),
   paymentQrImage: z.string().optional().default(""),
+  paymentUpiId: z.string().optional().default(""),
 });
 
 async function validateRosterRegistrations(tournamentId, players) {
@@ -164,7 +166,7 @@ router.get("/:id", async (req, res, next) => {
     const groupedStandings = buildGroupedStandings(standingsTeams, data.matches, data.tournament.format);
     return res.json({
       ...data,
-      tabs: stageTabsForFormat(data.tournament.format),
+      tabs: stageTabsForFormat(data.tournament.format, { teamCount: data.tournament.team_count }),
       standings,
       groupedStandings,
     });
@@ -368,7 +370,7 @@ router.post("/:id/generate", async (req, res, next) => {
     }
     const matches = generateMatches(data.tournament.format, names, data.tournament.series_rules || {});
     await replaceMatches(req.params.id, matches);
-    res.json({ matches, tabs: stageTabsForFormat(data.tournament.format) });
+    res.json({ matches, tabs: stageTabsForFormat(data.tournament.format, { teamCount: data.tournament.team_count }) });
   } catch (error) {
     next(error);
   }
@@ -425,9 +427,24 @@ router.post("/:id/matches/:matchId/result", async (req, res, next) => {
     }
 
     const standingsTeams = snapshot.approvedRoster?.teams || snapshot.teams;
-    const standings = buildStandings(standingsTeams, progressed, snapshot.tournament.format);
-    const groupedStandings = buildGroupedStandings(standingsTeams, progressed, snapshot.tournament.format);
-    res.json({ matches: progressed, standings, groupedStandings });
+    let afterSeeding = progressed;
+    if (snapshot.tournament.format === "blast") {
+      const { matches: seeded, changedIds } = applyBlastGroupSeeding(standingsTeams, progressed);
+      afterSeeding = seeded;
+      for (const matchId of changedIds) {
+        const matchRow = seeded.find((m) => String(m.id) === matchId);
+        if (matchRow) {
+          const saved = await updateMatch(req.params.id, matchId, matchRow);
+          if (!saved) {
+            return res.status(500).json({ message: "Failed to save BLAST seeding update" });
+          }
+        }
+      }
+    }
+
+    const standings = buildStandings(standingsTeams, afterSeeding, snapshot.tournament.format);
+    const groupedStandings = buildGroupedStandings(standingsTeams, afterSeeding, snapshot.tournament.format);
+    res.json({ matches: afterSeeding, standings, groupedStandings });
   } catch (error) {
     next(error);
   }

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { formatMatchRoundSummary, stageRoundStructure } from "../components/bracket/bracketLayout.js";
 
 export function SchedulePage({ state, saveSchedule, saveCustomSchedule }) {
   const [draft, setDraft] = useState([]);
@@ -38,6 +39,7 @@ export function SchedulePage({ state, saveSchedule, saveCustomSchedule }) {
     () => Object.fromEntries((state?.tabs || []).map((tab) => [tab.id, tab.label])),
     [state?.tabs],
   );
+  const roundStructureAll = useMemo(() => stageRoundStructure(state?.matches || []), [state?.matches]);
 
   function updateSlot(matchId, patch) {
     setDraft((prev) => {
@@ -80,7 +82,7 @@ export function SchedulePage({ state, saveSchedule, saveCustomSchedule }) {
               </div>
               <div>
                 <div className="text-xs uppercase tracking-wider text-muted-foreground">Round</div>
-                <div className="font-medium">R{(match?.roundIndex ?? 0) + 1} M{(match?.matchIndex ?? 0) + 1}</div>
+                <div className="font-medium">{match ? formatMatchRoundSummary(match, roundStructureAll) : "—"}</div>
               </div>
               <div>
                 <div className="text-xs uppercase tracking-wider text-muted-foreground">Teams</div>

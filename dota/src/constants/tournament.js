@@ -2,6 +2,36 @@ export const pages = ["setup", "teams", "bracket", "standings", "schedule"];
 
 export const roles = ["Carry", "Mid", "Offlane", "Soft support", "Hard support"];
 
+/**
+ * Ready to paste into Setup → Rule book for a 10-team BLAST tournament.
+ * Use the “Insert” control on Setup when format is BLAST and team count is 10.
+ */
+export const blastTenTeamRulebookOverview = `BLAST — 10 teams (short overview)
+
+STRUCTURE
+• Two groups of 5, BO1 round robin (everyone in-group plays everyone once).
+• Order: Groups → Last Chance → Play-In → Main playoffs (QF → SF → Final).
+
+WHO ADVANCES FROM GROUPS
+• 1st in each group → Main semifinals (after quarterfinals finish).
+• 2nd in each group → Main quarterfinals vs the two Play-In winners.
+• 3rd–5th in each group → Side path only (see below).
+
+SIDE PATH (6 TEAMS)
+The six teams who are NOT 1st or 2nd in either group are ranked together using wins, then Neustadtl (quality of opponents you beat), then tie-breakers.
+• Best 2 → seeded into Play-In.
+• Other 4 → Last Chance (4-team single elimination → 2 winners).
+Play-In: those 2 + the 2 group-side seeds = 4 teams, one knockout round → 2 winners → those 2 play the group 2nds in main quarterfinals.
+
+MAIN PLAYOFFS
+• Quarterfinals: Group A 2nd vs Play-In winner · Group B 2nd vs Play-In winner.
+• Semifinals: Group A 1st vs one QF winner · Group B 1st vs the other QF winner.
+• Final: semi winners.
+
+NOTES
+• Series length (BO3/BO5) follows the tournament series rules in admin.
+• Bracket placeholders fill from standings once every group BO1 has a result.`;
+
 export const formatDetails = {
   dse: {
     name: "Double Elimination",
@@ -51,6 +81,14 @@ export const formatDetails = {
     guidance:
       "Best for premium events where both consistency and elimination pressure matter.",
   },
+  blast: {
+    name: "BLAST-style slam",
+    tag: "Groups → Last Chance → Play-In → playoffs",
+    description:
+      "Two BO1 round-robin groups, Last Chance single elimination, Play-In, then main playoffs. At 10 teams the main bracket uses quarterfinals (group 2nds vs Play-In) then semis (group winners). At 12 teams the main bracket is semifinals and final among the top two from each group only.",
+    guidance:
+      "Requires at least ten teams. At 10 teams, group runners-up join the main quarterfinals against Play-In finalists. At 12 teams, each group's first- and second-place teams meet in the main semifinals (cross bracket). Other sizes use merged group-standings cuts for Last Chance and Play-In, with group winners entering at the semis.",
+  },
 };
 
 export const seriesOptions = ["bo1", "bo2", "bo3", "bo5"];
@@ -89,6 +127,19 @@ export const seriesRuleTemplates = {
     { key: "upper-playoff", label: "Upper Playoffs", defaultSeries: "bo3" },
     { key: "lower-playoff", label: "Lower Playoffs", defaultSeries: "bo3" },
     { key: "grand-final", label: "Grand Final", defaultSeries: "bo5" },
+  ],
+  blast: [
+    { key: "blast-group-bo1", label: "Group stage (BO1)", defaultSeries: "bo1" },
+    { key: "blast-playin-quarterfinal", label: "Play-In (R1)", defaultSeries: "bo3" },
+    { key: "blast-playin-semifinal", label: "Play-In (semis)", defaultSeries: "bo3" },
+    { key: "blast-playin-final", label: "Play-In (final)", defaultSeries: "bo3" },
+    { key: "blast-lc-quarterfinal", label: "Last Chance (R1)", defaultSeries: "bo3" },
+    { key: "blast-lc-semifinal", label: "Last Chance (semis)", defaultSeries: "bo3" },
+    { key: "blast-lc-final", label: "Last Chance (final)", defaultSeries: "bo3" },
+    { key: "blast-lc-round", label: "Last Chance (mid bracket)", defaultSeries: "bo3" },
+    { key: "blast-po-quarterfinal", label: "Playoffs (quarterfinals)", defaultSeries: "bo3" },
+    { key: "blast-po-semifinal", label: "Playoffs (semis)", defaultSeries: "bo3" },
+    { key: "blast-po-final", label: "Grand final", defaultSeries: "bo5" },
   ],
 };
 

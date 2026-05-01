@@ -7,6 +7,12 @@ export const formatTeamGuidance = {
   gsl: { min: 4, recommended: "8 or 16", odd: "Supported with uneven groups" },
   swiss: { min: 4, recommended: "8, 16, 32", odd: "Supported with round byes" },
   hybrid: { min: 4, recommended: "8 or 16", odd: "Supported with uneven groups" },
+  /** BLAST-style: two BO1 round-robin groups → Last Chance (≥4) → 8-slot Play-In → main playoffs (QF/SF/GF). */
+  blast: {
+    min: 10,
+    recommended: "10–20",
+    odd: "Odd team counts use ⌈n/2⌉ vs ⌊n/2⌋ groups. Last Chance and Play-In field sizes follow remainder = n−2 after group winners.",
+  },
 };
 
 function resolveSeries(seriesRules, key, fallback = "bo3") {
@@ -81,6 +87,21 @@ function roundRuleKey(size, rulePrefix, fallbackPrefix = "") {
   return rulePrefix ? `${rulePrefix}round` : fallbackPrefix || "quarterfinal";
 }
 
+function generateEliminationUntilSurvivors(teamNames, teams, seriesRules, stageKey, rulePrefix, tokenPrefix, survivorCount) {
+  const result = [];
+  const bracketSize = nextPowerOfTwo(Math.max(teamNames.length, survivorCount));
+  let entrants = Array.from({ length: bracketSize }, (_, index) => (index < teamNames.length ? teamNames[index] : "BYE"));
+  let roundIndex = 0;
+
+  while (entrants.length > survivorCount) {
+    const ruleKey = roundRuleKey(entrants.length, rulePrefix, "quarterfinal");
+    entrants = pairEntrants(result, teams, entrants, stageKey, roundIndex, seriesRules, ruleKey, tokenPrefix);
+    roundIndex += 1;
+  }
+
+  return { matches: result, survivorTokens: entrants };
+}
+
 function pairEntrants(result, teams, entrants, stageKey, roundIndex, seriesRules, seriesRuleKey, tokenPrefix) {
   const winners = [];
   const pairCount = Math.floor(entrants.length / 2);
@@ -103,7 +124,7 @@ function pairEntrants(result, teams, entrants, stageKey, roundIndex, seriesRules
   return winners;
 }
 
-function generateSingleElimination(teams, seriesRules, stageKey = "bracket", rulePrefix = "") {
+function generateSingleElimination(teams, seriesRules, stageKey = "bracket", rulePrefix = "", tokenPrefix = "R") {
   const result = [];
   const bracketSize = nextPowerOfTwo(Math.max(2, teams.length));
   let entrants = Array.from({ length: bracketSize }, (_, index) => (index < teams.length ? teamAt(teams, index) : "BYE"));
@@ -111,7 +132,7 @@ function generateSingleElimination(teams, seriesRules, stageKey = "bracket", rul
 
   while (entrants.length > 1) {
     const ruleKey = roundRuleKey(entrants.length, rulePrefix, "quarterfinal");
-    entrants = pairEntrants(result, teams, entrants, stageKey, roundIndex, seriesRules, ruleKey, "R");
+    entrants = pairEntrants(result, teams, entrants, stageKey, roundIndex, seriesRules, ruleKey, tokenPrefix);
     roundIndex += 1;
   }
 
@@ -262,6 +283,152 @@ function generateHybrid(teams, seriesRules) {
   return result;
 }
 
+/**
+ * BLAST side pool after reserving main-path group finishers:
+ * n=10 or 12: exclude group #1 and #2 from each group (4 teams). Other n: exclude only #1 (2 teams).
+ * @param {number} teamCount
+ */
+export function getBlastPhaseSizes(teamCount) {
+  const n = Math.max(0, Number(teamCount) || 0);
+  if (n < 10) return null;
+  const sidePoolExcluded = n === 10 || n === 12 ? 4 : 2;
+  const remainder = n - sidePoolExcluded;
+  const lcEntrants = Math.max(4, n - 8);
+  const playInFromGroups = remainder - lcEntrants;
+  if (playInFromGroups < 0) return null;
+
+  /** @type {"standard" | "ten_qf_seconds" | "twelve_semis_top2"} */
+  let mainPlayoffPath = "standard";
+  let piSurvivorsToMain = 4;
+
+  if (n === 10) {
+    mainPlayoffPath = "ten_qf_seconds";
+    piSurvivorsToMain = 2;
+  } else if (n === 12) {
+    mainPlayoffPath = "twelve_semis_top2";
+    piSurvivorsToMain = 0;
+  }
+
+  return {
+    n,
+    sidePoolExcluded,
+    remainder,
+    lcEntrants,
+    playInFromGroups,
+    playInBracketSize: n === 10 ? 4 : 8,
+    lcAdvanceToPlayIn: 2,
+    piSurvivorsToMain,
+    mainPlayoffPath,
+  };
+}
+
+/**
+ * @deprecated Prefer getBlastPhaseSizes. Kept for callers that expect { playin, lc }:
+ * playin = teams from groups into the 8-slot Play-In (excluding LC advancers), lc = Last Chance field size.
+ */
+export function blastSideBracketSizes(teamCount) {
+  const s = getBlastPhaseSizes(teamCount);
+  if (!s) return { playin: 0, lc: 0 };
+  return { playin: s.playInFromGroups, lc: s.lcEntrants };
+}
+
+/**
+ * BLAST-style slam: two BO1 round-robin groups → Last Chance → 8-slot Play-In → main playoffs.
+ *
+ * - **n=10**: Group 1sts start in semis; group 2nds in quarterfinals vs **two** Play-In winners (4-team Play-In: 2 BPI + 2 from LC).
+ * - **n=12**: Group 1st and 2nd from both groups start in **semifinals** only (cross: A1–B2, B1–A2); Play-In does not feed the title bracket.
+ * - **other n**: Group 1sts in semis vs winners of two all–Play-In quarterfinals (single PI round).
+ */
+function generateBlast(teams, seriesRules) {
+  const n = teams.length;
+  const sizes = getBlastPhaseSizes(n);
+  if (!sizes) {
+    throw new Error(validateTeamCount("blast", n) || "Invalid BLAST team count");
+  }
+
+  const mid = Math.ceil(n / 2);
+  const idxA = Array.from({ length: mid }, (_, i) => i);
+  const idxB = Array.from({ length: n - mid }, (_, i) => mid + i);
+  const result = [];
+  result.push(...generateRoundRobin(teams, seriesRules, "blast-group-a", "blast-group-bo1", idxA, "A"));
+  result.push(...generateRoundRobin(teams, seriesRules, "blast-group-b", "blast-group-bo1", idxB, "B"));
+
+  const lcSeeds = Array.from({ length: sizes.lcEntrants }, (_, i) => `BLC${i + 1}`);
+  const lcBlock = generateEliminationUntilSurvivors(
+    lcSeeds,
+    teams,
+    seriesRules,
+    "blast-lastchance",
+    "blast-lc-",
+    "LC",
+    sizes.lcAdvanceToPlayIn,
+  );
+  result.push(...lcBlock.matches);
+
+  if (sizes.mainPlayoffPath === "ten_qf_seconds") {
+    const piFour = [
+      ...Array.from({ length: sizes.playInFromGroups }, (_, i) => `BPI${i + 1}`),
+      ...lcBlock.survivorTokens,
+    ];
+    if (piFour.length !== 4) {
+      throw new Error(`BLAST n=10 expects 4 Play-In entrants, got ${piFour.length}`);
+    }
+    const playIn4Key = roundRuleKey(4, "blast-playin-", "quarterfinal");
+    pairEntrants(result, teams, piFour, "blast-playin", 0, seriesRules, playIn4Key, "PI");
+  } else {
+    const piLineup = [
+      ...Array.from({ length: sizes.playInFromGroups }, (_, i) => `BPI${i + 1}`),
+      ...lcBlock.survivorTokens,
+    ];
+    while (piLineup.length < sizes.playInBracketSize) {
+      piLineup.push("BYE");
+    }
+
+    const playInRuleKeyR1 = roundRuleKey(sizes.playInBracketSize, "blast-playin-", "quarterfinal");
+    pairEntrants(result, teams, piLineup, "blast-playin", 0, seriesRules, playInRuleKeyR1, "PI");
+  }
+
+  if (sizes.mainPlayoffPath === "twelve_semis_top2") {
+    addMatch(result, teams, "blast-playoffs", 0, 0, "Group A #1", "Group B #2", seriesRules, "blast-po-semifinal", {
+      winToken: "BPO1M1W",
+    });
+    addMatch(result, teams, "blast-playoffs", 0, 1, "Group B #1", "Group A #2", seriesRules, "blast-po-semifinal", {
+      winToken: "BPO1M2W",
+    });
+    addMatch(result, teams, "blast-playoffs", 1, 0, "BPO1M1W", "BPO1M2W", seriesRules, "blast-po-final", { winToken: "CHAMPION" });
+  } else if (sizes.mainPlayoffPath === "ten_qf_seconds") {
+    addMatch(result, teams, "blast-playoffs", 0, 0, "Group A #2", "PI1M1W", seriesRules, "blast-po-quarterfinal", {
+      winToken: "BPO1M1W",
+    });
+    addMatch(result, teams, "blast-playoffs", 0, 1, "Group B #2", "PI1M2W", seriesRules, "blast-po-quarterfinal", {
+      winToken: "BPO1M2W",
+    });
+    addMatch(result, teams, "blast-playoffs", 1, 0, "Group A #1", "BPO1M1W", seriesRules, "blast-po-semifinal", {
+      winToken: "BPO2M1W",
+    });
+    addMatch(result, teams, "blast-playoffs", 1, 1, "Group B #1", "BPO1M2W", seriesRules, "blast-po-semifinal", {
+      winToken: "BPO2M2W",
+    });
+    addMatch(result, teams, "blast-playoffs", 2, 0, "BPO2M1W", "BPO2M2W", seriesRules, "blast-po-final", { winToken: "CHAMPION" });
+  } else {
+    addMatch(result, teams, "blast-playoffs", 0, 0, "PI1M1W", "PI1M2W", seriesRules, "blast-po-quarterfinal", {
+      winToken: "BPO1M1W",
+    });
+    addMatch(result, teams, "blast-playoffs", 0, 1, "PI1M3W", "PI1M4W", seriesRules, "blast-po-quarterfinal", {
+      winToken: "BPO1M2W",
+    });
+    addMatch(result, teams, "blast-playoffs", 1, 0, "Group A #1", "BPO1M1W", seriesRules, "blast-po-semifinal", {
+      winToken: "BPO2M1W",
+    });
+    addMatch(result, teams, "blast-playoffs", 1, 1, "Group B #1", "BPO1M2W", seriesRules, "blast-po-semifinal", {
+      winToken: "BPO2M2W",
+    });
+    addMatch(result, teams, "blast-playoffs", 2, 0, "BPO2M1W", "BPO2M2W", seriesRules, "blast-po-final", { winToken: "CHAMPION" });
+  }
+
+  return result;
+}
+
 export function generateMatches(format, teams, seriesRules = {}) {
   const validationMessage = validateTeamCount(format, teams.length);
   if (validationMessage) {
@@ -279,6 +446,7 @@ export function generateMatches(format, teams, seriesRules = {}) {
   if (format === "gsl") return generateGsl(teams, seriesRules);
   if (format === "swiss") return generateSwiss(teams, seriesRules);
   if (format === "hybrid") return generateHybrid(teams, seriesRules);
+  if (format === "blast") return generateBlast(teams, seriesRules);
   return generateDse(teams, seriesRules);
 }
 
@@ -286,7 +454,23 @@ export function getFormatTeamCountMessage(format, teamCount) {
   return validateTeamCount(format, teamCount);
 }
 
-export function stageTabsForFormat(format) {
+export function stageTabsForFormat(format, options = {}) {
+  const teamCount = options.teamCount;
+  if (format === "blast") {
+    const n = typeof teamCount === "number" && Number.isFinite(teamCount) ? teamCount : 12;
+    const sizes = getBlastPhaseSizes(n);
+    const tabs = [
+      { id: "blast-group-a", label: "Group A (BO1)" },
+      { id: "blast-group-b", label: "Group B (BO1)" },
+    ];
+    if (sizes) {
+      tabs.push({ id: "blast-lastchance", label: "Last Chance" });
+      tabs.push({ id: "blast-playin", label: "Play-In" });
+    }
+    tabs.push({ id: "blast-playoffs", label: "Playoffs" });
+    return tabs;
+  }
+
   const map = {
     dse: [
       { id: "upper", label: "Upper bracket" },

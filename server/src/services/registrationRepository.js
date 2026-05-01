@@ -150,6 +150,17 @@ export async function getActiveRegistrationByEmailAndCode(tournamentId, email, p
   return rows[0] || null;
 }
 
+/** @returns {{ stage: string | null }} */
+export async function lookupRegistrationFlowStage(tournamentId, email) {
+  const emailNorm = String(email || "")
+    .trim()
+    .toLowerCase();
+  if (!emailNorm) return { stage: null };
+  const row = await getActiveRegistrationByEmail(tournamentId, emailNorm);
+  if (!row) return { stage: null };
+  return { stage: row.registration_flow_stage || null };
+}
+
 /**
  * @returns {{ registrationId: string, otp: string }}
  */
@@ -179,12 +190,14 @@ export async function requestRegistrationOtp(tournamentId, form, termsAcceptedAt
       await client.query("ROLLBACK");
       const err = new Error("This email already has a registration under review or completed.");
       err.status = 409;
+      err.registrationConflict = { stage: "submitted" };
       throw err;
     }
     if (row?.registration_flow_stage === "awaiting_payment") {
       await client.query("ROLLBACK");
       const err = new Error("Email already verified. Continue to the payment step with your registration ID.");
       err.status = 400;
+      err.registrationConflict = { stage: "awaiting_payment" };
       throw err;
     }
 

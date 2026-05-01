@@ -46,8 +46,11 @@ function httpErrorStatus(err) {
 }
 
 app.use((err, _req, res, _next) => {
-  res.status(httpErrorStatus(err)).json({
+  const status = httpErrorStatus(err);
+  const body = {
     message: err?.message || "Unexpected server error",
     issues: err?.issues || null,
-  });
+  };
+  if (err?.registrationConflict) body.registrationConflict = err.registrationConflict;
+  res.status(status).json(body);
 });

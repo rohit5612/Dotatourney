@@ -1,0 +1,1 @@
+ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS payment_upi_id TEXT NOT NULL DEFAULT '';

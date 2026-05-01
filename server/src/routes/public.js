@@ -4,6 +4,7 @@ import { env } from "../config/env.js";
 import {
   completeRegistrationPayment,
   getPublicRegistrationSession,
+  lookupRegistrationFlowStage,
   requestRegistrationOtp,
   verifyRegistrationOtp,
 } from "../services/registrationRepository.js";
@@ -18,17 +19,59 @@ import {
 
 const router = express.Router();
 
-const registerFormSchema = z.object({
-  email: z.string().email(),
-  name: z.string().min(1),
-  location: z.string().optional().default(""),
-  roles: z.array(z.string().min(1)).min(1),
-  mmr: z.number().int().min(0).max(15000),
-  steamName: z.string().min(1),
-  steamProfile: z.string().min(1),
-  discordHandle: z.string().min(1),
-  phoneNumber: z.string().min(1),
-});
+function isValidDiscordHandle(value) {
+  const s = String(value || "").trim();
+  if (!s) return false;
+  if (/^\d{17,20}$/.test(s)) return true;
+  if (/^[\w.]{2,32}#\d{4}$/i.test(s)) return true;
+  if (/^[a-z0-9._]{2,32}$/i.test(s)) return true;
+  return false;
+}
+
+function isValidSteamProfileLink(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return false;
+  const normalized = /^https?:\/\//i.test(raw) ? raw : `https://${raw.replace(/^\/+/, "")}`;
+  try {
+    const u = new URL(normalized);
+    if (u.hostname.toLowerCase() !== "steamcommunity.com") return false;
+    const pathPrefix = u.pathname.toLowerCase();
+    return pathPrefix.startsWith("/profiles/") || pathPrefix.startsWith("/id/");
+  } catch {
+    return false;
+  }
+}
+
+const registerFormSchema = z
+  .object({
+    email: z.string().email(),
+    name: z.string().min(1),
+    location: z.string().optional().default(""),
+    roles: z.array(z.string().min(1)).min(1),
+    mmr: z.number().int().min(0).max(20000),
+    steamName: z.string().min(1),
+    steamProfile: z.string().min(1),
+    discordHandle: z.string().min(1),
+    phoneNumber: z.string().min(1),
+  })
+  .superRefine((data, ctx) => {
+    if (!isValidDiscordHandle(data.discordHandle)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Discord ID must be a legacy tag (e.g. name#1234), a handle (e.g. my_name), or a numeric user ID (17–20 digits).",
+        path: ["discordHandle"],
+      });
+    }
+    if (!isValidSteamProfileLink(data.steamProfile)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Steam profile must be a steamcommunity.com URL, e.g. https://steamcommunity.com/profiles/76561198… or https://steamcommunity.com/id/yourid",
+        path: ["steamProfile"],
+      });
+    }
+  });
 
 function continueRegisterUrl(identifier, email, publicCode) {
   const base = env.appUrl.replace(/\/$/, "");
@@ -61,17 +104,25 @@ function fallbackTournament(identifier) {
     announcements: ["Tournament setup is in progress."],
     visibility_mode: "demo",
     payment_qr_image: "",
+    payment_upi_id: "",
     registration_code_prefix: DEFAULT_REG_PREFIX,
   };
 }
 
 function publicMatch(match, visibilityMode) {
   if (visibilityMode !== "demo") return match;
+  const t1 = match.meta?.demoTeam1 || match.team1;
+  const t2 = match.meta?.demoTeam2 || match.team2;
+  let winner = match.winner;
+  if (winner) {
+    if (winner === match.team1) winner = t1;
+    else if (winner === match.team2) winner = t2;
+  }
   return {
     ...match,
-    team1: match.meta?.demoTeam1 || match.team1,
-    team2: match.meta?.demoTeam2 || match.team2,
-    winner: null,
+    team1: t1,
+    team2: t2,
+    winner: winner || null,
   };
 }
 
@@ -102,15 +153,20 @@ function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
   const standingsTeams =
     visibilityMode === "demo"
       ? Array.from({ length: data.tournament.team_count }, (_, index) => ({ name: `Team ${index + 1}` }))
-      : publicTeams;
+      : publicTeams.length > 0
+        ? publicTeams
+        : Array.from(
+            new Set(matches.flatMap((m) => [m.team1, m.team2]).filter((n) => typeof n === "string" && n.trim() !== "")),
+          ).map((name) => ({ name }));
+  const format = data.tournament.format;
   return {
     tournament: data.tournament,
     teams: visibilityMode === "demo" ? [] : publicTeams,
     matches,
     schedule: data.schedule,
-    tabs: stageTabsForFormat(data.tournament.format),
-    standings: visibilityMode === "demo" ? [] : buildStandings(publicTeams, data.matches, data.tournament.format),
-    groupedStandings: buildGroupedStandings(standingsTeams, matches, data.tournament.format),
+    tabs: stageTabsForFormat(format, { teamCount: data.tournament.team_count }),
+    standings: buildStandings(standingsTeams, matches, format),
+    groupedStandings: buildGroupedStandings(standingsTeams, matches, format),
   };
 }
 
@@ -156,6 +212,18 @@ router.get("/tournaments/:identifier/register/session", async (req, res, next) =
     const session = await getPublicRegistrationSession(data.tournament.id, email, code || "");
     if (!session) return res.status(404).json({ message: "Registration session not found" });
     return res.json({ session });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post("/tournaments/:identifier/register/lookup-email", async (req, res, next) => {
+  try {
+    const data = await getPublishedTournamentForPublicRequest(req.params.identifier);
+    assertPublishedOpen(data);
+    const body = z.object({ email: z.string().email() }).parse(req.body);
+    const { stage } = await lookupRegistrationFlowStage(data.tournament.id, body.email);
+    return res.json({ stage });
   } catch (error) {
     return next(error);
   }

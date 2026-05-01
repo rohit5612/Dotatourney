@@ -33,7 +33,10 @@ async function request(path, options = {}) {
     if (response.status === 401) {
       setAuthToken("");
     }
-    throw new Error(body.message || "API request failed");
+    const err = new Error(body.message || "API request failed");
+    err.status = response.status;
+    if (body.registrationConflict) err.registrationConflict = body.registrationConflict;
+    throw err;
   }
   return response.json();
 }
@@ -78,6 +81,11 @@ export const api = {
     if (publicCode) q.set("code", String(publicCode).trim());
     return request(`/public/tournaments/${encodeURIComponent(identifier)}/register/session?${q}`);
   },
+  lookupRegistrationEmail: (identifier, email) =>
+    request(`/public/tournaments/${encodeURIComponent(identifier)}/register/lookup-email`, {
+      method: "POST",
+      body: JSON.stringify({ email: String(email || "").trim().toLowerCase() }),
+    }),
   requestRegistrationOtp: (identifier, payload) =>
     request(`/public/tournaments/${encodeURIComponent(identifier)}/register/request-otp`, {
       method: "POST",

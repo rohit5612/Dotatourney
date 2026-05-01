@@ -2,12 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AppFooter } from "../components/AppFooter";
 import { BracketDiagram } from "../components/BracketDiagram";
+import { formatMatchRoundSummary, stageRoundStructure } from "../components/bracket/bracketLayout.js";
 import { ScrollToTopButton } from "../components/ScrollToTopButton";
 import { PLAYER_RULES_SECTIONS } from "../constants/playerRules.js";
 import { COOKIE_CONSENT_KEY, VALVE_DISCLAIMER } from "../constants/legal.js";
 import { roles } from "../constants/tournament";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock.js";
 import { api } from "../lib/api";
+import { rulebookContentClassName, sanitizeRulebookHtml } from "../lib/sanitizeRulebookHtml.js";
 
 const SITE_BRAND_SHORT = "BPC League";
 const SITE_BRAND_FULL = "Bharat Pro Circuit League";
@@ -63,6 +65,7 @@ const formatNameMap = {
   rr: "Round Robin",
   swiss: "Swiss System",
   hybrid: "Group + Playoffs",
+  blast: "BLAST-style slam",
 };
 
 function getFormatName(format) {
@@ -85,10 +88,6 @@ function parsePrizePool(value) {
 
 function formatNumber(value) {
   return Math.round(value).toLocaleString("en-IN");
-}
-
-function ValveDisclaimer({ className = "" }) {
-  return <p className={`text-xs leading-relaxed text-muted-foreground ${className}`.trim()}>{VALVE_DISCLAIMER}</p>;
 }
 
 function CookieConsentBanner({ navigate }) {
@@ -447,7 +446,9 @@ function LandingPage({ event, navigate, message }) {
             <p className="mx-auto max-w-xl text-pretty text-base leading-relaxed text-muted-foreground sm:max-w-2xl sm:text-lg md:text-xl md:leading-relaxed">
               Assemble your roster, sharpen your strats, and compete in a high-stakes tournament format.
             </p>
-            <ValveDisclaimer className="mx-auto max-w-lg border-t border-border/60 pt-4" />
+            <p className="mx-auto max-w-lg border-t border-border/60 pt-3 text-pretty text-[9px] leading-snug text-muted-foreground/90 sm:text-[10px]">
+              {VALVE_DISCLAIMER}
+            </p>
           </div>
           <div className="w-full max-w-sm rounded-2xl border border-primary/25 bg-[#08080f]/90 px-6 py-5 shadow-2xl backdrop-blur-md ring-1 ring-white/[0.06] sm:px-8">
             <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">Prize pool</p>
@@ -492,7 +493,6 @@ function LandingPage({ event, navigate, message }) {
             <p className="mt-3 leading-relaxed text-muted-foreground">
               {tournament?.description || "Tournament details will appear here once admins publish the setup. Check Discord for live communications."}
             </p>
-            <ValveDisclaimer className="mt-4 border-t border-border pt-4" />
           </div>
           <div className="overflow-hidden rounded-xl border border-border bg-card">
             <img
@@ -522,9 +522,16 @@ function LandingPage({ event, navigate, message }) {
                 <span>📜</span>
               </div>
               <h3 className="font-serif text-3xl font-semibold tracking-tight text-foreground sm:text-4xl md:text-5xl">Rules — {SITE_BRAND_FULL}</h3>
-              <p className="mt-5 flex-1 overflow-y-auto whitespace-pre-line pr-1 text-sm leading-7 text-muted-foreground sm:text-base md:text-lg md:leading-8">
-                {tournament?.rulebook || "Rules will be published here before the tournament starts."}
-              </p>
+              {tournament?.rulebook?.trim() ? (
+                <div
+                  className={`${rulebookContentClassName} mt-5 flex-1 overflow-y-auto pr-1 text-sm leading-7 text-muted-foreground sm:text-base md:text-lg md:leading-8`}
+                  dangerouslySetInnerHTML={{ __html: sanitizeRulebookHtml(tournament.rulebook) }}
+                />
+              ) : (
+                <p className="mt-5 flex-1 overflow-y-auto pr-1 text-sm leading-7 text-muted-foreground sm:text-base md:text-lg md:leading-8">
+                  Rules will be published here before the tournament starts.
+                </p>
+              )}
             </div>
           </div>
         </section>
@@ -541,7 +548,6 @@ function LandingPage({ event, navigate, message }) {
             <a className="btn btn-primary mt-6 px-6 py-3" href={discordUrl} target="_blank" rel="noreferrer">
               Join Discord
             </a>
-            <ValveDisclaimer className="mx-auto mt-6 max-w-2xl px-2" />
           </div>
         </section>
       </RevealSection>
@@ -754,9 +760,6 @@ function TournamentInfo({ event, message }) {
           </div>
         </section>
       ) : null}
-      <section className="rounded-lg border border-border bg-background/50 p-4">
-        <ValveDisclaimer className="text-center" />
-      </section>
     </div>
   );
 }
@@ -789,6 +792,7 @@ function RevealSection({ children }) {
 }
 
 function PublicSchedule({ event, message }) {
+  const roundStructureAll = useMemo(() => stageRoundStructure(event?.matches || []), [event?.matches]);
   const groupedMatches = useMemo(() => {
     const groups = {};
     (event?.matches || []).forEach((match) => {
@@ -800,11 +804,9 @@ function PublicSchedule({ event, message }) {
   const stageTabs = event?.tabs?.length ? event.tabs : Object.keys(groupedMatches).map((id) => ({ id, label: id }));
   const stageLabels = Object.fromEntries(stageTabs.map((tab) => [tab.id, tab.label]));
   const sortedSchedule = [...(event?.schedule || [])].sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
-
   return (
     <div className="space-y-4">
       {message ? <p className="rounded-md border border-border bg-card p-2 text-sm text-secondary">{message}</p> : null}
-      <ValveDisclaimer className="rounded-lg border border-dashed border-border bg-card/40 p-3" />
       <section className="rounded-lg border border-border bg-card p-4">
         <h2 className="font-serif text-2xl">Bracket & Schedule</h2>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -831,7 +833,7 @@ function PublicSchedule({ event, message }) {
             <section key={tab.id} className="space-y-3 rounded-lg border border-border bg-card p-4">
               <div>
                 <h3 className="font-serif text-xl">{tab.label}</h3>
-                <p className="text-sm text-muted-foreground">Best-of labels and match state are shown on each card.</p>
+                <p className="text-sm text-muted-foreground">Bracket progression for this stage.</p>
               </div>
               <BracketDiagram matches={matches} />
             </section>
@@ -854,7 +856,7 @@ function PublicSchedule({ event, message }) {
                 <div className="text-xs uppercase tracking-wider text-muted-foreground">Bracket</div>
                 <div className="font-medium">{stageLabel}</div>
                 <div className="text-xs text-muted-foreground">
-                  Round {(match?.roundIndex ?? 0) + 1} - Match {(match?.matchIndex ?? 0) + 1}
+                  {match ? formatMatchRoundSummary(match, roundStructureAll) : "—"}
                 </div>
               </div>
             </div>
@@ -895,7 +897,6 @@ function PrivacyPolicyPage() {
       <header>
         <h1 className="font-serif text-3xl font-semibold tracking-tight">Privacy Policy</h1>
         <p className="mt-2 text-sm text-muted-foreground">Last updated {new Date().getFullYear()}. For {SITE_BRAND_FULL} ({SITE_BRAND_SHORT}) public website and registration.</p>
-        <ValveDisclaimer className="mt-4 rounded-lg border border-border bg-background/60 p-3" />
       </header>
       <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
         <h2 className="font-serif text-xl font-semibold text-foreground">Who we are</h2>
@@ -941,10 +942,6 @@ function PrivacyPolicyPage() {
           .
         </p>
       </section>
-      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
-        <h2 className="font-serif text-xl font-semibold text-foreground">Disclaimer</h2>
-        <p>{VALVE_DISCLAIMER}</p>
-      </section>
     </article>
   );
 }
@@ -955,7 +952,6 @@ function CookiePolicyPage() {
       <header>
         <h1 className="font-serif text-3xl font-semibold tracking-tight">Cookie Policy</h1>
         <p className="mt-2 text-sm text-muted-foreground">How {SITE_BRAND_SHORT} uses cookies and similar technologies on this site.</p>
-        <ValveDisclaimer className="mt-4 rounded-lg border border-border bg-background/60 p-3" />
       </header>
       <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
         <h2 className="font-serif text-xl font-semibold text-foreground">What we use</h2>
@@ -1003,11 +999,31 @@ function GeneralRulesPage() {
           <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{body}</p>
         </div>
       ))}
-      <div className="rounded-lg border border-border bg-background/60 p-4">
-        <ValveDisclaimer />
-      </div>
     </section>
   );
+}
+
+function isValidDiscordHandle(value) {
+  const s = String(value || "").trim();
+  if (!s) return false;
+  if (/^\d{17,20}$/.test(s)) return true;
+  if (/^[\w.]{2,32}#\d{4}$/i.test(s)) return true;
+  if (/^[a-z0-9._]{2,32}$/i.test(s)) return true;
+  return false;
+}
+
+function isValidSteamProfileLink(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return false;
+  const normalized = /^https?:\/\//i.test(raw) ? raw : `https://${raw.replace(/^\/+/, "")}`;
+  try {
+    const u = new URL(normalized);
+    if (u.hostname.toLowerCase() !== "steamcommunity.com") return false;
+    const pathPrefix = u.pathname.toLowerCase();
+    return pathPrefix.startsWith("/profiles/") || pathPrefix.startsWith("/id/");
+  } catch {
+    return false;
+  }
 }
 
 function RegistrationTermsModal({ open, busy, onClose, onAccept, rulebook }) {
@@ -1035,10 +1051,13 @@ function RegistrationTermsModal({ open, busy, onClose, onAccept, rulebook }) {
               <p className="mt-1 text-muted-foreground">{body}</p>
             </div>
           ))}
-          {rulebook ? (
+          {rulebook?.trim() ? (
             <div className="rounded-md border border-border bg-background p-3">
               <h4 className="font-medium text-foreground">Tournament rulebook</h4>
-              <p className="mt-2 max-h-48 overflow-y-auto whitespace-pre-line text-muted-foreground">{rulebook}</p>
+              <div
+                className={`${rulebookContentClassName} mt-2 max-h-48 overflow-y-auto text-sm text-muted-foreground`}
+                dangerouslySetInnerHTML={{ __html: sanitizeRulebookHtml(rulebook) }}
+              />
             </div>
           ) : null}
         </div>
@@ -1056,17 +1075,111 @@ function RegistrationTermsModal({ open, busy, onClose, onAccept, rulebook }) {
   );
 }
 
+function RegistrationConflictModal({ open, stage, busy, onClose, onGoToPayment, userEmail }) {
+  useBodyScrollLock(open);
+  if (!open || !stage) return null;
+  const isPayment = stage === "awaiting_payment";
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="registration-conflict-title"
+    >
+      <div className="w-full max-w-md rounded-lg border border-border bg-card shadow-2xl">
+        <div className="border-b border-border p-4">
+          <h3 id="registration-conflict-title" className="font-serif text-xl font-semibold text-foreground">
+            {isPayment ? "Email already verified" : "Already registered"}
+          </h3>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            {userEmail ? (
+              <>
+                For <span className="font-medium text-foreground">{userEmail}</span>:{" "}
+              </>
+            ) : null}
+            {isPayment
+              ? "You already verified this email but have not finished registration. Use the Complete payment tab with your email and registration ID from your verification email (or the continue link we sent)."
+              : "A registration for this email is already submitted or under admin review. You cannot start another one. Check your inbox for updates."}
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 border-t border-border p-4 sm:flex-row sm:justify-end">
+          {isPayment ? (
+            <button type="button" className="btn btn-primary sm:order-2" onClick={onGoToPayment} disabled={busy}>
+              Open Complete payment tab
+            </button>
+          ) : null}
+          <button type="button" className={`btn btn-outline sm:order-1 ${isPayment ? "" : "w-full sm:w-auto"}`} onClick={onClose} disabled={busy}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function PaymentQrModal({ open, onClose, src }) {
+  useBodyScrollLock(open);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open || !src) return null;
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="payment-qr-modal-title"
+      onClick={onClose}
+    >
+      <div
+        className="relative max-h-[90vh] w-full max-w-2xl rounded-lg border border-border bg-card p-4 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-border pb-3">
+          <h3 id="payment-qr-modal-title" className="font-serif text-lg font-semibold text-foreground">
+            Payment QR — full size
+          </h3>
+          <button type="button" className="btn btn-sm btn-outline shrink-0" onClick={onClose} autoFocus>
+            Close
+          </button>
+        </div>
+        <div className="mt-4 flex justify-center overflow-auto p-2">
+          <img
+            src={src}
+            alt="Payment QR code"
+            className="max-h-[min(75vh,720px)] w-full max-w-lg object-contain"
+          />
+        </div>
+        <p className="mt-3 text-center text-xs text-muted-foreground">Tap outside or press Esc to close.</p>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function RegistrationPage({ event, message, setMessage }) {
   const tournament = event?.tournament;
   const discordUrl = tournament?.discord_url || discordInviteUrl;
   const registrationDeadline = tournament?.registration_deadline;
   const registrationClosed = registrationDeadline ? new Date(registrationDeadline) <= new Date() : false;
   const qrImage = tournament?.payment_qr_image || "";
+  const paymentUpiId = (tournament?.payment_upi_id || "").trim();
+  const registrationFeeDisplay = (tournament?.entry_fee || "").trim();
   const rulebook = tournament?.rulebook || "";
 
+  const [regTab, setRegTab] = useState("new");
   const [step, setStep] = useState("form");
   const [resumeLoading, setResumeLoading] = useState(true);
   const [showTerms, setShowTerms] = useState(false);
+  const [showConflictModal, setShowConflictModal] = useState(false);
+  const [conflictStage, setConflictStage] = useState(null);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
     email: "",
@@ -1079,11 +1192,20 @@ function RegistrationPage({ event, message, setMessage }) {
     steamProfile: "",
     discordHandle: "",
   });
+  const [paymentLookupEmail, setPaymentLookupEmail] = useState("");
+  const [paymentLookupCode, setPaymentLookupCode] = useState("");
   const [otp, setOtp] = useState("");
   const [devOtpHint, setDevOtpHint] = useState("");
   const [publicCode, setPublicCode] = useState("");
   const [paymentScreenshot, setPaymentScreenshot] = useState("");
   const [paymentNotes, setPaymentNotes] = useState("");
+  const [showQrModal, setShowQrModal] = useState(false);
+
+  function openConflict(stage) {
+    setShowTerms(false);
+    setConflictStage(stage);
+    setShowConflictModal(true);
+  }
 
   useEffect(() => {
     const qs = new URLSearchParams(window.location.search);
@@ -1098,6 +1220,8 @@ function RegistrationPage({ event, message, setMessage }) {
       try {
         const { session } = await api.getRegistrationSession(tournamentSlug, email, code || undefined);
         if (cancelled || !session) return;
+        setPaymentLookupEmail(session.email || email);
+        setPaymentLookupCode(session.publicCode || code || "");
         setForm((prev) => ({
           ...prev,
           email: session.email || email,
@@ -1111,15 +1235,21 @@ function RegistrationPage({ event, message, setMessage }) {
           roles: Array.isArray(session.roles) && session.roles.length ? session.roles : prev.roles,
         }));
         const st = session.registrationFlowStage;
-        if (st === "awaiting_otp") setStep("otp");
-        else if (st === "awaiting_payment") {
+        if (st === "awaiting_otp") {
+          setRegTab("new");
+          setStep("otp");
+        } else if (st === "awaiting_payment") {
+          setRegTab("payment");
           setPublicCode(session.publicCode || code || "");
           setStep("payment");
-        } else if (st === "submitted") setStep("done");
+        } else if (st === "submitted") {
+          setRegTab("payment");
+          setStep("done");
+        }
         setMessage("");
       } catch {
         if (!cancelled) {
-          setMessage("Could not resume this registration. Use the link from your email (email + registration code), or start again below.");
+          setMessage("Could not resume this registration. Use the link from your email (email + registration code), or open the Complete payment tab below.");
         }
       } finally {
         if (!cancelled) setResumeLoading(false);
@@ -1166,11 +1296,17 @@ function RegistrationPage({ event, message, setMessage }) {
     if (!form.name.trim()) return "Name is required.";
     if (!form.phoneNumber.trim()) return "Phone number is required.";
     if (!form.discordHandle.trim()) return "Discord ID is required.";
+    if (!isValidDiscordHandle(form.discordHandle)) {
+      return "Discord ID must be a legacy tag (e.g. Player#4092), a handle (e.g. my_handle), or a 17–20 digit user ID.";
+    }
     if (!form.steamName.trim()) return "Steam name is required.";
     if (!form.steamProfile.trim()) return "Steam profile is required.";
+    if (!isValidSteamProfileLink(form.steamProfile)) {
+      return "Steam profile must be a steamcommunity.com link, e.g. https://steamcommunity.com/profiles/76561198912345678 or https://steamcommunity.com/id/yourname";
+    }
     if (form.mmr === "" || Number.isNaN(Number(form.mmr))) return "MMR is required.";
     const m = Number(form.mmr);
-    if (!Number.isInteger(m) || m < 0 || m > 15000) return "MMR must be a whole number between 0 and 15000.";
+    if (!Number.isInteger(m) || m < 0 || m > 20000) return "MMR must be a whole number between 0 and 20000.";
     if (!form.roles.length) return "Select at least one role.";
     return "";
   }
@@ -1187,8 +1323,80 @@ function RegistrationPage({ event, message, setMessage }) {
       setMessage(err);
       return;
     }
-    setDevOtpHint("");
-    setShowTerms(true);
+    void (async () => {
+      setBusy(true);
+      setMessage("");
+      try {
+        const { stage } = await api.lookupRegistrationEmail(tournamentSlug, form.email.trim());
+        if (stage === "submitted" || stage === "awaiting_payment") {
+          openConflict(stage);
+          return;
+        }
+      } catch {
+        // Continue to rules if lookup fails (e.g. network).
+      } finally {
+        setBusy(false);
+      }
+      setDevOtpHint("");
+      setShowTerms(true);
+    })();
+  }
+
+  async function onLoadPaymentSession(e) {
+    e.preventDefault();
+    setMessage("");
+    const em = paymentLookupEmail.trim();
+    const code = paymentLookupCode.trim();
+    if (!em) {
+      setMessage("Email is required.");
+      return;
+    }
+    if (!code) {
+      setMessage("Registration ID is required (for example BPC-001). Find it in your verification email.");
+      return;
+    }
+    if (registrationClosed) {
+      setMessage("Registration is closed for this tournament.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { session } = await api.getRegistrationSession(tournamentSlug, em, code);
+      const st = session.registrationFlowStage;
+      if (st !== "awaiting_payment" && st !== "submitted") {
+        setMessage(
+          st === "awaiting_otp"
+            ? "This email still needs verification. Use the New registration tab first so we can email you a code."
+            : "This registration cannot be continued from the payment step.",
+        );
+        return;
+      }
+      setForm((prev) => ({
+        ...prev,
+        email: session.email || em,
+        name: session.name || "",
+        location: session.location || "",
+        phoneNumber: session.phoneNumber || "",
+        discordHandle: session.discordHandle || "",
+        mmr: session.mmr != null ? String(session.mmr) : "",
+        steamName: session.steamName || "",
+        steamProfile: session.steamProfile || "",
+        roles: Array.isArray(session.roles) && session.roles.length ? session.roles : prev.roles,
+      }));
+      setPublicCode(session.publicCode || code);
+      if (st === "submitted") {
+        setStep("done");
+      } else {
+        setStep("payment");
+      }
+      const url = `/register?resume=1&email=${encodeURIComponent(em)}&code=${encodeURIComponent(session.publicCode || code)}`;
+      window.history.replaceState({}, "", url);
+      setMessage("");
+    } catch {
+      setMessage("No matching registration. Double-check your email and registration ID, or open the link from your verification email.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function acceptTermsAndRequestOtp() {
@@ -1211,7 +1419,11 @@ function RegistrationPage({ event, message, setMessage }) {
       setShowTerms(false);
       setStep("otp");
     } catch (err) {
-      setMessage(err.message || "Could not send verification email.");
+      if (err.registrationConflict?.stage) {
+        openConflict(err.registrationConflict.stage);
+      } else {
+        setMessage(err.message || "Could not send verification email.");
+      }
     } finally {
       setBusy(false);
     }
@@ -1229,6 +1441,8 @@ function RegistrationPage({ event, message, setMessage }) {
       setPublicCode(res.publicCode);
       const url = `/register?resume=1&email=${encodeURIComponent(form.email.trim())}&code=${encodeURIComponent(res.publicCode)}`;
       window.history.replaceState({}, "", url);
+      setPaymentLookupEmail(form.email.trim());
+      setPaymentLookupCode(res.publicCode);
       setStep("payment");
       setOtp("");
     } catch (err) {
@@ -1262,13 +1476,22 @@ function RegistrationPage({ event, message, setMessage }) {
   }
 
   const stepLabel =
-    step === "form"
-      ? "1. Your details"
-      : step === "otp"
-        ? "2. Email verification"
-        : step === "payment"
-          ? "3. Payment"
-          : "Submitted";
+    regTab === "payment" && step === "form"
+      ? "Complete payment"
+      : step === "form"
+        ? "1. Your details"
+        : step === "otp"
+          ? "2. Email verification"
+          : step === "payment"
+            ? "3. Payment"
+            : "Submitted";
+
+  const showNewForm = regTab === "new" && step === "form";
+  const showPaymentGate = regTab === "payment" && step === "form";
+  const showOtp = regTab === "new" && step === "otp";
+  const showPayment = step === "payment";
+  const showDone = step === "done";
+  const showPaymentTabOtpHint = regTab === "payment" && step === "otp";
 
   return (
     <div className="space-y-4 rounded-lg border border-border bg-muted/50 p-4 shadow-xl">
@@ -1279,11 +1502,29 @@ function RegistrationPage({ event, message, setMessage }) {
         onAccept={acceptTermsAndRequestOtp}
         rulebook={rulebook}
       />
+      <RegistrationConflictModal
+        open={showConflictModal}
+        stage={conflictStage}
+        busy={busy}
+        userEmail={form.email.trim()}
+        onClose={() => {
+          setShowConflictModal(false);
+          setConflictStage(null);
+        }}
+        onGoToPayment={() => {
+          setShowConflictModal(false);
+          setConflictStage(null);
+          setPaymentLookupEmail(form.email.trim());
+          setPaymentLookupCode("");
+          setRegTab("payment");
+        }}
+      />
+      <PaymentQrModal open={showQrModal} onClose={() => setShowQrModal(false)} src={qrImage} />
 
       <div>
         <h2 className="font-serif text-2xl">Register for {tournament?.name || SITE_BRAND_LINE}</h2>
         <p className="text-sm text-muted-foreground">
-          Multi-step registration: verify your email, receive your tournament ID, then upload payment proof for admin review.
+          Multi-step registration: verify your email, receive your tournament ID, then upload payment proof for admin review. Already verified and only need to pay? Use the Complete payment tab.
         </p>
         <p className="mt-2 text-xs uppercase tracking-wider text-secondary">{stepLabel}</p>
         {registrationDeadline ? (
@@ -1291,14 +1532,46 @@ function RegistrationPage({ event, message, setMessage }) {
             Registration {registrationClosed ? "closed" : "closes"} on {new Date(registrationDeadline).toLocaleString()}.
           </p>
         ) : null}
-        <a className="btn btn-outline mt-3 inline-flex" href={discordUrl} target="_blank" rel="noreferrer">
-          Join Discord for match updates
-        </a>
-        <ValveDisclaimer className="mt-4 border-t border-border pt-4" />
       </div>
 
+      {!resumeLoading ? (
+        <div className="flex gap-1 rounded-lg border border-border bg-background p-1" role="tablist" aria-label="Registration type">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={regTab === "new"}
+            className={`btn btn-sm flex-1 ${regTab === "new" ? "btn-primary" : "btn-outline"}`}
+            onClick={() => setRegTab("new")}
+          >
+            New registration
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={regTab === "payment"}
+            className={`btn btn-sm flex-1 ${regTab === "payment" ? "btn-primary" : "btn-outline"}`}
+            onClick={() => setRegTab("payment")}
+          >
+            Complete payment
+          </button>
+        </div>
+      ) : null}
+
       {resumeLoading ? <p className="text-sm text-muted-foreground">Checking for a saved registration…</p> : null}
-      {message ? <p className="rounded-md border border-border bg-background p-3 text-sm text-secondary">{message}</p> : null}
+      {message ? (
+        <p
+          className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm font-medium text-destructive dark:border-destructive/40 dark:bg-destructive/15"
+          role="alert"
+        >
+          {message}
+        </p>
+      ) : null}
+
+      {showPaymentTabOtpHint ? (
+        <p className="rounded-md border border-border bg-background p-3 text-sm text-muted-foreground">
+          Finish entering your <strong className="text-foreground">verification code</strong> on the <strong className="text-foreground">New registration</strong> tab first.
+        </p>
+      ) : null}
 
       {step === "done" && !resumeLoading ? (
         <div className="space-y-2 rounded-md border border-border bg-background p-4 text-sm">
@@ -1309,7 +1582,7 @@ function RegistrationPage({ event, message, setMessage }) {
         </div>
       ) : null}
 
-      {step === "form" && !resumeLoading ? (
+      {showNewForm && !resumeLoading ? (
         <form className="space-y-4" onSubmit={onFormSubmit}>
           <div className="grid gap-3 md:grid-cols-2">
             <Input label="Email" type="email" value={form.email} onChange={(v) => setForm((prev) => ({ ...prev, email: v }))} required />
@@ -1317,9 +1590,25 @@ function RegistrationPage({ event, message, setMessage }) {
             <Input label="City / region (optional)" value={form.location} onChange={(v) => setForm((prev) => ({ ...prev, location: v }))} />
             <Input label="Phone number" type="tel" value={form.phoneNumber} onChange={(v) => setForm((prev) => ({ ...prev, phoneNumber: v }))} required />
             <Input label="Discord ID" value={form.discordHandle} onChange={(v) => setForm((prev) => ({ ...prev, discordHandle: v }))} required />
-            <Input label="MMR" type="number" value={form.mmr} onChange={(v) => setForm((prev) => ({ ...prev, mmr: v }))} required />
+            <p className="text-xs text-muted-foreground md:col-span-2 -mt-2">
+              Format examples: legacy tag <span className="font-mono text-foreground">Name#1234</span>, handle <span className="font-mono text-foreground">my_handle</span>, or numeric ID{" "}
+              <span className="font-mono text-foreground">766262940060823456</span>.
+            </p>
+            <Input label="MMR" type="number" value={form.mmr} onChange={(v) => setForm((prev) => ({ ...prev, mmr: v }))} required max={20000} />
             <Input label="Steam name" value={form.steamName} onChange={(v) => setForm((prev) => ({ ...prev, steamName: v }))} required />
-            <Input label="Steam ID / profile link" value={form.steamProfile} onChange={(v) => setForm((prev) => ({ ...prev, steamProfile: v }))} required />
+            <Input
+              label="Steam profile URL"
+              value={form.steamProfile}
+              onChange={(v) => setForm((prev) => ({ ...prev, steamProfile: v }))}
+              required
+              placeholder="https://steamcommunity.com/profiles/76561198912345678"
+            />
+            <p className="text-xs text-muted-foreground md:col-span-2 -mt-2">
+              Must be a <span className="font-mono text-foreground">steamcommunity.com</span> profile link, e.g.{" "}
+              <span className="font-mono text-foreground">https://steamcommunity.com/profiles/76561198912345678</span> or{" "}
+              <span className="font-mono text-foreground">https://steamcommunity.com/id/yourname</span> — you can paste with or
+              without <span className="font-mono text-foreground">https://</span>.
+            </p>
           </div>
           <div>
             <p className="mb-2 text-sm font-medium">Roles</p>
@@ -1337,16 +1626,35 @@ function RegistrationPage({ event, message, setMessage }) {
             </div>
           </div>
           <button type="submit" className="btn btn-primary" disabled={registrationClosed || busy}>
-            {registrationClosed ? "Registration closed" : "Continue — accept rules & verify email"}
+            {registrationClosed ? "Registration closed" : busy ? "Checking…" : "Continue — accept rules & verify email"}
           </button>
         </form>
       ) : null}
 
-      {step === "otp" && !resumeLoading ? (
-        <form className="space-y-4" onSubmit={onVerifyOtp}>
+      {showPaymentGate && !resumeLoading ? (
+        <form className="space-y-4" onSubmit={onLoadPaymentSession}>
           <p className="text-sm text-muted-foreground">
-            Enter the 6-digit code we sent to <span className="text-foreground">{form.email}</span>.
+            Enter the same email you registered with and your <strong className="text-foreground">registration ID</strong> (for example BPC-012) from your verification email.
           </p>
+          <Input label="Email" type="email" value={paymentLookupEmail} onChange={setPaymentLookupEmail} required />
+          <Input label="Registration ID" value={paymentLookupCode} onChange={setPaymentLookupCode} required />
+          <button type="submit" className="btn btn-primary" disabled={busy || registrationClosed}>
+            {registrationClosed ? "Registration closed" : busy ? "Loading…" : "Continue to payment"}
+          </button>
+        </form>
+      ) : null}
+
+      {showOtp && !resumeLoading ? (
+        <form className="space-y-4" onSubmit={onVerifyOtp}>
+          <div className="rounded-lg border border-border bg-background p-4 sm:p-5">
+            <p className="font-serif text-xl font-semibold text-foreground sm:text-2xl">Check your email — including Spam</p>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              We sent a 6-digit code to <span className="font-medium text-foreground">{form.email}</span>. If you do not see it within a few minutes, look in your{" "}
+              <strong className="text-foreground">spam</strong>, <strong className="text-foreground">junk</strong>, or <strong className="text-foreground">Promotions</strong> folder and
+              mark the message as “not spam” so future mail arrives in your inbox.
+            </p>
+          </div>
+          <p className="text-sm text-muted-foreground">Enter the code below when you have it.</p>
           {devOtpHint ? (
             <p className="rounded-md border border-dashed border-primary/40 bg-primary/5 p-2 text-sm text-muted-foreground">
               Dev mode: use OTP <span className="font-mono text-foreground">{devOtpHint}</span> (email send skipped).
@@ -1373,59 +1681,128 @@ function RegistrationPage({ event, message, setMessage }) {
         </form>
       ) : null}
 
-      {step === "payment" && !resumeLoading ? (
+      {showPayment && !resumeLoading ? (
         <form className="space-y-4" onSubmit={onCompletePayment}>
           <div className="rounded-md border border-border bg-background p-4 text-sm">
             <p className="text-xs uppercase tracking-wider text-secondary">Your registration ID</p>
             <p className="mt-1 font-mono text-lg text-primary">{publicCode}</p>
-            <p className="mt-2 text-muted-foreground">Use this ID in payment notes if asked. Keep this page bookmarked until you finish payment.</p>
+            <p className="mt-2 text-muted-foreground">Keep this ID — you will use it in your UPI payment note.</p>
           </div>
+
+          <div className="rounded-lg border border-primary/35 bg-primary/10 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-secondary">Registration fee</p>
+            <p className="mt-2 text-xl font-semibold text-foreground">{registrationFeeDisplay || "See tournament announcement or Discord"}</p>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+              In your UPI app, add this registration ID in the payment note when you send the fee, using the same format you received (for example{" "}
+              <span className="font-mono font-medium text-foreground">{publicCode || "BPC-001"}</span>) so admins can match your payment to your registration.
+            </p>
+          </div>
+
           {qrImage ? (
             <div>
-              <p className="text-sm font-medium">Payment QR</p>
-              <img src={qrImage} alt="Payment QR" className="mt-2 h-48 w-48 rounded-md border border-border object-contain bg-background" />
+              <p className="text-sm font-medium">Scan to pay (QR)</p>
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start">
+                <button
+                  type="button"
+                  className="group shrink-0 rounded-lg border-2 border-border bg-background p-2 shadow-sm transition hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  onClick={() => setShowQrModal(true)}
+                  aria-label="Open payment QR in full size"
+                >
+                  <img
+                    src={qrImage}
+                    alt=""
+                    className="pointer-events-none block h-64 w-64 max-w-[85vw] object-contain sm:h-72 sm:w-72"
+                  />
+                  <span className="mt-2 block text-center text-xs text-muted-foreground group-hover:text-foreground">Tap to enlarge</span>
+                </button>
+                <div className="flex flex-col gap-2 pt-1">
+                  <button type="button" className="btn btn-outline" onClick={() => setShowQrModal(true)}>
+                    Open full-size QR
+                  </button>
+                  <p className="max-w-xs text-xs text-muted-foreground">Use a larger view if the code is hard to scan from your phone.</p>
+                </div>
+              </div>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Payment QR will appear here once the tournament publishes one. Check Discord if missing.</p>
+            <p className="text-sm text-muted-foreground">Payment QR will appear here once the tournament publishes one. You can still pay with UPI ID below if available.</p>
           )}
+
+          {paymentUpiId ? (
+            <div className="rounded-md border border-border bg-background p-4 text-sm">
+              <p className="font-medium text-foreground">UPI ID (manual transfer)</p>
+              <p className="mt-1 font-mono text-base text-primary">{paymentUpiId}</p>
+              <p className="mt-2 text-xs text-muted-foreground">Use this if you prefer typing a UPI ID instead of scanning the QR.</p>
+            </div>
+          ) : null}
+
           <label className="block text-sm">
-            UPI / transaction notes (optional)
+            Extra transaction / UPI notes (optional)
             <input
               type="text"
               className="mt-1 w-full rounded-md border border-input bg-background p-2"
               value={paymentNotes}
               onChange={(e) => setPaymentNotes(e.target.value)}
-              placeholder="Transaction reference or UPI ID"
+              placeholder="Reference or note beyond your registration ID"
             />
           </label>
-          <label className="block text-sm">
-            Payment screenshot
-            <input
-              type="file"
-              accept="image/*"
-              className="mt-1 w-full rounded-md border border-input bg-background p-2"
-              onChange={(event) => readPaymentFile(event.target.files?.[0])}
-            />
-          </label>
+          <div className="block text-sm font-medium">
+            <span className="block">
+              Payment screenshot <span className="text-destructive">*</span>
+              <span className="ml-1 text-xs font-normal text-muted-foreground">Required — upload proof of payment</span>
+            </span>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <input
+                id="registration-payment-screenshot"
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={(event) => readPaymentFile(event.target.files?.[0])}
+              />
+              <label
+                htmlFor="registration-payment-screenshot"
+                className="btn btn-outline cursor-pointer"
+              >
+                Choose file
+              </label>
+              <span className="text-xs text-muted-foreground">
+                {paymentScreenshot ? "Image selected — choose again to replace" : "No file chosen yet"}
+              </span>
+            </div>
+          </div>
           {paymentScreenshot ? (
             <img src={paymentScreenshot} alt="Payment screenshot preview" className="max-h-48 rounded-md border border-border object-contain" />
           ) : null}
-          <button type="submit" className="btn btn-primary" disabled={busy || registrationClosed}>
+          <button type="submit" className="btn btn-primary" disabled={busy || registrationClosed || !paymentScreenshot}>
             Submit for review
           </button>
         </form>
       ) : null}
+
+      <div className="mt-8 space-y-4 border-t border-border pt-6">
+        <div className="flex justify-end">
+          <div className="max-w-md text-right">
+            <a className="btn btn-primary inline-flex shadow-md" href={discordUrl} target="_blank" rel="noreferrer">
+              Join Discord for match updates
+            </a>
+            <p className="mt-3 rounded-md border-2 border-secondary/60 bg-secondary/20 px-3 py-2 text-left text-sm font-semibold text-foreground sm:text-right">
+              Mandatory: join the Discord server to receive pairings, rules, and admin messages for this event.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-function Input({ label, value, onChange, type = "text", required = false }) {
+function Input({ label, value, onChange, type = "text", required = false, max, placeholder }) {
   return (
     <label className="block text-sm">
       {label}
       <input
         required={required}
         type={type}
+        max={max}
+        placeholder={placeholder}
         className="mt-1 w-full rounded-md border border-input bg-background p-2"
         value={value}
         onChange={(event) => onChange(event.target.value)}
