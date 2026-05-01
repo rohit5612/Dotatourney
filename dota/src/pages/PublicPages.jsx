@@ -38,6 +38,24 @@ function normalizeAnnouncements(value) {
   return [];
 }
 
+/** Downscale and JPEG-wrap payment proofs so JSON POST stays under typical reverse-proxy limits (nginx default 1m). */
+async function compressImageFileForDataUrl(file, maxEdge = 1680, jpegQuality = 0.88) {
+  const bitmap = await createImageBitmap(file);
+  try {
+    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    return canvas.toDataURL("image/jpeg", jpegQuality);
+  } finally {
+    bitmap.close();
+  }
+}
+
 const formatNameMap = {
   dse: "Double Elimination",
   se: "Single Elimination",
@@ -1124,13 +1142,23 @@ function RegistrationPage({ event, message, setMessage }) {
       setPaymentScreenshot("");
       return;
     }
-    const dataUrl = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-    setPaymentScreenshot(dataUrl);
+    if (!file.type.startsWith("image/")) {
+      setMessage("Please upload an image (screenshot or photo).");
+      setPaymentScreenshot("");
+      return;
+    }
+    setMessage("");
+    try {
+      setPaymentScreenshot(await compressImageFileForDataUrl(file));
+    } catch {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      setPaymentScreenshot(dataUrl);
+    }
   }
 
   function validateFormForOtp() {
