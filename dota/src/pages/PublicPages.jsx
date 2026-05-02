@@ -4,8 +4,12 @@ import { AppFooter } from "../components/AppFooter";
 import { BracketDiagram } from "../components/BracketDiagram";
 import { formatMatchRoundSummary, stageRoundStructure } from "../components/bracket/bracketLayout.js";
 import { ScrollToTopButton } from "../components/ScrollToTopButton";
-import { PLAYER_RULES_SECTIONS } from "../constants/playerRules.js";
-import { COOKIE_CONSENT_KEY, VALVE_DISCLAIMER } from "../constants/legal.js";
+import {
+  PLAYER_RULES_DISCORD_SECTION_TITLE,
+  PLAYER_RULES_REGISTRATION_NOTICE,
+  PLAYER_RULES_SECTIONS,
+} from "../constants/playerRules.js";
+import { COOKIE_CONSENT_KEY, PUBLIC_CONTACT_EMAIL, VALVE_DISCLAIMER } from "../constants/legal.js";
 import { roles } from "../constants/tournament";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock.js";
 import { api } from "../lib/api";
@@ -410,9 +414,10 @@ export function PublicApp({ path, navigate }) {
   }
 
   if (path === "/rules") {
+    const rulesDiscordUrl = event?.tournament?.discord_url || discordInviteUrl;
     return (
       <EventShell path={path} navigate={navigate}>
-        <GeneralRulesPage />
+        <GeneralRulesPage discordUrl={rulesDiscordUrl} />
       </EventShell>
     );
   }
@@ -1129,7 +1134,8 @@ function CookiePolicyPage() {
   );
 }
 
-function GeneralRulesPage() {
+function GeneralRulesPage({ discordUrl }) {
+  const invite = (discordUrl || discordInviteUrl).trim();
   return (
     <section className="space-y-4 rounded-2xl border border-border bg-card/85 p-4 shadow-xl backdrop-blur-md sm:p-6">
       <div>
@@ -1138,11 +1144,30 @@ function GeneralRulesPage() {
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           These rules cover player behavior, eligibility, communication, and fair-play expectations for every {SITE_BRAND_FULL} event.
         </p>
+        <p className="mt-3 rounded-lg border border-primary/25 bg-primary/10 px-3 py-2 text-sm leading-relaxed text-foreground/95">
+          {PLAYER_RULES_REGISTRATION_NOTICE}
+        </p>
       </div>
       {PLAYER_RULES_SECTIONS.map(([title, body]) => (
         <div key={title} className="rounded-lg border border-border bg-background/90 p-4 shadow-sm backdrop-blur-sm">
           <h3 className="font-serif text-lg font-medium text-foreground">{title}</h3>
           <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{body}</p>
+          {title === PLAYER_RULES_DISCORD_SECTION_TITLE && invite ? (
+            <p className="mt-3 text-sm leading-relaxed text-foreground">
+              <a
+                className="font-medium text-secondary underline underline-offset-2 hover:text-foreground"
+                href={invite}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Join the Discord server
+              </a>
+              <span className="text-muted-foreground">
+                {" "}
+                now so you are in the right place for pairings, announcements, and admin messages.
+              </span>
+            </p>
+          ) : null}
         </div>
       ))}
     </section>
@@ -1172,9 +1197,10 @@ function isValidSteamProfileLink(value) {
   }
 }
 
-function RegistrationTermsModal({ open, busy, onClose, onAccept, rulebook }) {
+function RegistrationTermsModal({ open, busy, onClose, onAccept, rulebook, discordUrl }) {
   useBodyScrollLock(open);
   if (!open) return null;
+  const invite = (discordUrl || discordInviteUrl).trim();
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-labelledby="registration-terms-title">
       <div className="flex max-h-[min(90vh,640px)] w-full max-w-lg flex-col rounded-lg border border-border bg-card shadow-2xl">
@@ -1183,11 +1209,14 @@ function RegistrationTermsModal({ open, busy, onClose, onAccept, rulebook }) {
             Rules — {SITE_BRAND_FULL}
           </h3>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            Read and accept before we send a verification code to your email.{" "}
+            Read and accept before we send a verification code to your email. This list matches the{" "}
             <a className="font-medium text-secondary underline underline-offset-2 hover:text-foreground" href="/rules" target="_blank" rel="noreferrer">
-              Open full rules in a new tab
-            </a>
-            .
+              Rules
+            </a>{" "}
+            page and updates whenever organizers change it.
+          </p>
+          <p className="mt-2 rounded-md border border-border bg-background/80 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
+            {PLAYER_RULES_REGISTRATION_NOTICE}
           </p>
         </div>
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 text-sm">
@@ -1195,6 +1224,22 @@ function RegistrationTermsModal({ open, busy, onClose, onAccept, rulebook }) {
             <div key={title} className="rounded-md border border-border bg-background p-3">
               <h4 className="font-medium text-foreground">{title}</h4>
               <p className="mt-1 text-muted-foreground">{body}</p>
+              {title === PLAYER_RULES_DISCORD_SECTION_TITLE && invite ? (
+                <p className="mt-2 text-foreground">
+                  <a
+                    className="font-medium text-secondary underline underline-offset-2 hover:text-foreground"
+                    href={invite}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Join the Discord server
+                  </a>
+                  <span className="text-muted-foreground">
+                    {" "}
+                    now so you are in the right place for pairings, announcements, and admin messages.
+                  </span>
+                </p>
+              ) : null}
             </div>
           ))}
           {rulebook?.trim() ? (
@@ -1647,6 +1692,7 @@ function RegistrationPage({ event, message, setMessage }) {
         onClose={() => setShowTerms(false)}
         onAccept={acceptTermsAndRequestOtp}
         rulebook={rulebook}
+        discordUrl={discordUrl}
       />
       <RegistrationConflictModal
         open={showConflictModal}
@@ -1935,6 +1981,15 @@ function RegistrationPage({ event, message, setMessage }) {
             </p>
           </div>
         </div>
+        <p className="text-center text-xs text-muted-foreground sm:text-left">
+          Registration questions?{" "}
+          <a
+            className="text-secondary underline underline-offset-2 hover:text-foreground"
+            href={`mailto:${PUBLIC_CONTACT_EMAIL}`}
+          >
+            {PUBLIC_CONTACT_EMAIL}
+          </a>
+        </p>
       </div>
     </div>
   );

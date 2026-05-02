@@ -1,27 +1,49 @@
-/** Static sections shown on /rules and in the registration terms modal. */
+/** Static sections shown on /rules and in the registration terms modal (single source of truth). */
+export const PLAYER_RULES_DISCORD_SECTION_TITLE = "Discord";
+
 export const PLAYER_RULES_SECTIONS = [
   [
-    "Eligibility",
-    "Players must submit accurate identity, Discord, Steam, and contact details. Admins may reject unverifiable registrations.",
+    "Game Mode",
+    "All matches will be played in Captains Mode.",
   ],
   [
-    "Conduct",
-    "Harassment, hate speech, threats, griefing, abuse, or targeted toxicity can lead to removal without refund.",
+    "Registration",
+    "Players register as solo participants. Slots are given on a first-come, first-served basis.",
   ],
   [
-    "Fair Play",
-    "Cheating, account sharing, smurfing, match fixing, stream sniping, or exploiting tournament systems is prohibited.",
+    PLAYER_RULES_DISCORD_SECTION_TITLE,
+    "Discord is mandatory — join the tournament server using the link below. Players must have a working microphone and stay reachable during the event. Unreachable players may lose their slot.",
   ],
   [
-    "Communication",
-    "Players must be reachable through Discord during tournament operations and must follow admin instructions.",
+    "Account Rules",
+    "Players must use their primary Dota 2 account with rank unlocked and medal/MMR visible. Only your highest-ranked main account is allowed. Smurfing, alternate accounts, or account sharing will result in an immediate ban.",
   ],
   [
-    "Payments",
-    "Entry/payment proof must be valid and reviewable by admins. Fraudulent screenshots or chargebacks may lead to bans.",
+    "Player Conduct",
+    "Respect all players, captains, moderators, and admins. Players of all ranks, from Herald to Immortal, may participate together, so keep the environment friendly. No verbal abuse, flaming, insults, threats, harassment, offensive names, or toxic all-chat. Serious or repeated toxicity may lead to disqualification or ban.",
   ],
   [
-    "Admin Decisions",
-    "Admins may make final calls on disputes, scheduling, rule interpretation, and emergency tournament operations.",
+    "Substitution Rule",
+    "All registered players must be available for their scheduled matches. Each player is allowed to skip only 1 map during the tournament. If a player skips more than 1 map, they may be disqualified from the event. If a substitute is required, the admins will assign a replacement player from the same tier as the player who is unavailable. The final decision on substitutions will be made by the admins.",
+  ],
+  [
+    "Gameplay Integrity",
+    "Play seriously and fairly. Intentional feeding, griefing, lane ruining, AFK jungling, grief picks, sabotaging teammates, or refusing to cooperate is strictly prohibited. Verified griefing may result in immediate disqualification.",
+  ],
+  [
+    "In-Game Tipping & Voice Lines",
+    "Tipping and voice lines are allowed, but using them for targeted harassment or toxicity may still be punished.",
+  ],
+  [
+    "Names",
+    "Steam, Dota, Discord, and team names must be appropriate and non-offensive.",
+  ],
+  [
+    "Final Authority",
+    "Admins have final authority on all disputes, penalties, disqualifications, slot decisions, and rule interpretations.",
   ],
 ];
+
+/** Explains that /rules and registration acceptance use the same list. */
+export const PLAYER_RULES_REGISTRATION_NOTICE =
+  "These rules are what you have to accept when you register as a player.";

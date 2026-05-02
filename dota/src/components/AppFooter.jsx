@@ -1,3 +1,4 @@
+import { PUBLIC_CONTACT_EMAIL } from "../constants/legal.js";
 import { ValveDisclaimer } from "./ValveDisclaimer.jsx";
 
 export function AppFooter({ navigate, mode = "public" }) {
@@ -42,6 +43,14 @@ export function AppFooter({ navigate, mode = "public" }) {
           <p className="mt-2 max-w-md leading-relaxed">
             Bharat Pro Circuit League — a Dota 2 tournament hub for registrations, rosters, brackets, schedules, standings, and match-day updates.
           </p>
+          {mode === "public" ? (
+            <p className="mt-3 text-xs text-muted-foreground">
+              Contact:{" "}
+              <a className="text-secondary underline underline-offset-2 hover:text-foreground" href={`mailto:${PUBLIC_CONTACT_EMAIL}`}>
+                {PUBLIC_CONTACT_EMAIL}
+              </a>
+            </p>
+          ) : null}
         </div>
 
         <div>
