@@ -22,6 +22,9 @@ const SITE_BRAND_LINE = `${SITE_BRAND_SHORT} — ${SITE_BRAND_FULL}`;
 const tournamentSlug = "bpcl";
 const defaultTournamentStart = "2026-05-22T00:00:00+05:30";
 const discordInviteUrl = "https://discord.gg/NmC2Xqnb";
+/** Discord brand blurple — used for the registration page CTA only. */
+const REGISTRATION_DISCORD_BTN_CLASS =
+  "btn inline-flex items-center justify-center gap-2 border-transparent bg-[#5865F2] text-white shadow-md hover:bg-[#4752C4] hover:brightness-100 focus-visible:ring-2 focus-visible:ring-[#5865F2] focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 const publicPaths = ["/", "/tournament", "/schedule", "/register", "/rules", "/privacy", "/cookies"];
 
 /** Public tournament announcements list: page size before pagination. */
@@ -1197,6 +1200,15 @@ function isValidSteamProfileLink(value) {
   }
 }
 
+function RegistrationButtonSpinner() {
+  return (
+    <span
+      className="inline-block size-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent opacity-90"
+      aria-hidden
+    />
+  );
+}
+
 function RegistrationTermsModal({ open, busy, onClose, onAccept, rulebook, discordUrl }) {
   useBodyScrollLock(open);
   if (!open) return null;
@@ -1256,7 +1268,8 @@ function RegistrationTermsModal({ open, busy, onClose, onAccept, rulebook, disco
           <button type="button" className="btn btn-outline" onClick={onClose} disabled={busy}>
             Cancel
           </button>
-          <button type="button" className="btn btn-primary" onClick={onAccept} disabled={busy}>
+          <button type="button" className="btn btn-primary inline-flex items-center justify-center gap-2" onClick={onAccept} disabled={busy}>
+            {busy ? <RegistrationButtonSpinner /> : null}
             {busy ? "Sending code…" : "I agree — send verification code"}
           </button>
         </div>
@@ -1295,7 +1308,8 @@ function RegistrationConflictModal({ open, stage, busy, onClose, onGoToPayment, 
         </div>
         <div className="flex flex-col gap-2 border-t border-border p-4 sm:flex-row sm:justify-end">
           {isPayment ? (
-            <button type="button" className="btn btn-primary sm:order-2" onClick={onGoToPayment} disabled={busy}>
+            <button type="button" className="btn btn-primary inline-flex items-center justify-center gap-2 sm:order-2" onClick={onGoToPayment} disabled={busy}>
+              {busy ? <RegistrationButtonSpinner /> : null}
               Open Complete payment tab
             </button>
           ) : null}
@@ -1817,7 +1831,8 @@ function RegistrationPage({ event, message, setMessage }) {
               ))}
             </div>
           </div>
-          <button type="submit" className="btn btn-primary" disabled={registrationClosed || busy}>
+          <button type="submit" className="btn btn-primary inline-flex items-center justify-center gap-2" disabled={registrationClosed || busy}>
+            {busy ? <RegistrationButtonSpinner /> : null}
             {registrationClosed ? "Registration closed" : busy ? "Checking…" : "Continue — accept rules & verify email"}
           </button>
         </form>
@@ -1830,7 +1845,8 @@ function RegistrationPage({ event, message, setMessage }) {
           </p>
           <Input label="Email" type="email" value={paymentLookupEmail} onChange={setPaymentLookupEmail} required />
           <Input label="Registration ID" value={paymentLookupCode} onChange={setPaymentLookupCode} required />
-          <button type="submit" className="btn btn-primary" disabled={busy || registrationClosed}>
+          <button type="submit" className="btn btn-primary inline-flex items-center justify-center gap-2" disabled={busy || registrationClosed}>
+            {busy ? <RegistrationButtonSpinner /> : null}
             {registrationClosed ? "Registration closed" : busy ? "Loading…" : "Continue to payment"}
           </button>
         </form>
@@ -1854,8 +1870,9 @@ function RegistrationPage({ event, message, setMessage }) {
           ) : null}
           <Input label="Verification code" value={otp} onChange={setOtp} required />
           <div className="flex flex-wrap gap-2">
-            <button type="submit" className="btn btn-primary" disabled={busy}>
-              Verify and continue
+            <button type="submit" className="btn btn-primary inline-flex items-center justify-center gap-2" disabled={busy}>
+              {busy ? <RegistrationButtonSpinner /> : null}
+              {busy ? "Verifying…" : "Verify and continue"}
             </button>
             <button
               type="button"
@@ -1964,8 +1981,9 @@ function RegistrationPage({ event, message, setMessage }) {
           {paymentScreenshot ? (
             <img src={paymentScreenshot} alt="Payment screenshot preview" className="max-h-48 rounded-md border border-border object-contain" />
           ) : null}
-          <button type="submit" className="btn btn-primary" disabled={busy || registrationClosed || !paymentScreenshot}>
-            Submit for review
+          <button type="submit" className="btn btn-primary inline-flex items-center justify-center gap-2" disabled={busy || registrationClosed || !paymentScreenshot}>
+            {busy ? <RegistrationButtonSpinner /> : null}
+            {busy ? "Submitting…" : "Submit for review"}
           </button>
         </form>
       ) : null}
@@ -1973,7 +1991,7 @@ function RegistrationPage({ event, message, setMessage }) {
       <div className="mt-8 space-y-4 border-t border-border pt-6">
         <div className="flex justify-end">
           <div className="max-w-md text-right">
-            <a className="btn btn-primary inline-flex shadow-md" href={discordUrl} target="_blank" rel="noreferrer">
+            <a className={REGISTRATION_DISCORD_BTN_CLASS} href={discordUrl} target="_blank" rel="noreferrer">
               Join Discord for match updates
             </a>
             <p className="mt-3 rounded-md border-2 border-secondary/60 bg-secondary/20 px-3 py-2 text-left text-sm font-semibold text-foreground sm:text-right">
