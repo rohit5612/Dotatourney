@@ -7,6 +7,7 @@ import { ScrollToTopButton } from "./components/ScrollToTopButton";
 import { buildDefaultSeriesRules, roles } from "./constants/tournament";
 import { api, getAuthToken, setAuthToken } from "./lib/api";
 import { toDateInputValue, toDatetimeLocalValue } from "./utils/datetime";
+import { announcementsToAdminFormState, announcementsToApiPayload } from "./lib/announcementEntries.js";
 import { AnnouncementsPage } from "./pages/AnnouncementsPage";
 import { BracketPage } from "./pages/BracketPage";
 import { PublicApp } from "./pages/PublicPages";
@@ -63,22 +64,6 @@ function App() {
   const [newPlayer, setNewPlayer] = useState({ name: "", role: "Carry" });
   const [darkMode, setDarkMode] = useState(getInitialDarkMode);
   const [message, setMessage] = useState("");
-
-  function normalizeAnnouncements(value) {
-    if (Array.isArray(value)) return value;
-    if (typeof value === "string") {
-      return value
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean);
-    }
-    if (value && typeof value === "object") {
-      return Object.values(value)
-        .map((item) => String(item || "").trim())
-        .filter(Boolean);
-    }
-    return [];
-  }
 
   function navigate(nextPath) {
     window.history.pushState({}, "", nextPath);
@@ -179,7 +164,7 @@ function App() {
           : prev.registrationDeadline,
         discordUrl: payload.tournament.discord_url ?? prev.discordUrl,
         rulebook: payload.tournament.rulebook ?? prev.rulebook,
-        announcements: payload.tournament.announcements ?? prev.announcements,
+        announcements: announcementsToAdminFormState(payload.tournament.announcements),
         visibilityMode: payload.tournament.visibility_mode ?? prev.visibilityMode,
         bracketActive: payload.tournament.bracket_active ?? prev.bracketActive,
         registrationCodePrefix: payload.tournament.registration_code_prefix ?? prev.registrationCodePrefix ?? "BPC",
@@ -231,7 +216,7 @@ function App() {
       ...overrides,
       teamCount: Number(setup.teamCount),
       darkMode: true,
-      announcements: normalizeAnnouncements(overrides.announcements ?? setup.announcements),
+      announcements: announcementsToApiPayload(overrides.announcements ?? setup.announcements),
     };
   }
 

@@ -9,7 +9,8 @@ import { COOKIE_CONSENT_KEY, VALVE_DISCLAIMER } from "../constants/legal.js";
 import { roles } from "../constants/tournament";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock.js";
 import { api } from "../lib/api";
-import { rulebookContentClassName, sanitizeRulebookHtml } from "../lib/sanitizeRulebookHtml.js";
+import { descriptionContentClassName, rulebookContentClassName, sanitizeDescriptionHtml, sanitizeRulebookHtml } from "../lib/sanitizeRulebookHtml.js";
+import { formatAnnouncementPostedAt, parseAnnouncementEntries } from "../lib/announcementEntries.js";
 
 const SITE_BRAND_SHORT = "BPC League";
 const SITE_BRAND_FULL = "Bharat Pro Circuit League";
@@ -19,25 +20,41 @@ const defaultTournamentStart = "2026-05-22T00:00:00+05:30";
 const discordInviteUrl = "https://discord.gg/NmC2Xqnb";
 const publicPaths = ["/", "/tournament", "/schedule", "/register", "/rules", "/privacy", "/cookies"];
 
+/** Public tournament announcements list: page size before pagination. */
+const ANNOUNCEMENTS_PAGE_SIZE = 5;
+
+/** Drop replacement files in `public/images/` using these exact basenames. */
+const images = {
+  overviewCard: "/images/overview.jpg",
+  rulebookBg: "/images/rulebook.jpg",
+  tournamentHero: "/images/tournamenthero.jpg",
+  bracketsBg: "/images/brackets.jpeg",
+  registerBg: "/images/register.jpg",
+  /** Standalone `/rules` (general player conduct) page background */
+  generalRulesBg: "/images/rules.jpeg",
+  /** `/tournament` — content below the hero band */
+  tournamentPageBg: "/images/tournamentpage.png",
+};
+
 function formatDate(value) {
   if (!value) return "TBA";
   return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-function normalizeAnnouncements(value) {
-  if (Array.isArray(value)) return value;
-  if (typeof value === "string") {
-    return value
-      .split("\n")
-      .map((item) => item.trim())
-      .filter(Boolean);
+const DESCRIPTION_FALLBACK =
+  "Tournament details will appear here once admins publish the setup. Check Discord for live communications.";
+
+function TournamentDescriptionProse({ description, className }) {
+  const trimmed = description?.trim();
+  if (!trimmed) {
+    return <p className={className}>{DESCRIPTION_FALLBACK}</p>;
   }
-  if (value && typeof value === "object") {
-    return Object.values(value)
-      .map((item) => String(item || "").trim())
-      .filter(Boolean);
-  }
-  return [];
+  return (
+    <div
+      className={`${className} ${descriptionContentClassName} max-w-none`}
+      dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(trimmed) }}
+    />
+  );
 }
 
 /** Downscale and JPEG-wrap payment proofs so JSON POST stays under typical reverse-proxy limits (nginx default 1m). */
@@ -326,12 +343,29 @@ function PublicHeader({ path, navigate }) {
 }
 
 function EventShell({ path, navigate, children }) {
+  const isFullBleedBg = path === "/schedule" || path === "/register" || path === "/rules";
   const contentClass = path === "/schedule" ? "mx-auto max-w-7xl space-y-6 px-4 pb-10 pt-28" : "mx-auto max-w-6xl space-y-6 px-4 pb-10 pt-28";
+  const fullBleedImage =
+    path === "/schedule" ? images.bracketsBg : path === "/register" ? images.registerBg : path === "/rules" ? images.generalRulesBg : null;
+  const fullBleedGradientClass =
+    path === "/schedule"
+      ? "bg-gradient-to-br from-background/88 via-background/80 to-background/72"
+      : path === "/register"
+        ? "bg-gradient-to-b from-background/86 via-background/78 to-background/84"
+        : "bg-gradient-to-br from-background/87 via-background/78 to-background/80";
   return (
-    <main className="min-h-screen bg-background text-foreground">
+    <main className={`min-h-screen text-foreground ${isFullBleedBg ? "" : "bg-background"}`}>
+      {isFullBleedBg && fullBleedImage ? (
+        <div className="pointer-events-none fixed inset-0 z-0" aria-hidden="true">
+          <img alt="" className="h-full w-full object-cover" src={fullBleedImage} />
+          <div className={`absolute inset-0 ${fullBleedGradientClass}`} />
+        </div>
+      ) : null}
       <PublicHeader path={path} navigate={navigate} />
-      <section className={path === "/" ? "space-y-20" : contentClass}>{children}</section>
-      <AppFooter navigate={navigate} />
+      <section className={path === "/" ? "space-y-20" : `${contentClass} relative z-10`}>{children}</section>
+      <div className={`relative z-10 ${isFullBleedBg ? "border-t border-border/60 bg-background/95 backdrop-blur-sm" : ""}`}>
+        <AppFooter navigate={navigate} />
+      </div>
       <CookieConsentBanner navigate={navigate} />
       <ScrollToTopButton />
     </main>
@@ -490,14 +524,15 @@ function LandingPage({ event, navigate, message }) {
               <span>⚔️</span>
             </div>
             <h3 className="font-serif text-3xl font-semibold tracking-tight text-foreground md:text-4xl">{tournament?.name || SITE_BRAND_LINE}</h3>
-            <p className="mt-3 leading-relaxed text-muted-foreground">
-              {tournament?.description || "Tournament details will appear here once admins publish the setup. Check Discord for live communications."}
-            </p>
+            <TournamentDescriptionProse
+              description={tournament?.description}
+              className="mt-3 leading-relaxed text-muted-foreground"
+            />
           </div>
           <div className="overflow-hidden rounded-xl border border-border bg-card">
             <img
-              src="https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1200&q=80"
-              alt="Esports arena visual"
+              src={images.overviewCard}
+              alt="Tournament overview"
               className="h-64 w-full object-cover opacity-80 lg:h-full lg:min-h-64"
             />
           </div>
@@ -508,9 +543,10 @@ function LandingPage({ event, navigate, message }) {
         <section className="relative flex min-h-screen items-center overflow-hidden py-16 md:py-20">
           <div className="absolute inset-0">
             <img
-              src="https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1200&q=80"
-              alt="Gaming setup background"
+              src={images.rulebookBg}
+              alt=""
               className="h-full w-full object-cover"
+              aria-hidden="true"
             />
             <div className="absolute inset-0 bg-black/70" />
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(233,168,74,0.14),transparent_62%)]" />
@@ -659,7 +695,60 @@ function normalizeBreakdown(value) {
 
 function TournamentInfo({ event, message }) {
   const tournament = event?.tournament;
-  const announcements = normalizeAnnouncements(tournament?.announcements);
+  const [announcementPage, setAnnouncementPage] = useState(0);
+
+  const announcementEntries = useMemo(() => {
+    const list = parseAnnouncementEntries(tournament?.announcements).filter((e) => e.body.trim());
+    const rank = (postedAt) => {
+      if (!postedAt) return Number.NEGATIVE_INFINITY;
+      const t = new Date(postedAt).getTime();
+      return Number.isFinite(t) ? t : Number.NEGATIVE_INFINITY;
+    };
+    const withMeta = list.map((entry, origIdx) => ({ entry, origIdx }));
+    /** #1 = oldest by posted time; undated items use save order (first in list = older). */
+    const chronology = [...withMeta].sort((a, b) => {
+      const diff = rank(a.entry.postedAt) - rank(b.entry.postedAt);
+      if (diff !== 0) return diff;
+      return a.origIdx - b.origIdx;
+    });
+    const creationNumberByOrigIdx = new Map();
+    chronology.forEach((item, i) => {
+      creationNumberByOrigIdx.set(item.origIdx, i + 1);
+    });
+    /** Newest first for readers. */
+    const display = [...withMeta].sort((a, b) => {
+      const diff = rank(b.entry.postedAt) - rank(a.entry.postedAt);
+      if (diff !== 0) return diff;
+      return b.origIdx - a.origIdx;
+    });
+    return display.map((item) => ({
+      ...item.entry,
+      creationNumber: creationNumberByOrigIdx.get(item.origIdx),
+      origIdx: item.origIdx,
+    }));
+  }, [tournament?.announcements]);
+
+  const announcementsFingerprint = useMemo(() => JSON.stringify(tournament?.announcements ?? null), [tournament?.announcements]);
+
+  useEffect(() => {
+    setAnnouncementPage(0);
+  }, [announcementsFingerprint]);
+
+  const displayAnnouncementRows = announcementEntries.length
+    ? announcementEntries
+    : [{ body: "Announcements will appear here.", postedAt: null, creationNumber: 1, origIdx: -1 }];
+
+  const announcementPageCount = Math.max(1, Math.ceil(displayAnnouncementRows.length / ANNOUNCEMENTS_PAGE_SIZE));
+
+  useEffect(() => {
+    setAnnouncementPage((p) => Math.min(Math.max(0, p), announcementPageCount - 1));
+  }, [announcementPageCount]);
+
+  const safeAnnouncementPage = Math.min(announcementPage, announcementPageCount - 1);
+  const pagedAnnouncements = displayAnnouncementRows.slice(
+    safeAnnouncementPage * ANNOUNCEMENTS_PAGE_SIZE,
+    safeAnnouncementPage * ANNOUNCEMENTS_PAGE_SIZE + ANNOUNCEMENTS_PAGE_SIZE,
+  );
   const prizeBreakdown = normalizeBreakdown(tournament?.prize_pool_breakdown);
   const tournamentMode = tournament?.visibility_mode !== "demo";
   const groupedStandings = event?.groupedStandings || [];
@@ -667,12 +756,14 @@ function TournamentInfo({ event, message }) {
   const teams = event?.teams || [];
   return (
     <div className="space-y-6">
-      {message ? <p className="rounded-md border border-border bg-card p-2 text-sm text-secondary">{message}</p> : null}
+      {message ? (
+        <p className="rounded-md border border-border bg-card/90 p-2 text-sm text-secondary shadow-sm backdrop-blur-sm">{message}</p>
+      ) : null}
 
       <section className="relative left-1/2 flex min-h-[60vh] w-screen -translate-x-1/2 items-center overflow-hidden border-y border-border bg-card px-4 py-10 shadow-2xl sm:px-6">
         <img
           className="absolute inset-0 h-full w-full object-cover opacity-35"
-          src="https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1800&q=80"
+          src={images.tournamentHero}
           alt=""
           aria-hidden="true"
         />
@@ -681,9 +772,10 @@ function TournamentInfo({ event, message }) {
           <div>
             <p className="text-xs uppercase tracking-[0.25em] text-secondary">Tournament hub</p>
             <h2 className="mt-3 font-serif text-4xl font-semibold tracking-tight text-foreground md:text-6xl">{tournament?.name || SITE_BRAND_LINE}</h2>
-            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base md:leading-relaxed">
-              {tournament?.description || "Tournament details will appear here once admins publish the setup. Check Discord for live communications."}
-            </p>
+            <TournamentDescriptionProse
+              description={tournament?.description}
+              className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base md:leading-relaxed"
+            />
           </div>
           <div className="rounded-xl border border-primary/20 bg-card/80 p-4 shadow-lg backdrop-blur ring-1 ring-white/[0.04]">
             <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">Tournament starts</p>
@@ -695,71 +787,125 @@ function TournamentInfo({ event, message }) {
         </div>
       </section>
 
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Format" value={`${getFormatName(tournament?.format)} ${tournament?.team_count || "TBA"} Teams`} />
-        <Metric label="Registration fee" value={tournament?.entry_fee || "TBA"} />
-        <Metric label="Prize pool" value={tournament?.prize_pool || "TBA"} />
-        <Metric label="Registration closes" value={formatDate(tournament?.registration_deadline)} />
-      </section>
-
-      <section className="rounded-xl border border-border bg-card p-4">
-        <h3 className="font-serif text-xl font-semibold tracking-tight text-foreground">Prize Pool Breakdown</h3>
-        <div className="mt-3 grid gap-2 md:grid-cols-2">
-          {(prizeBreakdown.length ? prizeBreakdown : [{ label: "Prize breakdown", amount: "Breakdown will be announced soon." }]).map((item, index) => (
-            <div key={`${item.label || item}-${index}`} className="rounded-md border border-border bg-background p-3 text-sm">
-              <p className="text-xs uppercase tracking-wider text-secondary">{item.label || `${index + 1}`}</p>
-              <p className="mt-1 font-serif text-lg text-primary">{item.amount || "TBA"}</p>
-            </div>
-          ))}
+      <div className="relative left-1/2 w-screen -translate-x-1/2">
+        <div className="pointer-events-none absolute inset-0 z-0 min-h-full" aria-hidden="true">
+          <img alt="" className="h-full w-full min-h-full object-cover" src={images.tournamentPageBg} />
+          <div className="absolute inset-0 bg-gradient-to-b from-background/88 via-background/76 to-background/86" />
         </div>
-      </section>
+        <div className="relative z-10 mx-auto max-w-6xl space-y-6 px-4 py-8 pb-2">
+          <section className="rounded-xl border border-border bg-card/85 p-4 shadow-lg backdrop-blur-md">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <Metric label="Format" value={`${getFormatName(tournament?.format)} ${tournament?.team_count || "TBA"} Teams`} />
+              <Metric label="Registration fee" value={tournament?.entry_fee || "TBA"} />
+              <Metric label="Prize pool" value={tournament?.prize_pool || "TBA"} />
+              <Metric label="Registration closes" value={formatDate(tournament?.registration_deadline)} />
+            </div>
+          </section>
 
-      <section className="space-y-3 rounded-xl border border-border bg-card p-4">
-        <h3 className="font-serif text-xl font-semibold tracking-tight text-foreground">Standings</h3>
-        {groupedStandings.length ? (
-          <div className="grid gap-3 lg:grid-cols-2">
-            {groupedStandings.map((group) => (
-              <StandingsTable key={group.id} title={group.label} rows={group.rows} />
-            ))}
-          </div>
-        ) : (
-          <StandingsTable title="Overall standings" rows={standings} />
-        )}
-      </section>
+          <section className="relative overflow-hidden rounded-2xl border-2 border-primary/45 bg-card/90 p-5 shadow-2xl shadow-primary/10 ring-1 ring-primary/15 backdrop-blur-md sm:p-8">
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#c9782e] via-secondary to-[#1a6b5c]"
+              aria-hidden="true"
+            />
+            <div className="mb-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-secondary">Official updates</p>
+              <h3 className="mt-1 font-serif text-2xl font-semibold tracking-tight text-foreground sm:text-3xl md:text-4xl">Announcements</h3>
+              <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-foreground/90 sm:text-base">
+                Read these first — schedule changes, rules, and tournament news are posted here.
+              </p>
+            </div>
+            <div className="space-y-4">
+              {pagedAnnouncements.map((entry, i) => (
+                <article
+                  key={`announcement-${entry.origIdx}-${entry.creationNumber}-${i}`}
+                  className="rounded-xl border border-border bg-background/95 p-5 shadow-md backdrop-blur-sm sm:p-6"
+                >
+                  <p className="text-[11px] font-bold uppercase leading-snug tracking-[0.12em] text-primary sm:text-xs sm:tracking-[0.16em]">
+                    BPC LEAGUE ANNOUNCEMENT #{entry.creationNumber}{" "}
+                    <span className="font-semibold tracking-wide text-foreground">{formatAnnouncementPostedAt(entry.postedAt)}</span>
+                  </p>
+                  <p className="mt-3 text-base font-medium leading-relaxed text-foreground sm:text-lg sm:leading-relaxed">{entry.body}</p>
+                </article>
+              ))}
+            </div>
+            {announcementPageCount > 1 ? (
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-5">
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  disabled={safeAnnouncementPage <= 0}
+                  onClick={() => setAnnouncementPage((p) => Math.max(0, p - 1))}
+                >
+                  Previous
+                </button>
+                <p className="text-sm text-muted-foreground">
+                  Page <span className="font-medium text-foreground">{safeAnnouncementPage + 1}</span> of{" "}
+                  <span className="font-medium text-foreground">{announcementPageCount}</span>
+                  <span className="mx-1 text-muted-foreground/80">·</span>
+                  {displayAnnouncementRows.length} update{displayAnnouncementRows.length === 1 ? "" : "s"}
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  disabled={safeAnnouncementPage >= announcementPageCount - 1}
+                  onClick={() => setAnnouncementPage((p) => Math.min(announcementPageCount - 1, p + 1))}
+                >
+                  Next
+                </button>
+              </div>
+            ) : null}
+          </section>
 
-      <section className="space-y-3 rounded-xl border border-border bg-card p-4">
-        <h3 className="font-serif text-xl font-semibold tracking-tight text-foreground">Announcements</h3>
-        {(announcements.length ? announcements : ["Announcements will appear here."]).map((item, index) => (
-          <article key={`${item}-${index}`} className="rounded-xl border border-border bg-background p-4">
-            <p className="text-xs uppercase tracking-wider text-secondary">Update {index + 1}</p>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">{item}</p>
-          </article>
-        ))}
-      </section>
-
-      {tournamentMode && teams.length ? (
-        <section className="space-y-3 rounded-xl border border-border bg-card p-4">
-          <h3 className="font-serif text-xl font-semibold tracking-tight text-foreground">Teams</h3>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {teams.map((team) => (
-              <article key={team.id || team.name} className="overflow-hidden rounded-xl border border-border bg-background">
-                <div className="border-b border-border bg-card px-4 py-3">
-                  <h4 className="font-serif text-xl font-semibold tracking-tight text-foreground">{team.name}</h4>
-                  <p className="text-xs text-secondary">{team.captain ? `Captain: ${team.captain}` : "Captain TBA"}</p>
+          <section className="rounded-xl border border-border bg-card/85 p-4 shadow-lg backdrop-blur-md">
+            <h3 className="font-serif text-xl font-semibold tracking-tight text-foreground">Prize Pool Breakdown</h3>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {(prizeBreakdown.length ? prizeBreakdown : [{ label: "Prize breakdown", amount: "Breakdown will be announced soon." }]).map((item, index) => (
+                <div key={`${item.label || item}-${index}`} className="rounded-md border border-border bg-background/90 p-3 text-sm shadow-sm backdrop-blur-sm">
+                  <p className="text-xs uppercase tracking-wider text-secondary">{item.label || `${index + 1}`}</p>
+                  <p className="mt-1 font-serif text-lg text-primary">{item.amount || "TBA"}</p>
                 </div>
-                <div className="divide-y divide-border">
-                  {(team.players?.length ? team.players : [{ name: "Roster TBA", roles: [] }]).map((player) => (
-                    <div key={player.id || player.name} className="grid grid-cols-[1fr_auto] gap-2 px-4 py-2 text-sm">
-                      <span className="font-medium">{player.name}</span>
-                      <span className="text-xs text-muted-foreground">{Array.isArray(player.roles) ? player.roles.join(", ") : player.role || "Player"}</span>
+              ))}
+            </div>
+          </section>
+
+          <section className="space-y-3 rounded-xl border border-border bg-card/85 p-4 shadow-lg backdrop-blur-md">
+            <h3 className="font-serif text-xl font-semibold tracking-tight text-foreground">Standings</h3>
+            {groupedStandings.length ? (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {groupedStandings.map((group) => (
+                  <StandingsTable key={group.id} title={group.label} rows={group.rows} />
+                ))}
+              </div>
+            ) : (
+              <StandingsTable title="Overall standings" rows={standings} />
+            )}
+          </section>
+
+          {tournamentMode && teams.length ? (
+            <section className="space-y-3 rounded-xl border border-border bg-card/85 p-4 shadow-lg backdrop-blur-md">
+              <h3 className="font-serif text-xl font-semibold tracking-tight text-foreground">Teams</h3>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {teams.map((team) => (
+                  <article key={team.id || team.name} className="overflow-hidden rounded-xl border border-border bg-background/90 shadow-sm backdrop-blur-sm">
+                    <div className="border-b border-border bg-card/80 px-4 py-3 backdrop-blur-sm">
+                      <h4 className="font-serif text-xl font-semibold tracking-tight text-foreground">{team.name}</h4>
+                      <p className="text-xs text-secondary">{team.captain ? `Captain: ${team.captain}` : "Captain TBA"}</p>
                     </div>
-                  ))}
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-      ) : null}
+                    <div className="divide-y divide-border">
+                      {(team.players?.length ? team.players : [{ name: "Roster TBA", roles: [] }]).map((player) => (
+                        <div key={player.id || player.name} className="grid grid-cols-[1fr_auto] gap-2 px-4 py-2 text-sm">
+                          <span className="font-medium">{player.name}</span>
+                          <span className="text-xs text-muted-foreground">{Array.isArray(player.roles) ? player.roles.join(", ") : player.role || "Player"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }
@@ -806,9 +952,9 @@ function PublicSchedule({ event, message }) {
   const sortedSchedule = [...(event?.schedule || [])].sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
   return (
     <div className="space-y-4">
-      {message ? <p className="rounded-md border border-border bg-card p-2 text-sm text-secondary">{message}</p> : null}
-      <section className="rounded-lg border border-border bg-card p-4">
-        <h2 className="font-serif text-2xl">Bracket & Schedule</h2>
+      {message ? <p className="rounded-md border border-border bg-card/90 p-2 text-sm text-secondary shadow-sm backdrop-blur-sm">{message}</p> : null}
+      <section className="rounded-lg border border-border bg-card/85 p-4 shadow-xl backdrop-blur-md sm:p-6">
+        <h2 className="font-serif text-2xl text-foreground">Bracket & Schedule</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           {event?.tournament?.visibility_mode === "demo"
             ? "Demo mode is active. Brackets are previews and real team names unlock when tournament mode begins."
@@ -816,7 +962,7 @@ function PublicSchedule({ event, message }) {
         </p>
       </section>
       {(event?.groupedStandings || []).length ? (
-        <section className="space-y-3 rounded-lg border border-border bg-card p-4">
+        <section className="space-y-3 rounded-lg border border-border bg-card/85 p-4 shadow-lg backdrop-blur-md">
           <h3 className="font-serif text-lg">Group standings</h3>
           <div className="grid gap-3 lg:grid-cols-2">
             {event.groupedStandings.map((group) => (
@@ -830,7 +976,7 @@ function PublicSchedule({ event, message }) {
           const matches = groupedMatches[tab.id] || [];
           if (!matches.length) return null;
           return (
-            <section key={tab.id} className="space-y-3 rounded-lg border border-border bg-card p-4">
+            <section key={tab.id} className="space-y-3 rounded-lg border border-border bg-card/85 p-4 shadow-lg backdrop-blur-md">
               <div>
                 <h3 className="font-serif text-xl">{tab.label}</h3>
                 <p className="text-sm text-muted-foreground">Bracket progression for this stage.</p>
@@ -840,7 +986,7 @@ function PublicSchedule({ event, message }) {
           );
         })}
       </div>
-      <section className="space-y-2 rounded-lg border border-border bg-card p-4">
+      <section className="space-y-2 rounded-lg border border-border bg-card/85 p-4 shadow-lg backdrop-blur-md">
         <h3 className="font-serif text-lg">Scheduled matches</h3>
         {sortedSchedule.map((slot) => {
           const match = event?.matches?.find((entry) => entry.id === slot.matchId);
@@ -985,7 +1131,7 @@ function CookiePolicyPage() {
 
 function GeneralRulesPage() {
   return (
-    <section className="space-y-4 rounded-2xl border border-border bg-card p-4 sm:p-6">
+    <section className="space-y-4 rounded-2xl border border-border bg-card/85 p-4 shadow-xl backdrop-blur-md sm:p-6">
       <div>
         <p className="text-xs uppercase tracking-widest text-secondary">{SITE_BRAND_SHORT}</p>
         <h2 className="font-serif text-3xl font-semibold tracking-tight text-foreground">General Rules & Player Conduct</h2>
@@ -994,7 +1140,7 @@ function GeneralRulesPage() {
         </p>
       </div>
       {PLAYER_RULES_SECTIONS.map(([title, body]) => (
-        <div key={title} className="rounded-lg border border-border bg-background p-4">
+        <div key={title} className="rounded-lg border border-border bg-background/90 p-4 shadow-sm backdrop-blur-sm">
           <h3 className="font-serif text-lg font-medium text-foreground">{title}</h3>
           <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{body}</p>
         </div>
@@ -1494,7 +1640,7 @@ function RegistrationPage({ event, message, setMessage }) {
   const showPaymentTabOtpHint = regTab === "payment" && step === "otp";
 
   return (
-    <div className="space-y-4 rounded-lg border border-border bg-muted/50 p-4 shadow-xl">
+    <div className="space-y-4 rounded-lg border border-border bg-card/85 p-4 shadow-xl backdrop-blur-md sm:p-5">
       <RegistrationTermsModal
         open={showTerms}
         busy={busy}

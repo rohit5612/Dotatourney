@@ -396,12 +396,26 @@ export function SetupPage({
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
-        <textarea
-          className="min-h-28 w-full rounded-md border border-input bg-background p-2 md:col-span-2"
-          value={setup.description || ""}
-          onChange={(event) => setSetup((prev) => ({ ...prev, description: event.target.value }))}
-          placeholder="Public tournament description"
-        />
+        <div className="md:col-span-2">
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground">Public overview</span>
+          </div>
+          <textarea
+            className="min-h-28 w-full rounded-md border border-input bg-background p-2"
+            value={setup.description || ""}
+            onChange={(event) => setSetup((prev) => ({ ...prev, description: event.target.value }))}
+            placeholder="Short tournament summary for the home page and tournament hub (plain text or simple HTML)"
+          />
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            <span className="font-medium text-foreground">HTML:</span> Optional tags{" "}
+            <code className="rounded bg-background px-1">&lt;p&gt;</code>, <code className="rounded bg-background px-1">&lt;br&gt;</code>,{" "}
+            <code className="rounded bg-background px-1">&lt;strong&gt;</code>/<code className="rounded bg-background px-1">&lt;b&gt;</code>,{" "}
+            <code className="rounded bg-background px-1">&lt;em&gt;</code>/<code className="rounded bg-background px-1">&lt;i&gt;</code>,{" "}
+            <code className="rounded bg-background px-1">&lt;u&gt;</code>, <code className="rounded bg-background px-1">&lt;a href&gt;</code>,{" "}
+            <code className="rounded bg-background px-1">&lt;ul&gt;</code>/<code className="rounded bg-background px-1">&lt;ol&gt;</code>/<code className="rounded bg-background px-1">&lt;li&gt;</code>.
+            Blank lines in plain text become line breaks. Other markup is stripped on the public site.
+          </p>
+        </div>
         <div className="md:col-span-2">
           <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs uppercase tracking-wider text-muted-foreground">Rule book</span>

@@ -1,29 +1,23 @@
 import { useState } from "react";
+import { toDatetimeLocalValue } from "../utils/datetime";
 
-function normalizeAnnouncements(value) {
-  if (Array.isArray(value)) return value;
-  if (typeof value === "string") {
-    return value
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-  }
-  if (value && typeof value === "object") {
-    return Object.values(value)
-      .map((item) => String(item || "").trim())
-      .filter(Boolean);
-  }
-  return [];
+function ensureRows(announcements) {
+  if (!Array.isArray(announcements)) return [];
+  return announcements.map((item) =>
+    item && typeof item === "object" && "body" in item
+      ? { body: String(item.body ?? ""), postedAt: String(item.postedAt ?? "") }
+      : { body: String(item ?? ""), postedAt: "" },
+  );
 }
 
 export function AnnouncementsPage({ setup, setSetup, saveTournament }) {
   const [isSaving, setIsSaving] = useState(false);
-  const announcements = normalizeAnnouncements(setup.announcements);
+  const announcements = ensureRows(setup.announcements);
 
-  function updateAnnouncement(index, value) {
+  function updateAnnouncement(index, patch) {
     setSetup((prev) => {
-      const next = normalizeAnnouncements(prev.announcements);
-      next[index] = value;
+      const next = ensureRows(prev.announcements);
+      next[index] = { ...next[index], ...patch };
       return { ...prev, announcements: next };
     });
   }
@@ -31,7 +25,10 @@ export function AnnouncementsPage({ setup, setSetup, saveTournament }) {
   function addAnnouncement() {
     setSetup((prev) => ({
       ...prev,
-      announcements: [...normalizeAnnouncements(prev.announcements), ""],
+      announcements: [
+        ...ensureRows(prev.announcements),
+        { body: "", postedAt: toDatetimeLocalValue(new Date()) },
+      ],
     }));
   }
 
@@ -40,7 +37,7 @@ export function AnnouncementsPage({ setup, setSetup, saveTournament }) {
     if (!confirmed) return;
     setSetup((prev) => ({
       ...prev,
-      announcements: normalizeAnnouncements(prev.announcements).filter((_, itemIndex) => itemIndex !== index),
+      announcements: ensureRows(prev.announcements).filter((_, itemIndex) => itemIndex !== index),
     }));
   }
 
@@ -60,7 +57,7 @@ export function AnnouncementsPage({ setup, setSetup, saveTournament }) {
           <div>
             <h2 className="font-serif text-lg tracking-wide">Announcements</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Add, edit, and remove tournament update posts. These appear on the public Tournament page.
+              Add, edit, and remove tournament updates. Set date and time for each post (shown on the public Tournament page).
             </p>
           </div>
           <button type="button" className="btn btn-primary" onClick={addAnnouncement}>
@@ -75,17 +72,26 @@ export function AnnouncementsPage({ setup, setSetup, saveTournament }) {
             <article key={index} className="space-y-3 rounded-xl border border-border bg-card p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-xs uppercase tracking-wider text-secondary">Update {index + 1}</p>
-                  <h3 className="font-serif text-xl">Announcement post</h3>
+                  <p className="text-xs uppercase tracking-wider text-secondary">Post {index + 1}</p>
+                  <h3 className="font-serif text-xl">Announcement</h3>
                 </div>
                 <button type="button" className="btn btn-destructive-outline btn-sm" onClick={() => removeAnnouncement(index)}>
                   Remove
                 </button>
               </div>
+              <label className="block text-sm">
+                <span className="text-muted-foreground">Posted (date &amp; time)</span>
+                <input
+                  type="datetime-local"
+                  className="mt-1 w-full max-w-md rounded-md border border-input bg-background p-2 text-sm"
+                  value={item.postedAt}
+                  onChange={(event) => updateAnnouncement(index, { postedAt: event.target.value })}
+                />
+              </label>
               <textarea
                 className="min-h-32 w-full rounded-md border border-input bg-background p-3 text-sm leading-6"
-                value={item}
-                onChange={(event) => updateAnnouncement(index, event.target.value)}
+                value={item.body}
+                onChange={(event) => updateAnnouncement(index, { body: event.target.value })}
                 placeholder="Write the announcement update..."
               />
             </article>

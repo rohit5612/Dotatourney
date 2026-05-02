@@ -59,7 +59,18 @@ const tournamentSchema = z.object({
   registrationDeadline: z.string().nullable().optional(),
   discordUrl: z.string().optional().default(""),
   rulebook: z.string().optional().default(""),
-  announcements: z.array(z.string()).optional().default([]),
+  announcements: z
+    .array(
+      z.union([
+        z.string(),
+        z.object({
+          body: z.string(),
+          postedAt: z.union([z.string(), z.null()]).optional(),
+        }),
+      ]),
+    )
+    .optional()
+    .default([]),
   visibilityMode: z.enum(["demo", "tournament"]).optional().default("demo"),
   bracketActive: z.boolean().optional().default(false),
   status: z.enum(["draft", "approved", "published", "archived"]).optional().default("draft"),

@@ -78,13 +78,17 @@ async function sendMail({ to, subject, text, html }) {
   const transport = getTransporter();
   const from = env.emailFrom || env.emailUser;
   const prefix = env.emailSubjectPrefix ? `${env.emailSubjectPrefix} ` : "";
-  await transport.sendMail({
+  const options = {
     from,
     to,
     subject: `${prefix}${subject}`.trim(),
     text,
     html,
-  });
+  };
+  if (env.emailReplyTo) {
+    options.replyTo = env.emailReplyTo;
+  }
+  await transport.sendMail(options);
 }
 
 /**

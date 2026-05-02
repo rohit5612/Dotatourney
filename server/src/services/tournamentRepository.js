@@ -92,7 +92,18 @@ export function applyPublishedSnapshot(data) {
   const { published_snapshot: _snap, ...base } = t;
   if (snap && typeof snap === "object" && !Array.isArray(snap)) {
     const { visibility_mode: _frozenVis, ...snapRest } = snap;
-    return { ...data, tournament: { ...base, ...snapRest } };
+    /** Always use live copy for fields ops tweak often without re-publish. */
+    const liveAnnouncements = base.announcements;
+    const liveDescription = base.description;
+    return {
+      ...data,
+      tournament: {
+        ...base,
+        ...snapRest,
+        ...(liveAnnouncements !== undefined && liveAnnouncements !== null ? { announcements: liveAnnouncements } : {}),
+        description: liveDescription,
+      },
+    };
   }
   return { ...data, tournament: base };
 }

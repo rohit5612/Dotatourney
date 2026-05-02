@@ -48,6 +48,8 @@ export const env = {
   emailUser,
   emailPass,
   emailFrom: process.env.EMAIL_FROM?.trim() || "",
+  /** Optional; e.g. support@yourdomain.com — improves deliverability vs noreply-only. */
+  emailReplyTo: process.env.EMAIL_REPLY_TO?.trim() || "",
   emailSubjectPrefix: process.env.EMAIL_SUBJECT_PREFIX?.trim() || "",
   /** Local/dev only: create invite but do not send email (still returns link in JSON). */
   emailSkipSend: process.env.EMAIL_SKIP_SEND === "true",
