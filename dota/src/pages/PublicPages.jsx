@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { HiOutlineBolt, HiOutlineChatBubbleLeftRight, HiOutlineTrophy } from "react-icons/hi2";
 import { AppFooter } from "../components/AppFooter";
 import { BracketDiagram } from "../components/BracketDiagram";
 import { formatMatchRoundSummary, stageRoundStructure } from "../components/bracket/bracketLayout.js";
@@ -25,7 +26,56 @@ const discordInviteUrl = "https://discord.gg/NmC2Xqnb";
 /** Discord brand blurple — used for the registration page CTA only. */
 const REGISTRATION_DISCORD_BTN_CLASS =
   "btn inline-flex items-center justify-center gap-2 border-transparent bg-[#5865F2] text-white shadow-md hover:bg-[#4752C4] hover:brightness-100 focus-visible:ring-2 focus-visible:ring-[#5865F2] focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+const LANDING_JOURNEY_ICONS = {
+  hub: HiOutlineChatBubbleLeftRight,
+  blast: HiOutlineBolt,
+  trophy: HiOutlineTrophy,
+};
+
+/** Primary registration flow CTA — red, full-width on small screens, prominent. */
+const REGISTRATION_CONTINUE_BTN_CLASS =
+  "btn btn-destructive inline-flex min-h-12 items-center justify-center gap-2 px-8 text-base font-semibold shadow-lg hover:shadow-xl";
 const publicPaths = ["/", "/tournament", "/schedule", "/register", "/rules", "/privacy", "/cookies"];
+
+/** @param {Record<string, unknown> | null | undefined} tournament */
+function getLandingJourneySteps(tournament) {
+  const formatName = getFormatName(tournament?.format);
+  return [
+    {
+      kicker: "01",
+      icon: "hub",
+      iconClassName: "text-secondary",
+      title: "Register & Discord",
+      summary: "Sign up on the site; captains draft the teams and the whole week runs through Discord.",
+      bullets: [
+        "Lock in registration and payment so you keep your player spot.",
+        "Be in Discord, mic on — drafts, pairings, and lobbies are called there.",
+      ],
+    },
+    {
+      kicker: "02",
+      icon: "blast",
+      iconClassName: "text-primary",
+      title: "Captains Mode & BLAST rhythm",
+      summary: `Matches are Captains Mode. The path is BLAST-inspired — play-ins and a last-chance stage so more people get games before the main ${formatName} bracket.`,
+      bullets: [
+        "Captains draft line-ups; everyone plays on verified mains.",
+        "Early losses are not always final: play-ins / last-chance rounds give the field another swing.",
+      ],
+    },
+    {
+      kicker: "03",
+      icon: "trophy",
+      iconClassName: "text-accent",
+      title: "Series wins",
+      summary: "You move through the event by taking series off the other squad.",
+      bullets: [
+        "Bo1, Bo3, or longer — each round’s length is whatever the rulebook and schedule say.",
+        "Stack wins toward grand finals; admins handle forfeits and disputes so rounds stay on rails.",
+      ],
+    },
+  ];
+}
 
 /** Public tournament announcements list: page size before pagination. */
 const ANNOUNCEMENTS_PAGE_SIZE = 5;
@@ -41,6 +91,8 @@ const images = {
   generalRulesBg: "/images/rules.jpeg",
   /** `/tournament` — content below the hero band */
   tournamentPageBg: "/images/tournamentpage.png",
+  /** Landing page — “Registration to victory” journey cards band */
+  journeySectionBg: "/images/cards.jpg",
 };
 
 function formatDate(value) {
@@ -468,6 +520,11 @@ function LandingPage({ event, navigate, message }) {
   const tournament = event?.tournament;
   const discordUrl = tournament?.discord_url || discordInviteUrl;
   const formatLabel = `${getFormatName(tournament?.format)} ${tournament?.team_count || "TBA"} Teams`;
+
+  function scrollToExplore() {
+    document.getElementById("landing-explore")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   return (
     <>
       {message ? <p className="mx-auto mt-4 max-w-6xl rounded-md border border-border bg-card p-2 text-sm text-secondary">{message}</p> : null}
@@ -505,10 +562,32 @@ function LandingPage({ event, navigate, message }) {
             </a>
           </div>
         </div>
+        <div className="pointer-events-auto absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 sm:bottom-8">
+          <button
+            type="button"
+            onClick={scrollToExplore}
+            className="group flex flex-col items-center gap-1 rounded-lg px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/75 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-transparent sm:text-[11px] sm:tracking-[0.24em]"
+            aria-label="Scroll to explore tournament details"
+          >
+            <span>Scroll to explore</span>
+            <svg
+              className="size-5 text-secondary motion-safe:animate-bounce group-hover:text-secondary sm:size-6"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+        </div>
       </section>
 
       <RevealSection>
-        <section className="mx-auto max-w-6xl space-y-4 px-4">
+        <section id="landing-explore" className="mx-auto max-w-6xl scroll-mt-20 space-y-4 px-4">
           <div className="mx-auto max-w-xl rounded-2xl border border-primary/20 bg-card/95 p-5 text-center shadow-xl backdrop-blur-sm">
             <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">Tournament starts</p>
             <p className="mt-2 font-serif text-3xl font-semibold tracking-tight text-foreground">{formatDate(tournament?.start_date || defaultTournamentStart)}</p>
@@ -548,7 +627,81 @@ function LandingPage({ event, navigate, message }) {
       </RevealSection>
 
       <RevealSection>
-        <section className="relative flex min-h-screen items-center overflow-hidden py-16 md:py-20">
+        <div className="relative">
+          <div className="pointer-events-none absolute inset-0 z-0 min-h-full" aria-hidden="true">
+            <img
+              src={images.journeySectionBg}
+              alt=""
+              className="h-full min-h-[28rem] w-full object-cover sm:min-h-[32rem]"
+            />
+            <div className="absolute inset-0 bg-background/80 dark:bg-background/75" />
+            <div className="absolute inset-0 bg-gradient-to-b from-background via-background/65 to-background dark:from-background dark:via-background/55 dark:to-background" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_90%_60%_at_50%_30%,rgba(180,83,9,0.08),transparent_55%)] dark:bg-[radial-gradient(ellipse_90%_60%_at_50%_30%,rgba(233,168,74,0.07),transparent_52%)]" />
+          </div>
+          <section className="relative z-10 mx-auto max-w-6xl px-4 py-10 md:py-16" aria-labelledby="landing-journey-heading">
+            <div className="mb-10 text-center md:mb-14">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-secondary sm:tracking-[0.28em]">The path</p>
+              <h2
+                id="landing-journey-heading"
+                className="mt-2 font-serif text-2xl font-semibold tracking-tight text-foreground sm:text-3xl md:text-4xl"
+              >
+                Registration to victory
+              </h2>
+              <p className="mx-auto mt-3 max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground md:text-base">
+                Three steps — hub, competitive shape, then closing out your series.
+              </p>
+            </div>
+            <div className="mx-auto max-w-5xl space-y-12 md:space-y-16 lg:space-y-20">
+            {getLandingJourneySteps(tournament).map((item, i) => {
+              const JourneyIcon = LANDING_JOURNEY_ICONS[item.icon];
+              return (
+              <div key={item.kicker} className="flex w-full">
+                <article
+                  style={{ animationDelay: `${i * 0.85}s` }}
+                  className={`landing-journey-card w-full max-w-full rounded-3xl border-2 border-primary/20 bg-card/90 p-8 shadow-2xl backdrop-blur-md ring-1 ring-white/[0.05] dark:ring-white/[0.08] md:p-10 lg:max-w-3xl lg:p-12 ${
+                    i % 2 === 0 ? "mr-auto" : "ml-auto"
+                  }`}
+                >
+                  <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:gap-6">
+                    <div
+                      className="flex size-14 shrink-0 items-center justify-center rounded-2xl border border-border/80 bg-background/80 shadow-inner sm:size-16"
+                      aria-hidden
+                    >
+                      {JourneyIcon ? (
+                        <JourneyIcon className={`size-7 sm:size-8 ${item.iconClassName}`} strokeWidth={1.75} />
+                      ) : null}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-mono text-[11px] font-semibold tabular-nums tracking-[0.35em] text-primary md:text-xs">{item.kicker}</p>
+                      <h3 className="mt-2 font-serif text-2xl font-semibold tracking-tight text-foreground md:text-3xl">{item.title}</h3>
+                      <p className="mt-3 text-pretty text-base font-medium leading-snug text-foreground/90 md:text-lg">{item.summary}</p>
+                      <ul className="mt-5 space-y-2.5 border-t border-border/60 pt-5 md:mt-6 md:space-y-3 md:pt-6">
+                        {item.bullets.map((line, bi) => (
+                          <li
+                            key={`${item.kicker}-${bi}`}
+                            className="flex gap-3 text-pretty text-sm leading-relaxed text-muted-foreground md:text-base md:leading-relaxed"
+                          >
+                            <span className="mt-2.5 size-1.5 shrink-0 rounded-full bg-secondary md:mt-3" aria-hidden />
+                            <span>{line}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </article>
+              </div>
+              );
+            })}
+          </div>
+        </section>
+        </div>
+      </RevealSection>
+
+      <RevealSection>
+        <section
+          id="landing-tournament-rulebook"
+          className="relative flex min-h-screen scroll-mt-28 items-center overflow-hidden py-16 md:py-20"
+        >
           <div className="absolute inset-0">
             <img
               src={images.rulebookBg}
@@ -1699,7 +1852,7 @@ function RegistrationPage({ event, message, setMessage }) {
   const showPaymentTabOtpHint = regTab === "payment" && step === "otp";
 
   return (
-    <div className="space-y-4 rounded-lg border border-border bg-card/85 p-4 shadow-xl backdrop-blur-md sm:p-5">
+    <div className="space-y-4 rounded-lg border border-border/40 bg-card/58 p-4 shadow-sm backdrop-blur-xl sm:p-5 dark:border-border/35 dark:bg-card/52">
       <RegistrationTermsModal
         open={showTerms}
         busy={busy}
@@ -1741,12 +1894,20 @@ function RegistrationPage({ event, message, setMessage }) {
       </div>
 
       {!resumeLoading ? (
-        <div className="flex gap-1 rounded-lg border border-border bg-background p-1" role="tablist" aria-label="Registration type">
+        <div
+          className="inline-flex max-w-full flex-wrap gap-2 rounded-xl border-2 border-foreground/12 bg-muted/70 p-1.5 shadow-sm dark:border-border dark:bg-muted/50"
+          role="tablist"
+          aria-label="Registration type"
+        >
           <button
             type="button"
             role="tab"
             aria-selected={regTab === "new"}
-            className={`btn btn-sm flex-1 ${regTab === "new" ? "btn-primary" : "btn-outline"}`}
+            className={`shrink-0 rounded-lg px-3 py-2 text-center text-xs font-semibold tracking-tight whitespace-nowrap transition sm:px-4 sm:text-sm ${
+              regTab === "new"
+                ? "bg-primary text-primary-foreground shadow-md ring-2 ring-primary/35 ring-offset-2 ring-offset-background"
+                : "border-2 border-border/80 bg-card text-foreground shadow-sm hover:border-primary/40 hover:bg-background dark:border-border dark:bg-card/90 dark:hover:border-primary/35"
+            }`}
             onClick={() => setRegTab("new")}
           >
             New registration
@@ -1755,7 +1916,11 @@ function RegistrationPage({ event, message, setMessage }) {
             type="button"
             role="tab"
             aria-selected={regTab === "payment"}
-            className={`btn btn-sm flex-1 ${regTab === "payment" ? "btn-primary" : "btn-outline"}`}
+            className={`shrink-0 rounded-lg px-3 py-2 text-center text-xs font-semibold tracking-tight whitespace-nowrap transition sm:px-4 sm:text-sm ${
+              regTab === "payment"
+                ? "bg-primary text-primary-foreground shadow-md ring-2 ring-primary/35 ring-offset-2 ring-offset-background"
+                : "border-2 border-border/80 bg-card text-foreground shadow-sm hover:border-primary/40 hover:bg-background dark:border-border dark:bg-card/90 dark:hover:border-primary/35"
+            }`}
             onClick={() => setRegTab("payment")}
           >
             Complete payment
@@ -1830,11 +1995,13 @@ function RegistrationPage({ event, message, setMessage }) {
                 </button>
               ))}
             </div>
+            <div className="mt-4 flex justify-end">
+              <button type="submit" className={REGISTRATION_CONTINUE_BTN_CLASS} disabled={registrationClosed || busy}>
+                {busy ? <RegistrationButtonSpinner /> : null}
+                {registrationClosed ? "Registration closed" : busy ? "Continuing…" : "Continue"}
+              </button>
+            </div>
           </div>
-          <button type="submit" className="btn btn-primary inline-flex items-center justify-center gap-2" disabled={registrationClosed || busy}>
-            {busy ? <RegistrationButtonSpinner /> : null}
-            {registrationClosed ? "Registration closed" : busy ? "Checking…" : "Continue — accept rules & verify email"}
-          </button>
         </form>
       ) : null}
 
@@ -1845,10 +2012,12 @@ function RegistrationPage({ event, message, setMessage }) {
           </p>
           <Input label="Email" type="email" value={paymentLookupEmail} onChange={setPaymentLookupEmail} required />
           <Input label="Registration ID" value={paymentLookupCode} onChange={setPaymentLookupCode} required />
-          <button type="submit" className="btn btn-primary inline-flex items-center justify-center gap-2" disabled={busy || registrationClosed}>
-            {busy ? <RegistrationButtonSpinner /> : null}
-            {registrationClosed ? "Registration closed" : busy ? "Loading…" : "Continue to payment"}
-          </button>
+          <div className="flex justify-end">
+            <button type="submit" className={REGISTRATION_CONTINUE_BTN_CLASS} disabled={busy || registrationClosed}>
+              {busy ? <RegistrationButtonSpinner /> : null}
+              {registrationClosed ? "Registration closed" : busy ? "Continuing…" : "Continue"}
+            </button>
+          </div>
         </form>
       ) : null}
 
@@ -1869,11 +2038,7 @@ function RegistrationPage({ event, message, setMessage }) {
             </p>
           ) : null}
           <Input label="Verification code" value={otp} onChange={setOtp} required />
-          <div className="flex flex-wrap gap-2">
-            <button type="submit" className="btn btn-primary inline-flex items-center justify-center gap-2" disabled={busy}>
-              {busy ? <RegistrationButtonSpinner /> : null}
-              {busy ? "Verifying…" : "Verify and continue"}
-            </button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <button
               type="button"
               className="btn btn-outline"
@@ -1885,6 +2050,10 @@ function RegistrationPage({ event, message, setMessage }) {
               }}
             >
               Edit details
+            </button>
+            <button type="submit" className={REGISTRATION_CONTINUE_BTN_CLASS} disabled={busy}>
+              {busy ? <RegistrationButtonSpinner /> : null}
+              {busy ? "Continuing…" : "Continue"}
             </button>
           </div>
         </form>
@@ -1981,10 +2150,12 @@ function RegistrationPage({ event, message, setMessage }) {
           {paymentScreenshot ? (
             <img src={paymentScreenshot} alt="Payment screenshot preview" className="max-h-48 rounded-md border border-border object-contain" />
           ) : null}
-          <button type="submit" className="btn btn-primary inline-flex items-center justify-center gap-2" disabled={busy || registrationClosed || !paymentScreenshot}>
-            {busy ? <RegistrationButtonSpinner /> : null}
-            {busy ? "Submitting…" : "Submit for review"}
-          </button>
+          <div className="flex justify-end">
+            <button type="submit" className={REGISTRATION_CONTINUE_BTN_CLASS} disabled={busy || registrationClosed || !paymentScreenshot}>
+              {busy ? <RegistrationButtonSpinner /> : null}
+              {busy ? "Continuing…" : "Continue"}
+            </button>
+          </div>
         </form>
       ) : null}
 
