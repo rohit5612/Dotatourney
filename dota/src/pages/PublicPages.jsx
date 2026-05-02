@@ -1544,7 +1544,7 @@ function RegistrationPage({ event, message, setMessage }) {
     name: "",
     location: "",
     phoneNumber: "",
-    roles: ["Carry"],
+    roles: [],
     mmr: "",
     steamName: "",
     steamProfile: "",
@@ -1590,7 +1590,7 @@ function RegistrationPage({ event, message, setMessage }) {
           mmr: session.mmr != null ? String(session.mmr) : "",
           steamName: session.steamName || "",
           steamProfile: session.steamProfile || "",
-          roles: Array.isArray(session.roles) && session.roles.length ? session.roles : prev.roles,
+          roles: Array.isArray(session.roles) && session.roles.length ? session.roles : [],
         }));
         const st = session.registrationFlowStage;
         if (st === "awaiting_otp") {
@@ -1739,7 +1739,7 @@ function RegistrationPage({ event, message, setMessage }) {
         mmr: session.mmr != null ? String(session.mmr) : "",
         steamName: session.steamName || "",
         steamProfile: session.steamProfile || "",
-        roles: Array.isArray(session.roles) && session.roles.length ? session.roles : prev.roles,
+        roles: Array.isArray(session.roles) && session.roles.length ? session.roles : [],
       }));
       setPublicCode(session.publicCode || code);
       if (st === "submitted") {
@@ -1982,18 +1982,27 @@ function RegistrationPage({ event, message, setMessage }) {
             </p>
           </div>
           <div>
-            <p className="mb-2 text-sm font-medium">Roles</p>
+            <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-3">
+              <span className="text-sm font-medium">Roles</span>
+              <span className="text-xs leading-snug text-muted-foreground sm:max-w-xl">
+                (Select one or more roles to assign to your id.)
+              </span>
+            </div>
             <div className="flex flex-wrap gap-2">
-              {roles.map((role) => (
-                <button
-                  key={role}
-                  type="button"
-                  onClick={() => toggleRole(role)}
-                  className={`btn btn-sm ${form.roles.includes(role) ? "btn-primary" : "btn-outline"}`}
-                >
-                  {role}
-                </button>
-              ))}
+              {roles.map((role) => {
+                const selected = form.roles.includes(role);
+                const breatheHint = form.roles.length === 0;
+                return (
+                  <button
+                    key={role}
+                    type="button"
+                    onClick={() => toggleRole(role)}
+                    className={`btn btn-sm ${selected ? "btn-primary" : "btn-outline"} ${breatheHint ? "registration-role-breathe" : ""}`}
+                  >
+                    {role}
+                  </button>
+                );
+              })}
             </div>
             <div className="mt-4 flex justify-end">
               <button type="submit" className={REGISTRATION_CONTINUE_BTN_CLASS} disabled={registrationClosed || busy}>

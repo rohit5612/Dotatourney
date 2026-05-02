@@ -328,3 +328,25 @@
     animation: none;
   }
 }
+
+@keyframes registration-role-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 40%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--primary) 14%, transparent);
+  }
+}
+
+.registration-role-breathe {
+  border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
+  animation: registration-role-breathe 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .registration-role-breathe {
+    animation: none;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 28%, transparent);
+  }
+}
