@@ -199,7 +199,7 @@ export function SetupPage({
       startDate: "",
       endDate: "",
       registrationDeadline: "",
-      discordUrl: "https://discord.gg/NmC2Xqnb",
+      discordUrl: "https://discord.gg/sV2PhYc6A3",
       rulebook: "",
       announcements: [],
       visibilityMode: "demo",

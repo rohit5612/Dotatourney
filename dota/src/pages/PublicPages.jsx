@@ -22,7 +22,7 @@ const SITE_BRAND_FULL = "Bharat Pro Circuit League";
 const SITE_BRAND_LINE = `${SITE_BRAND_SHORT} — ${SITE_BRAND_FULL}`;
 const tournamentSlug = "bpcl";
 const defaultTournamentStart = "2026-05-22T00:00:00+05:30";
-const discordInviteUrl = "https://discord.gg/NmC2Xqnb";
+const discordInviteUrl = "https://discord.gg/sV2PhYc6A3";
 /** Discord brand blurple — used for the registration page CTA only. */
 const REGISTRATION_DISCORD_BTN_CLASS =
   "btn inline-flex items-center justify-center gap-2 border-transparent bg-[#5865F2] text-white shadow-md hover:bg-[#4752C4] hover:brightness-100 focus-visible:ring-2 focus-visible:ring-[#5865F2] focus-visible:ring-offset-2 focus-visible:ring-offset-background";

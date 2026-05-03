@@ -99,7 +99,7 @@ function fallbackTournament(identifier) {
     start_date: null,
     end_date: null,
     registration_deadline: null,
-    discord_url: "https://discord.gg/NmC2Xqnb",
+    discord_url: "https://discord.gg/sV2PhYc6A3",
     rulebook: "Rules will be published before tournament lock-in.",
     announcements: ["Tournament setup is in progress."],
     visibility_mode: "demo",

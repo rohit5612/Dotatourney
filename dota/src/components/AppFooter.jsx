@@ -90,7 +90,7 @@ export function AppFooter({ navigate, mode = "public" }) {
         <div>
           <div className="text-xs font-medium uppercase tracking-wider text-foreground">Community</div>
           <div className="mt-3 grid gap-2">
-            <a className="w-fit transition hover:text-primary" href="https://discord.gg/NmC2Xqnb" target="_blank" rel="noreferrer">
+            <a className="w-fit transition hover:text-primary" href="https://discord.gg/sV2PhYc6A3" target="_blank" rel="noreferrer">
               Join Discord
             </a>
           </div>
