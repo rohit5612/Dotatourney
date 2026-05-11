@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { HiOutlineBolt, HiOutlineChatBubbleLeftRight, HiOutlineTrophy } from "react-icons/hi2";
 import { AppFooter } from "../components/AppFooter";
+import { PageLoadingSpinner } from "../components/PageLoadingSpinner";
 import { BracketDiagram } from "../components/BracketDiagram";
 import {
   augmentGroupedBracketMatches,
@@ -440,6 +441,7 @@ function EventShell({ path, navigate, children }) {
 export function PublicApp({ path, navigate }) {
   const [event, setEvent] = useState(null);
   const [message, setMessage] = useState("");
+  const [publicBootstrapDone, setPublicBootstrapDone] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -450,6 +452,9 @@ export function PublicApp({ path, navigate }) {
       })
       .catch((error) => {
         if (active) setMessage(error.message);
+      })
+      .finally(() => {
+        if (active) setPublicBootstrapDone(true);
       });
     return () => {
       active = false;
@@ -465,6 +470,10 @@ export function PublicApp({ path, navigate }) {
       navigate("/");
     }
   }, [navigate, path]);
+
+  if (!publicBootstrapDone) {
+    return <PageLoadingSpinner label="Loading event…" />;
+  }
 
   if (path === "/register") {
     return (
@@ -522,6 +531,49 @@ export function PublicApp({ path, navigate }) {
   );
 }
 
+function LandingPageHeroVideo() {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+
+    function tryPlay() {
+      void el.play().catch(() => {});
+    }
+
+    tryPlay();
+    el.addEventListener("canplay", tryPlay);
+    el.addEventListener("loadeddata", tryPlay);
+
+    function onVisibility() {
+      if (document.visibilityState === "visible") tryPlay();
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      el.removeEventListener("canplay", tryPlay);
+      el.removeEventListener("loadeddata", tryPlay);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+
+  return (
+    <video
+      ref={ref}
+      className="absolute inset-0 h-full w-full object-cover"
+      src="/herobg.mp4"
+      autoPlay
+      muted
+      loop
+      playsInline
+      preload="auto"
+      fetchPriority="high"
+      aria-hidden="true"
+    />
+  );
+}
+
 function LandingPage({ event, navigate, message }) {
   const tournament = event?.tournament;
   const discordUrl = tournament?.discord_url || discordInviteUrl;
@@ -535,7 +587,7 @@ function LandingPage({ event, navigate, message }) {
     <>
       {message ? <p className="mx-auto mt-4 max-w-6xl rounded-md border border-border bg-card p-2 text-sm text-secondary">{message}</p> : null}
       <section className="relative flex min-h-[100svh] items-center justify-center overflow-hidden px-4 py-24 md:py-16">
-        <video className="absolute inset-0 h-full w-full object-cover" src="/herobg.mp4" autoPlay muted loop playsInline aria-hidden="true" />
+        <LandingPageHeroVideo />
         <div className="pointer-events-none absolute inset-0 bg-black/50" />
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_100%_75%_at_50%_-10%,rgba(233,168,74,0.2),transparent_55%)]" />
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_55%_70%_at_95%_45%,rgba(94,234,212,0.1),transparent_48%)]" />
