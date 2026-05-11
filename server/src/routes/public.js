@@ -3,6 +3,7 @@ import { z } from "zod";
 import { env } from "../config/env.js";
 import {
   completeRegistrationPayment,
+  countApprovedPlayerRegistrations,
   getPublicRegistrationSession,
   lookupRegistrationFlowStage,
   requestRegistrationOtp,
@@ -126,7 +127,7 @@ function publicMatch(match, visibilityMode) {
   };
 }
 
-function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
+async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
   if (!data) {
     return {
       tournament: fallbackTournament(fallbackIdentifier),
@@ -137,8 +138,11 @@ function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
       standings: [],
       groupedStandings: [],
       isPlaceholder: true,
+      approvedRegistrationCount: 0,
     };
   }
+
+  const approvedRegistrationCount = await countApprovedPlayerRegistrations(data.tournament.id);
 
   const visibilityMode = data.tournament.visibility_mode || "demo";
   const matches = data.matches.map((match) => publicMatch(match, visibilityMode));
@@ -167,6 +171,7 @@ function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
     tabs: stageTabsForFormat(format, { teamCount: data.tournament.team_count }),
     standings: buildStandings(standingsTeams, matches, format),
     groupedStandings: buildGroupedStandings(standingsTeams, matches, format),
+    approvedRegistrationCount,
   };
 }
 
@@ -185,7 +190,7 @@ function assertPublishedOpen(data) {
 
 router.get("/tournament", async (_req, res, next) => {
   try {
-    return res.json(publicPayload(await getPublishedTournament()));
+    return res.json(await publicPayload(await getPublishedTournament()));
   } catch (error) {
     return next(error);
   }
@@ -194,7 +199,7 @@ router.get("/tournament", async (_req, res, next) => {
 router.get("/tournaments/:identifier", async (req, res, next) => {
   try {
     const data = await getPublishedTournamentForPublicRequest(req.params.identifier);
-    return res.json(publicPayload(data, req.params.identifier));
+    return res.json(await publicPayload(data, req.params.identifier));
   } catch (error) {
     return next(error);
   }

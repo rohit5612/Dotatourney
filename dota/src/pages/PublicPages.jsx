@@ -3,7 +3,13 @@ import { createPortal } from "react-dom";
 import { HiOutlineBolt, HiOutlineChatBubbleLeftRight, HiOutlineTrophy } from "react-icons/hi2";
 import { AppFooter } from "../components/AppFooter";
 import { BracketDiagram } from "../components/BracketDiagram";
-import { formatMatchRoundSummary, stageRoundStructure } from "../components/bracket/bracketLayout.js";
+import {
+  augmentGroupedBracketMatches,
+  buildStageTabLabels,
+  formatMatchRoundSummary,
+  normalizedBlastBracketTabs,
+  stageRoundStructure,
+} from "../components/bracket/bracketLayout.js";
 import { ScrollToTopButton } from "../components/ScrollToTopButton";
 import {
   PLAYER_RULES_DISCORD_SECTION_TITLE,
@@ -545,6 +551,11 @@ function LandingPage({ event, navigate, message }) {
             <p className="mx-auto max-w-xl text-pretty text-base leading-relaxed text-muted-foreground sm:max-w-2xl sm:text-lg md:text-xl md:leading-relaxed">
               Assemble your roster, sharpen your strats, and compete in a high-stakes tournament format.
             </p>
+            {event != null ? (
+              <div className="flex justify-center pt-1">
+                <ApprovedRegistrationsHero count={event.approvedRegistrationCount} />
+              </div>
+            ) : null}
             <p className="mx-auto max-w-lg border-t border-border/60 pt-3 text-pretty text-[9px] leading-snug text-muted-foreground/90 sm:text-[10px]">
               {VALVE_DISCLAIMER}
             </p>
@@ -757,6 +768,25 @@ function Metric({ label, value }) {
     <div className="rounded-lg border border-border bg-background p-4">
       <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className="mt-1.5 font-serif text-lg font-medium leading-snug tracking-tight text-foreground">{value}</div>
+    </div>
+  );
+}
+
+/** Live-ish approved player count from the public tournament payload (`approvedRegistrationCount`). */
+function ApprovedRegistrationsHero({ count }) {
+  const n = typeof count === "number" && Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+  const playerLabel = n === 1 ? "player" : "players";
+  return (
+    <div
+      className="inline-flex max-w-full items-center gap-2.5 rounded-full border border-accent/35 bg-[#06060f]/88 px-4 py-2 text-left text-sm shadow-lg backdrop-blur-md ring-1 ring-white/[0.06]"
+      role="status"
+      aria-live="polite"
+      aria-label={`${n} registered ${playerLabel} and counting`}
+    >
+      <span className="hero-approved-dot shrink-0" aria-hidden />
+      <span className="min-w-0 leading-snug text-muted-foreground">
+        <span className="font-semibold tabular-nums text-accent">{n}</span>  {playerLabel} registered and ready to play!
+      </span>
     </div>
   );
 }
@@ -1100,16 +1130,18 @@ function RevealSection({ children }) {
 
 function PublicSchedule({ event, message }) {
   const roundStructureAll = useMemo(() => stageRoundStructure(event?.matches || []), [event?.matches]);
-  const groupedMatches = useMemo(() => {
+  const { groupedMatches, stageTabs, stageLabels } = useMemo(() => {
     const groups = {};
     (event?.matches || []).forEach((match) => {
       if (!groups[match.stageKey]) groups[match.stageKey] = [];
       groups[match.stageKey].push(match);
     });
-    return groups;
+    const augmented = augmentGroupedBracketMatches(groups);
+    const raw = event?.tabs?.length ? event.tabs : Object.keys(augmented).map((id) => ({ id, label: id }));
+    const tabs = normalizedBlastBracketTabs(event?.tournament?.format || "", raw);
+    const labels = buildStageTabLabels(event?.tournament?.format || "", tabs);
+    return { groupedMatches: augmented, stageTabs: tabs, stageLabels: labels };
   }, [event]);
-  const stageTabs = event?.tabs?.length ? event.tabs : Object.keys(groupedMatches).map((id) => ({ id, label: id }));
-  const stageLabels = Object.fromEntries(stageTabs.map((tab) => [tab.id, tab.label]));
   const sortedSchedule = [...(event?.schedule || [])].sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
   return (
     <div className="space-y-4">
@@ -1142,7 +1174,14 @@ function PublicSchedule({ event, message }) {
                 <h3 className="font-serif text-xl">{tab.label}</h3>
                 <p className="text-sm text-muted-foreground">Bracket progression for this stage.</p>
               </div>
-              <BracketDiagram matches={matches} />
+              <BracketDiagram
+                matches={matches}
+                playoffFeedMatches={
+                  tab.id === "blast-qualifiers"
+                    ? (groupedMatches["blast-playoffs"] || []).filter((m) => (m.roundIndex ?? 0) === 0)
+                    : undefined
+                }
+              />
             </section>
           );
         })}

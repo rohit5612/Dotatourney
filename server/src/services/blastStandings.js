@@ -39,3 +39,26 @@ export function mergeBlastRemainder(rowsA, rowsB, winnerAName, winnerBName, also
   });
   return merged.map((r) => r.team);
 }
+
+/**
+ * Merge full Group A and Group B standings (already sorted best-first per group)
+ * into one global BO1 ranking: wins, Neustadtl, group key (A before B), tiebreak.
+ * @param {object[]} rowsA
+ * @param {object[]} rowsB
+ * @returns {string[]} team names, best-first
+ */
+export function mergeBlastFullRanking(rowsA, rowsB) {
+  const merged = [
+    ...rowsA.map((r) => ({ ...r, groupKey: "A" })),
+    ...rowsB.map((r) => ({ ...r, groupKey: "B" })),
+  ];
+  merged.sort((a, b) => {
+    if (b.wins !== a.wins) return b.wins - a.wins;
+    const na = a.neustadtl ?? 0;
+    const nb = b.neustadtl ?? 0;
+    if (nb !== na) return nb - na;
+    if (a.groupKey !== b.groupKey) return a.groupKey.localeCompare(b.groupKey);
+    return (b.tiebreakScore ?? 0) - (a.tiebreakScore ?? 0);
+  });
+  return merged.map((r) => r.team);
+}

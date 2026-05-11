@@ -10,18 +10,45 @@ const formatTeamGuidance = {
   hybrid: { min: 4, recommended: "8 or 16", odd: "Odd counts split into uneven groups before playoffs." },
   blast: {
     min: 10,
-    recommended: "10–20",
-    odd: "Minimum 10 teams. Two BO1 groups, then Last Chance → 8-slot Play-In → playoffs (group winners skip to semis).",
+    recommended: "10+ (up to UI cap)",
+    odd: "Minimum 10 teams. Two BO1 groups, then Last chance → Play-In → main playoffs (depth scales with entrants).",
   },
 };
 
-/** Mirrors server `getBlastPhaseSizes` / `blastSideBracketSizes` for UI hints only. */
-function blastSideBracketSizesUi(n) {
-  if (n < 10) return { playin: 0, lc: 0 };
-  const remainder = n - 2;
-  const lcEntrants = Math.max(4, n - 8);
-  const playin = remainder - lcEntrants;
-  return { playin, lc: lcEntrants };
+/** Mirrors server `getBlastPhaseSizes` for setup hints — keep in sync when server formula changes */
+function blastPhaseSizesUi(n) {
+  const x = Math.max(0, Number(n) || 0);
+  if (x < 10) return null;
+  const lcEntrants = Math.max(4, x - 8);
+
+  if (x === 10) {
+    const sidePoolExcluded = 4;
+    const remainder = x - sidePoolExcluded;
+    const playInFromGroups = remainder - lcEntrants;
+    if (playInFromGroups < 0) return null;
+    return {
+      lcEntrants,
+      playInFromGroups,
+      remainder,
+      piBracketSlots: 4,
+      middleBracketEntrants: null,
+      /** @type {"ten_qf_seconds"} */
+      mainPlayoffPath: "ten_qf_seconds",
+    };
+  }
+
+  const middleBracketEntrants = x - 4 - lcEntrants;
+  if (middleBracketEntrants < 1) return null;
+
+  return {
+    lcEntrants,
+    playInFromGroups: null,
+    remainder: null,
+    piBracketSlots: null,
+    middleBracketEntrants,
+    /** @type {"tiered_merged_standings"} */
+    mainPlayoffPath: "tiered_merged_standings",
+  };
 }
 
 function normalizePrizePoolBreakdown(value) {
@@ -107,20 +134,42 @@ function getSetupInsights(format, teamCount, isPowerOfTwo, selectedGuidance) {
         label: "Elimination",
         value: (() => {
           if (count < 10) return "—";
-          const { playin, lc } = blastSideBracketSizesUi(count);
-          const parts = [];
-          if (lc) parts.push(`Last Chance (${lc} entrants → 2 into Play-In)`);
-          if (count === 10) {
-            parts.push(`Play-In (4 teams: ${playin} from groups + 2 from Last Chance)`);
-            parts.push("Playoffs: group 2nds in quarterfinals vs Play-In winners; group winners in semis; final");
-          } else if (count === 12) {
-            parts.push(`Play-In (8 teams: ${playin} from groups + 2 from Last Chance + byes)`);
-            parts.push("Playoffs: group 1st vs other group 2nd in semis only, then final (Play-In is separate)");
-          } else {
-            parts.push(`Play-In (8 slots: ${playin} from groups + 2 from Last Chance + byes)`);
-            parts.push("Playoffs: main QF / SF / GF (default BO3, grand final BO5 in series rules)");
+          const sizes = blastPhaseSizesUi(count);
+          if (!sizes)
+            return `Invalid team count (${count}). BLAST expects at least ${formatTeamGuidance.blast.min} teams with viable remainder sizing.`;
+
+          const { playInFromGroups, lcEntrants, piBracketSlots, middleBracketEntrants, mainPlayoffPath } = sizes;
+
+          function lcDepthHint(m) {
+            if (m <= 2) return "direct seeding";
+            const padded = Math.max(4, 2 ** Math.ceil(Math.log2(Math.max(m, 4))));
+            const cols = Math.max(1, Math.ceil(Math.log2(padded)) - 1);
+            return `~${cols} elimination bracket column${cols !== 1 ? "s" : ""} (${m} LC entrants incl. bye padding)`;
           }
-          return parts.join("; ");
+
+          const parts = [];
+          parts.push(`Last chance (${lcEntrants} entrants → 2 advance; ${lcDepthHint(lcEntrants)})`);
+
+          if (mainPlayoffPath === "ten_qf_seconds") {
+            parts.push(
+              `Play-In (${piBracketSlots}-team bracket: ${playInFromGroups} from groups + 2 from Last chance)`,
+            );
+            parts.push("Main playoffs: group 2nds in quarterfinals vs Play-In winners; group winners in semis; final.");
+          } else {
+            parts.push(
+              `Play-In — middle knockout (${middleBracketEntrants} teams from merged standings after groups; single elimination → 2 finalists).`,
+            );
+            parts.push(
+              `Play-In — crossover: merged standings #3 and #4 each face one Last chance finalist (2 qualifiers into title quarterfinals).`,
+            );
+            parts.push(
+              `Quarterfinals pair crossover winners (~#3 and ~#4 vs LC) against opposite middle-band finalists (avoid parallel 1–1 / 2–2 seed lanes).`,
+            );
+            parts.push(
+              `Main playoffs: four qualifier winners contest quarterfinals → two; overall #1 and #2 meet them in semifinals; final.`,
+            );
+          }
+          return parts.join(" ");
         })(),
       },
     ],

@@ -1,5 +1,5 @@
 import { getBlastPhaseSizes } from "./formatGenerator.js";
-import { mergeBlastRemainder } from "./blastStandings.js";
+import { mergeBlastFullRanking } from "./blastStandings.js";
 import { buildGroupedStandings } from "./standingsEngine.js";
 
 function blastGroupStageFinished(matches) {
@@ -11,9 +11,12 @@ function blastGroupStageFinished(matches) {
 
 /**
  * Builds placeholder → team name map when both BLAST groups are fully decided.
- * Group winners seed Group A/B #1. For n=10 and n=12, group runners-up are reserved for the main path and are
- * excluded from the Last Chance / Play-In pool. Remainder is merged (wins, Neustadtl, group); best playInFromGroups
- * → BPI*, next lcEntrants → BLC*.
+ *
+ * - **n=10**: Group A/B standings fill `Group A #n` / `Group B #n` only.
+ * - **n=12**: Same group labels for all six ranks; no separate BLR/MID/BLC keys.
+ * - **n≥11 (not 12) tiered**: merged global standings → BLR1–4*, MID*, BLC*.
+ *
+ * Group A/B #N always mirror in-group standings (for display).
  * @param {{ name: string }[]} teams
  * @param {object[]} matches
  * @returns {Record<string, string> | null}
@@ -43,30 +46,39 @@ export function computeBlastPlaceholderToTeamMap(teams, matches) {
     map[`Group B #${j + 1}`] = gB.rows[j].team;
   }
 
-  const alsoEx =
-    n === 10 || n === 12
-      ? [gA.rows[1]?.team, gB.rows[1]?.team].filter((t) => typeof t === "string" && t.length > 0)
-      : [];
-  const merged = mergeBlastRemainder(gA.rows, gB.rows, winnerA, winnerB, alsoEx);
-  if (merged.length !== sizes.remainder) return null;
-
-  const bpiTeams = merged.slice(0, sizes.playInFromGroups);
-  const blcTeams = merged.slice(sizes.playInFromGroups, sizes.playInFromGroups + sizes.lcEntrants);
-
-  if (bpiTeams.length !== sizes.playInFromGroups || blcTeams.length !== sizes.lcEntrants) return null;
-
-  for (let i = 0; i < bpiTeams.length; i += 1) {
-    map[`BPI${i + 1}`] = bpiTeams[i];
-  }
-  for (let j = 0; j < blcTeams.length; j += 1) {
-    map[`BLC${j + 1}`] = blcTeams[j];
+  if (sizes.mainPlayoffPath === "ten_qf_seconds") {
+    return map;
   }
 
-  return map;
+  if (sizes.mainPlayoffPath === "tiered_merged_standings" && n === 12) {
+    return map;
+  }
+
+  if (sizes.mainPlayoffPath === "tiered_merged_standings") {
+    const fullRank = mergeBlastFullRanking(gA.rows, gB.rows);
+    if (fullRank.length !== n) return null;
+    const lc = sizes.lcEntrants;
+    const mid = sizes.middleBracketEntrants ?? 0;
+
+    map.BLR1 = fullRank[0];
+    map.BLR2 = fullRank[1];
+    map.BLR3 = fullRank[2];
+    map.BLR4 = fullRank[3];
+    for (let i = 0; i < mid; i += 1) {
+      map[`MID${i + 1}`] = fullRank[4 + i];
+    }
+    const lcStart = n - lc;
+    for (let j = 0; j < lc; j += 1) {
+      map[`BLC${j + 1}`] = fullRank[lcStart + j];
+    }
+    return map;
+  }
+
+  return null;
 }
 
 /**
- * Replaces BPI/BLC and Group A/B #N placeholders with real teams after groups complete.
+ * Replaces BLAST qualifier placeholders with real teams after groups complete.
  * @param {{ name: string }[]} teams
  * @param {object[]} matches
  */

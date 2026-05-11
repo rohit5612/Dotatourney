@@ -1,5 +1,10 @@
 import { useMemo, useState } from "react";
-import { formatMatchRoundSummary, stageRoundStructure } from "../components/bracket/bracketLayout.js";
+import {
+  buildStageTabLabels,
+  buildStageTabOrdering,
+  formatMatchRoundSummary,
+  stageRoundStructure,
+} from "../components/bracket/bracketLayout.js";
 
 export function SchedulePage({ state, saveSchedule, saveCustomSchedule }) {
   const [draft, setDraft] = useState([]);
@@ -7,7 +12,7 @@ export function SchedulePage({ state, saveSchedule, saveCustomSchedule }) {
   const upcomingCount = (state?.schedule || []).filter((slot) => slot.status === "upcoming").length;
   const finishedCount = (state?.schedule || []).filter((slot) => slot.status === "finished").length;
   const editableSchedule = useMemo(() => {
-    const stageOrder = Object.fromEntries((state?.tabs || []).map((tab, index) => [tab.id, index]));
+    const stageOrder = buildStageTabOrdering(state?.tournament?.format, state?.tabs || []);
     const byStageRound = (a, b) => {
       const matchA = state?.matches?.find((entry) => entry.id === a.matchId) || a;
       const matchB = state?.matches?.find((entry) => entry.id === b.matchId) || b;
@@ -36,8 +41,8 @@ export function SchedulePage({ state, saveSchedule, saveCustomSchedule }) {
   }, [draft, state]);
 
   const stageLabels = useMemo(
-    () => Object.fromEntries((state?.tabs || []).map((tab) => [tab.id, tab.label])),
-    [state?.tabs],
+    () => buildStageTabLabels(state?.tournament?.format, state?.tabs || []),
+    [state?.tournament?.format, state?.tabs],
   );
   const roundStructureAll = useMemo(() => stageRoundStructure(state?.matches || []), [state?.matches]);
 

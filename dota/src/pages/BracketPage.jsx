@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BracketDiagram } from "../components/BracketDiagram";
+import { normalizedBlastBracketTabs } from "../components/bracket/bracketLayout.js";
 
 export function BracketPage({
   state,
@@ -33,6 +34,24 @@ export function BracketPage({
     mode === "demo"
       ? `Demo mode will generate placeholder teams from the ${requiredTeamCount}-team ${setup?.format?.toUpperCase() || "configured"} format for the public bracket map.`
       : "Tournament mode will generate real matches from the currently approved roster.";
+
+  const displayTabs = useMemo(
+    () => normalizedBlastBracketTabs(setup?.format || "", state?.tabs || []),
+    [setup?.format, state?.tabs],
+  );
+
+  const blastPlayoffQuarterRows = useMemo(
+    () => (groupedMatches["blast-playoffs"] || []).filter((m) => (m.roundIndex ?? 0) === 0),
+    [groupedMatches],
+  );
+
+  useEffect(() => {
+    if (setup?.format !== "blast") return;
+    if (!groupedMatches["blast-qualifiers"]?.length) return;
+    if (activeTab === "blast-lastchance" || activeTab === "blast-playin") {
+      setActiveTab("blast-qualifiers");
+    }
+  }, [setup?.format, activeTab, groupedMatches, setActiveTab]);
 
   async function changeMode(nextMode) {
     setIsSavingMode(true);
@@ -133,7 +152,7 @@ export function BracketPage({
         <div className="h-full bg-primary transition-all" style={{ width: `${completionPct}%` }} />
       </div>
       <div className="flex gap-2">
-        {(state?.tabs || []).map((tab) => (
+        {displayTabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
@@ -154,6 +173,7 @@ export function BracketPage({
         setScores={setScores}
         submitResult={submitResult}
         updateMatch={updateMatch}
+        playoffFeedMatches={activeTab === "blast-qualifiers" ? blastPlayoffQuarterRows : undefined}
       />
     </div>
   );

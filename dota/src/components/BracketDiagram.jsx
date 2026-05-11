@@ -1,15 +1,35 @@
 import { useMemo } from "react";
+import { EliminationBracketCanvas } from "./bracket/EliminationBracketCanvas.jsx";
 import { MatchCard } from "./bracket/MatchCard.jsx";
 import {
+  blastStageRoundColumnCount,
   bracketColumnTitle,
   compareRoundKeys,
+  isRoundRobinStyleStage,
   matchRoundKey,
   parseRoundKey,
   stageRoundStructure,
 } from "./bracket/bracketLayout.js";
 
-export function BracketDiagram({ matches = [], editable = false, scores = {}, setScores, submitResult, updateMatch }) {
+export function BracketDiagram({
+  matches = [],
+  editable = false,
+  scores = {},
+  setScores,
+  submitResult,
+  updateMatch,
+  playoffFeedMatches = null,
+}) {
   const columnStructure = useMemo(() => stageRoundStructure(matches), [matches]);
+
+  const blastBracketDepths = useMemo(
+    () => ({
+      lc: blastStageRoundColumnCount(matches, "blast-lastchance"),
+      pi: blastStageRoundColumnCount(matches, "blast-playin"),
+    }),
+    [matches],
+  );
+
   const rounds = matches.reduce((acc, match) => {
     const key = matchRoundKey(match);
     if (!acc[key]) acc[key] = [];
@@ -18,10 +38,31 @@ export function BracketDiagram({ matches = [], editable = false, scores = {}, se
   }, {});
   const sortedRounds = Object.entries(rounds).sort(([a], [b]) => compareRoundKeys(a, b));
 
+  const useRoundRobinListLayout = useMemo(
+    () => matches.length > 0 && matches.every((match) => isRoundRobinStyleStage(match.stageKey)),
+    [matches],
+  );
+
   if (!matches.length) {
     return (
       <div className="rounded-lg border border-border bg-background p-6 text-center text-sm text-muted-foreground">
         No matches generated yet.
+      </div>
+    );
+  }
+
+  if (!useRoundRobinListLayout) {
+    return (
+      <div className="overflow-x-auto rounded-lg border border-border bg-background p-4 pb-6">
+        <EliminationBracketCanvas
+          matches={matches}
+          editable={editable}
+          scores={scores}
+          setScores={setScores}
+          submitResult={submitResult}
+          updateMatch={updateMatch}
+          playoffFeedMatches={playoffFeedMatches || undefined}
+        />
       </div>
     );
   }
@@ -64,6 +105,7 @@ export function BracketDiagram({ matches = [], editable = false, scores = {}, se
                       }
                       submitResult={submitResult}
                       updateMatch={updateMatch}
+                      blastBracketDepths={blastBracketDepths}
                     />
                   ))}
               </div>

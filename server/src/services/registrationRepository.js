@@ -130,6 +130,21 @@ export async function listPlayerRegistrations(tournamentId) {
   return rows.map((row) => mapRegistrationRow(row));
 }
 
+/** Approved, non-archived player registrations (CRM “approved” decisions). */
+export async function countApprovedPlayerRegistrations(tournamentId) {
+  if (!tournamentId) return 0;
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS c
+     FROM player_registrations
+     WHERE tournament_id = $1
+       AND registration_status = 'approved'
+       AND archived_at IS NULL`,
+    [tournamentId],
+  );
+  const n = rows[0]?.c;
+  return typeof n === "number" ? n : Number(n) || 0;
+}
+
 export async function getActiveRegistrationByEmail(tournamentId, email) {
   const { rows } = await pool.query(
     `${listSelect}

@@ -47,6 +47,7 @@ describe("BLAST formatGenerator", () => {
         remainder: 6,
         lcEntrants: 4,
         playInFromGroups: 2,
+        middleBracketEntrants: null,
         playInBracketSize: 4,
         lcAdvanceToPlayIn: 2,
         piSurvivorsToMain: 2,
@@ -55,24 +56,25 @@ describe("BLAST formatGenerator", () => {
     );
     assert.deepEqual(getBlastPhaseSizes(12), {
       n: 12,
-      sidePoolExcluded: 4,
-      remainder: 8,
+      sidePoolExcluded: null,
+      remainder: null,
       lcEntrants: 4,
-      playInFromGroups: 4,
-      playInBracketSize: 8,
+      playInFromGroups: null,
+      middleBracketEntrants: 4,
+      playInBracketSize: null,
       lcAdvanceToPlayIn: 2,
-      piSurvivorsToMain: 0,
-      mainPlayoffPath: "twelve_semis_top2",
+      piSurvivorsToMain: 4,
+      mainPlayoffPath: "tiered_merged_standings",
     });
     assert.deepEqual(blastSideBracketSizes(12), { playin: 4, lc: 4 });
   });
 
-  it("n=16 keeps standard main path (only group winners reserved from side pool)", () => {
+  it("n≥11 tiered path: middle band + LC scale (e.g. n=16)", () => {
     const s = getBlastPhaseSizes(16);
     assert.ok(s);
-    assert.equal(s.sidePoolExcluded, 2);
-    assert.equal(s.remainder, 14);
-    assert.equal(s.mainPlayoffPath, "standard");
+    assert.equal(s.mainPlayoffPath, "tiered_merged_standings");
+    assert.equal(s.lcEntrants, 8);
+    assert.equal(s.middleBracketEntrants, 4);
     assert.equal(s.piSurvivorsToMain, 4);
   });
 
@@ -95,11 +97,27 @@ describe("BLAST formatGenerator", () => {
       assert.ok(stages.includes("blast-lastchance"), `n=${n} has last chance`);
 
       const tabs = stageTabsForFormat("blast", { teamCount: n }).map((t) => t.id);
-      assert.ok(tabs.includes("blast-playin"), `n=${n} tabs include Play-In`);
-      assert.ok(tabs.includes("blast-lastchance"), `n=${n} tabs include Last Chance`);
-      const lcIdx = tabs.indexOf("blast-lastchance");
-      const piIdx = tabs.indexOf("blast-playin");
-      assert.ok(lcIdx < piIdx, "UI tabs: Last Chance before Play-In");
+      assert.ok(tabs.includes("blast-qualifiers"), `n=${n} merged Last Chance & Play-In tab`);
+      assert.ok(!tabs.includes("blast-playin"), `n=${n} standalone Play-In tab removed`);
+      assert.ok(!tabs.includes("blast-lastchance"), `n=${n} standalone Last Chance tab removed`);
+      const qaIdx = tabs.indexOf("blast-qualifiers");
+      const grpBIdx = tabs.indexOf("blast-group-b");
+      const poIdx = tabs.indexOf("blast-playoffs");
+      assert.ok(grpBIdx < qaIdx, "Qualifier tab after Group B");
+      assert.ok(qaIdx < poIdx, "Qualifier tab before Playoffs");
+    }
+  });
+
+  it("generateMatches('blast') succeeds for every team count 10–64 (dashboard input range)", () => {
+    const names64 = Array.from({ length: 64 }, (_, i) => `T${i + 1}`);
+    for (let n = 10; n <= 64; n += 1) {
+      assert.ok(getBlastPhaseSizes(n), `sizes n=${n}`);
+      const slice = names64.slice(0, n);
+      let matches;
+      assert.doesNotThrow(() => {
+        matches = generateMatches("blast", slice, {});
+      }, `generate n=${n}`);
+      assert.ok(matches.length > 0, `non-empty n=${n}`);
     }
   });
 
@@ -114,30 +132,40 @@ describe("BLAST formatGenerator", () => {
     const teamsQf = new Set(poQf.flatMap((m) => [m.team1, m.team2]));
     assert.ok(teamsQf.has("Group A #2"));
     assert.ok(teamsQf.has("Group B #2"));
-    assert.ok(teamsQf.has("PI1M1W"));
-    assert.ok(teamsQf.has("PI1M2W"));
+    assert.ok(teamsQf.has("PIR1M1W"));
+    assert.ok(teamsQf.has("PIR1M2W"));
   });
 
-  it("n=12: main bracket is semis + final only; top two per group (no Play-In feeds championship)", () => {
+  it("n=12 tiered BLAST: quarterfinals then semis (group #1/#2 paths), PIR + LCR tokens", () => {
     const teams = teamList(12);
     const matches = generateMatches("blast", teams.map((t) => t.name), {});
+    const pi = matches.filter((m) => m.stageKey === "blast-playin");
+    assert.ok(pi.every((m) => String(m.meta?.winToken || "").startsWith("PIR")), "all Play-In wins use PIR…");
+    assert.ok(pi.some((m) => m.meta?.seriesRuleKey === "blast-playin-cross"), "crossover rows");
     const po = matches.filter((m) => m.stageKey === "blast-playoffs").sort((a, b) => a.roundIndex - b.roundIndex);
-    assert.equal(po.length, 3);
-    assert.ok(
-      po
-        .filter((m) => m.roundIndex === 0)
-        .every((m) => m.meta?.seriesRuleKey === "blast-po-semifinal"),
-    );
-    const sf = po.filter((m) => m.roundIndex === 0);
+    assert.equal(po.length, 5);
+    const qf = po.filter((m) => m.roundIndex === 0);
+    assert.equal(qf.length, 2);
+    assert.ok(qf.every((m) => m.meta?.seriesRuleKey === "blast-po-quarterfinal"));
+    const sf = po.filter((m) => m.roundIndex === 1);
     const tSf = new Set(sf.flatMap((m) => [m.team1, m.team2]));
     assert.ok(tSf.has("Group A #1"));
-    assert.ok(tSf.has("Group A #2"));
     assert.ok(tSf.has("Group B #1"));
-    assert.ok(tSf.has("Group B #2"));
-    for (const m of po) {
-      assert.ok(!String(m.team1).startsWith("PI"));
-      assert.ok(!String(m.team2).startsWith("PI"));
-    }
+    const cross = matches.filter((m) => m.meta?.seriesRuleKey === "blast-playin-cross");
+    assert.equal(cross.length, 2);
+    const cx1 = cross[0].meta?.winToken;
+    const cx2 = cross[1].meta?.winToken;
+    const qp = (tok) => {
+      const row = qf.find((m) => m.team1 === tok || m.team2 === tok);
+      return row.team1 === tok ? row.team2 : row.team1;
+    };
+    assert.notEqual(qp(cx1), qp(cx2));
+    const qs = [...qf].sort((a, b) => (a.matchIndex ?? 0) - (b.matchIndex ?? 0));
+    assert.ok(
+      qs.every((row) => [row.team1, row.team2].some((x) => String(x).startsWith("PIR"))),
+      "QF sides reference Play-In winners",
+    );
+    assert.equal(new Set(qs.map((row) => [String(row.team1), String(row.team2)].sort().join("+"))).size, 2);
   });
 
   it("match list order: Last Chance block before Play-In block", () => {
@@ -149,17 +177,20 @@ describe("BLAST formatGenerator", () => {
     assert.ok(firstLc < firstPi);
   });
 
-  it("Play-In single round for n>=11 except n=10 (n=14 has only PI round 0)", () => {
+  it("n≥11 tiered: Play-In has middle rounds then crossover (all `PIR…` win tokens)", () => {
     const teams = teamList(14);
     const matches = generateMatches("blast", teams.map((t) => t.name), {});
     const pi = matches.filter((m) => m.stageKey === "blast-playin");
-    assert.ok(pi.every((m) => m.roundIndex === 0));
-    for (const m of pi) {
-      assert.match(String(m.meta?.winToken || ""), /^PI1M\d+W$/);
-    }
+    const rounds = [...new Set(pi.map((m) => m.roundIndex ?? 0))].sort((a, b) => a - b);
+    assert.ok(rounds.length >= 2, `expected middle + crossover rounds, got ${rounds.length}`);
+    assert.ok(pi.every((m) => String(m.meta?.winToken || "").startsWith("PIR")), "PIR prefix for Play-In");
+    assert.ok(
+      pi.every((m) => !/^PI\d+M\d+W$/.test(String(m.meta?.winToken || ""))),
+      "tiered drops legacy PI1M1W-style tokens",
+    );
   });
 
-  it("Play-In and Last Chance use disjoint winToken prefixes", () => {
+  it("Play-In / Last chance / playoff win tokens use simple prefixes (PIR / LCR / QFR / SFR)", () => {
     const teams = teamList(12);
     const matches = generateMatches("blast", teams.map((t) => t.name), {});
     const byStage = winTokensByStage(matches);
@@ -168,25 +199,28 @@ describe("BLAST formatGenerator", () => {
     for (const t of pi) {
       assert.ok(!lc.has(t), `token ${t} must not appear in both play-in and last chance`);
     }
-    for (const t of pi) assert.ok(t.startsWith("PI"), `play-in token ${t} should start with PI`);
-    for (const t of lc) assert.ok(t.startsWith("LC"), `last-chance token ${t} should start with LC`);
+    for (const t of pi) {
+      assert.ok(/^PIR\d+M\d+W$/.test(t), `play-in token ${t} should be PIR…`);
+    }
+    for (const t of lc) assert.ok(t.startsWith("LCR"), `last-chance token ${t} should start with LCR`);
     const po = byStage["blast-playoffs"] || new Set();
     for (const t of po) {
       if (t === "CHAMPION") continue;
-      assert.ok(t.startsWith("BPO"), `playoff SE token ${t} should start with BPO`);
+      assert.ok(t.startsWith("QFR") || t.startsWith("SFR"), `playoff token ${t} should be QFR… or SFR…`);
     }
   });
 
-  it("applyProgression on Play-In does not fill Last Chance slots", () => {
+  it("applyProgression on qualifier winners does not fill Last Chance slots", () => {
     const teams = teamList(12);
     const matches = generateMatches("blast", teams.map((t) => t.name), {});
-    const playinFirst = matches.find((m) => m.stageKey === "blast-playin" && m.meta?.winToken);
-    assert.ok(playinFirst);
-    const tok = playinFirst.meta.winToken;
-    assert.ok(tok.startsWith("PI"));
-    const winner = "WinnerPI";
-    const updated = { ...playinFirst, winner, meta: { ...playinFirst.meta, winToken: tok } };
-    const base = matches.map((m) => (m.id === playinFirst.id ? updated : m));
+    const qualFirst = matches.find(
+      (m) => m.stageKey === "blast-playin" && m.meta?.winToken && /^PIR\d+M\d+W$/.test(m.meta.winToken),
+    );
+    assert.ok(qualFirst);
+    const tok = qualFirst.meta.winToken;
+    const winner = "WinnerQual";
+    const updated = { ...qualFirst, winner, meta: { ...qualFirst.meta, winToken: tok } };
+    const base = matches.map((m) => (m.id === qualFirst.id ? updated : m));
     const progressed = applyProgression(base, updated);
 
     const lcMatches = progressed.filter((m) => m.stageKey === "blast-lastchance");
@@ -219,11 +253,11 @@ describe("BLAST group seeding from standings", () => {
     assert.ok(computeBlastPlaceholderToTeamMap(teams, finished));
     const { matches: seeded } = applyBlastGroupSeeding(teams, finished);
 
-    const groupPlaceholder = /^((BPI|BLC)\d+|Group [AB] #\d+)$/;
+    const groupStandingPlaceholder = /^Group [AB] #\d+$/;
     for (const m of seeded) {
       if (m.stageKey === "blast-playin" || m.stageKey === "blast-lastchance") {
-        assert.ok(!groupPlaceholder.test(m.team1), `team1 still group placeholder: ${m.team1}`);
-        assert.ok(!groupPlaceholder.test(m.team2), `team2 still group placeholder: ${m.team2}`);
+        assert.ok(!groupStandingPlaceholder.test(m.team1), `team1 still group placeholder: ${m.team1}`);
+        assert.ok(!groupStandingPlaceholder.test(m.team2), `team2 still group placeholder: ${m.team2}`);
       }
     }
   });

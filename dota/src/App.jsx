@@ -16,6 +16,7 @@ import { SchedulePage } from "./pages/SchedulePage";
 import { SetupPage } from "./pages/SetupPage";
 import { StandingsPage } from "./pages/StandingsPage";
 import { TeamsPage } from "./pages/TeamsPage";
+import { augmentGroupedBracketMatches, buildStageTabOrdering } from "./components/bracket/bracketLayout.js";
 import { createId, getInitialDarkMode } from "./utils/client";
 
 const adminPages = ["registrations", "teams", "setup", "announcements", "bracketSchedule", "standings", "users"];
@@ -602,7 +603,7 @@ function App() {
 
   async function saveSchedule() {
     if (!state?.matches?.length) return;
-    const stageOrder = Object.fromEntries((state.tabs || []).map((tab, index) => [tab.id, index]));
+    const stageOrder = buildStageTabOrdering(state?.tournament?.format || setup?.format, state.tabs || []);
     const orderedMatches = [...state.matches].sort((a, b) => {
       const stageDiff = (stageOrder[a.stageKey] ?? 999) - (stageOrder[b.stageKey] ?? 999);
       if (stageDiff !== 0) return stageDiff;
@@ -658,8 +659,8 @@ function App() {
       if (!groups[match.stageKey]) groups[match.stageKey] = [];
       groups[match.stageKey].push(match);
     });
-    return groups;
-  }, [state]);
+    return augmentGroupedBracketMatches(groups);
+  }, [state?.matches]);
 
   async function logout() {
     await api.logoutAdmin().catch(() => {});

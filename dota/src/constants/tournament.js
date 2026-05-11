@@ -85,9 +85,9 @@ export const formatDetails = {
     name: "BLAST-style slam",
     tag: "Groups → Last Chance → Play-In → playoffs",
     description:
-      "Two BO1 round-robin groups, Last Chance single elimination, Play-In, then main playoffs. At 10 teams the main bracket uses quarterfinals (group 2nds vs Play-In) then semis (group winners). At 12 teams the main bracket is semifinals and final among the top two from each group only.",
+      "Two BO1 round-robin groups, Last chance single elimination, Play-In bracket, then main playoffs. Field sizes and how many LC/PI rounds you see follow the team count (minimum 10 through the admin UI cap). At 10 teams the main bracket uses quarterfinals (group 2nds vs Play-In) then semis (group winners). At 12 teams the main bracket is semifinals and final among the top two from each group only.",
     guidance:
-      "Requires at least ten teams. At 10 teams, group runners-up join the main quarterfinals against Play-In finalists. At 12 teams, each group's first- and second-place teams meet in the main semifinals (cross bracket). Other sizes use merged group-standings cuts for Last Chance and Play-In, with group winners entering at the semis.",
+      "Requires at least ten teams. Larger events add depth to the Last chance bracket; Play-In stays on a 4-slot (n=10) or 8-slot mini-bracket with seeds and byes from standings. Group winners still enter the main path at semis (or QF at 10 teams) per the generator rules.",
   },
 };
 

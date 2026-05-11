@@ -7,11 +7,11 @@ export const formatTeamGuidance = {
   gsl: { min: 4, recommended: "8 or 16", odd: "Supported with uneven groups" },
   swiss: { min: 4, recommended: "8, 16, 32", odd: "Supported with round byes" },
   hybrid: { min: 4, recommended: "8 or 16", odd: "Supported with uneven groups" },
-  /** BLAST-style: two BO1 round-robin groups → Last Chance (≥4) → 8-slot Play-In → main playoffs (QF/SF/GF). */
+  /** BLAST: two BO1 groups → Last chance → Play-In → main playoffs. Side-bracket depth scales with total teams (minimum 10). */
   blast: {
     min: 10,
-    recommended: "10–20",
-    odd: "Odd team counts use ⌈n/2⌉ vs ⌊n/2⌋ groups. Last Chance and Play-In field sizes follow remainder = n−2 after group winners.",
+    recommended: "10+ (scales to large events)",
+    odd: "Odd totals split ⌈n/2⌉ / ⌊n/2⌋ into two BO1 groups. Last chance and Play-In round counts follow bracket generation for that entry count.",
   },
 };
 
@@ -284,60 +284,71 @@ function generateHybrid(teams, seriesRules) {
 }
 
 /**
- * BLAST side pool after reserving main-path group finishers:
- * n=10 or 12: exclude group #1 and #2 from each group (4 teams). Other n: exclude only #1 (2 teams).
+ * BLAST sizing:
+ * - n=10: group 1sts/2nds reserved for main path; remainder → BPI slice + LC (legacy path).
+ * - n≥11: merged global standings — #1–#2 semifinal seeds, #9+ style bottom band → LC, middle → knockout,
+ *   #3–#4 vs LC survivors → QF fills with middle survivors until 4 title-bracket entrants.
  * @param {number} teamCount
  */
 export function getBlastPhaseSizes(teamCount) {
   const n = Math.max(0, Number(teamCount) || 0);
   if (n < 10) return null;
-  const sidePoolExcluded = n === 10 || n === 12 ? 4 : 2;
-  const remainder = n - sidePoolExcluded;
   const lcEntrants = Math.max(4, n - 8);
-  const playInFromGroups = remainder - lcEntrants;
-  if (playInFromGroups < 0) return null;
-
-  /** @type {"standard" | "ten_qf_seconds" | "twelve_semis_top2"} */
-  let mainPlayoffPath = "standard";
-  let piSurvivorsToMain = 4;
 
   if (n === 10) {
-    mainPlayoffPath = "ten_qf_seconds";
-    piSurvivorsToMain = 2;
-  } else if (n === 12) {
-    mainPlayoffPath = "twelve_semis_top2";
-    piSurvivorsToMain = 0;
+    const sidePoolExcluded = 4;
+    const remainder = n - sidePoolExcluded;
+    const playInFromGroups = remainder - lcEntrants;
+    if (playInFromGroups < 0) return null;
+    return {
+      n,
+      sidePoolExcluded,
+      remainder,
+      lcEntrants,
+      playInFromGroups,
+      middleBracketEntrants: null,
+      playInBracketSize: 4,
+      lcAdvanceToPlayIn: 2,
+      piSurvivorsToMain: 2,
+      mainPlayoffPath: "ten_qf_seconds",
+    };
   }
+
+  const middleBracketEntrants = n - 4 - lcEntrants;
+  if (middleBracketEntrants < 1) return null;
 
   return {
     n,
-    sidePoolExcluded,
-    remainder,
+    sidePoolExcluded: null,
+    remainder: null,
     lcEntrants,
-    playInFromGroups,
-    playInBracketSize: n === 10 ? 4 : 8,
+    playInFromGroups: null,
+    middleBracketEntrants,
+    playInBracketSize: null,
     lcAdvanceToPlayIn: 2,
-    piSurvivorsToMain,
-    mainPlayoffPath,
+    piSurvivorsToMain: 4,
+    /** @type {"tiered_merged_standings"} */
+    mainPlayoffPath: "tiered_merged_standings",
   };
 }
 
 /**
  * @deprecated Prefer getBlastPhaseSizes. Kept for callers that expect { playin, lc }:
- * playin = teams from groups into the 8-slot Play-In (excluding LC advancers), lc = Last Chance field size.
+ * playin = middle Play-In entrants (n≥11) or BPI count (n=10); lc = Last chance field size.
  */
 export function blastSideBracketSizes(teamCount) {
   const s = getBlastPhaseSizes(teamCount);
   if (!s) return { playin: 0, lc: 0 };
-  return { playin: s.playInFromGroups, lc: s.lcEntrants };
+  const pin = s.middleBracketEntrants ?? s.playInFromGroups ?? 0;
+  return { playin: pin, lc: s.lcEntrants };
 }
 
 /**
- * BLAST-style slam: two BO1 round-robin groups → Last Chance → 8-slot Play-In → main playoffs.
+ * BLAST-style slam: two BO1 groups → qualifiers → playoffs.
  *
- * - **n=10**: Group 1sts start in semis; group 2nds in quarterfinals vs **two** Play-In winners (4-team Play-In: 2 BPI + 2 from LC).
- * - **n=12**: Group 1st and 2nd from both groups start in **semifinals** only (cross: A1–B2, B1–A2); Play-In does not feed the title bracket.
- * - **other n**: Group 1sts in semis vs winners of two all–Play-In quarterfinals (single PI round).
+ * - **n=10**: Group **A/B #1** wait in semis; **#2** in QFs vs Play-In winners; **#3** + Last chance survivors in the 4-team Play-In;
+ *   **#4–#5** in each group start Last chance.
+ * - **n=12**: tiered as **#1** semis, **#2/#4** middle Play-In, **#3** crossover vs LC, **#5/#6** Last chance (merged logic for other counts unchanged).
  */
 function generateBlast(teams, seriesRules) {
   const n = teams.length;
@@ -353,77 +364,106 @@ function generateBlast(teams, seriesRules) {
   result.push(...generateRoundRobin(teams, seriesRules, "blast-group-a", "blast-group-bo1", idxA, "A"));
   result.push(...generateRoundRobin(teams, seriesRules, "blast-group-b", "blast-group-bo1", idxB, "B"));
 
-  const lcSeeds = Array.from({ length: sizes.lcEntrants }, (_, i) => `BLC${i + 1}`);
+  /** Win-token prefixes: Last chance `LCR1M1W`; Play-In `PIR1M1W`; playoffs `QFR` / `SFR`. */
+  const lcTok = "LCR";
+  const piTok = "PIR";
+
+  let lcSeeds;
+  if (sizes.mainPlayoffPath === "ten_qf_seconds") {
+    lcSeeds = ["Group A #4", "Group A #5", "Group B #4", "Group B #5"];
+  } else if (sizes.mainPlayoffPath === "tiered_merged_standings" && n === 12) {
+    lcSeeds = ["Group A #5", "Group A #6", "Group B #5", "Group B #6"];
+  } else {
+    lcSeeds = Array.from({ length: sizes.lcEntrants }, (_, i) => `BLC${i + 1}`);
+  }
+
   const lcBlock = generateEliminationUntilSurvivors(
     lcSeeds,
     teams,
     seriesRules,
     "blast-lastchance",
     "blast-lc-",
-    "LC",
+    lcTok,
     sizes.lcAdvanceToPlayIn,
   );
   result.push(...lcBlock.matches);
 
   if (sizes.mainPlayoffPath === "ten_qf_seconds") {
-    const piFour = [
-      ...Array.from({ length: sizes.playInFromGroups }, (_, i) => `BPI${i + 1}`),
-      ...lcBlock.survivorTokens,
-    ];
+    const piFour = ["Group A #3", "Group B #3", ...lcBlock.survivorTokens];
     if (piFour.length !== 4) {
       throw new Error(`BLAST n=10 expects 4 Play-In entrants, got ${piFour.length}`);
     }
     const playIn4Key = roundRuleKey(4, "blast-playin-", "quarterfinal");
-    pairEntrants(result, teams, piFour, "blast-playin", 0, seriesRules, playIn4Key, "PI");
-  } else {
-    const piLineup = [
-      ...Array.from({ length: sizes.playInFromGroups }, (_, i) => `BPI${i + 1}`),
-      ...lcBlock.survivorTokens,
-    ];
-    while (piLineup.length < sizes.playInBracketSize) {
-      piLineup.push("BYE");
+    pairEntrants(result, teams, piFour, "blast-playin", 0, seriesRules, playIn4Key, piTok);
+
+    addMatch(result, teams, "blast-playoffs", 0, 0, "Group A #2", "PIR1M1W", seriesRules, "blast-po-quarterfinal", {
+      winToken: "QFR1M1W",
+    });
+    addMatch(result, teams, "blast-playoffs", 0, 1, "Group B #2", "PIR1M2W", seriesRules, "blast-po-quarterfinal", {
+      winToken: "QFR1M2W",
+    });
+    addMatch(result, teams, "blast-playoffs", 1, 0, "Group A #1", "QFR1M1W", seriesRules, "blast-po-semifinal", {
+      winToken: "SFR1M1W",
+    });
+    addMatch(result, teams, "blast-playoffs", 1, 1, "Group B #1", "QFR1M2W", seriesRules, "blast-po-semifinal", {
+      winToken: "SFR1M2W",
+    });
+    addMatch(result, teams, "blast-playoffs", 2, 0, "SFR1M1W", "SFR1M2W", seriesRules, "blast-po-final", { winToken: "CHAMPION" });
+  } else if (sizes.mainPlayoffPath === "tiered_merged_standings") {
+    const middleCount = sizes.middleBracketEntrants ?? 0;
+    if (middleCount < 1) {
+      throw new Error(`BLAST tiered expects middleBracketEntrants >= 1, got ${middleCount}`);
     }
+    const midSeeds =
+      n === 12
+        ? ["Group A #2", "Group B #2", "Group A #4", "Group B #4"]
+        : Array.from({ length: middleCount }, (_, i) => `MID${i + 1}`);
+    const mpBlock = generateEliminationUntilSurvivors(
+      midSeeds,
+      teams,
+      seriesRules,
+      "blast-playin",
+      "blast-mp-",
+      piTok,
+      2,
+    );
+    result.push(...mpBlock.matches);
+    let maxMpRi = -1;
+    for (const m of mpBlock.matches) {
+      const ri = m.roundIndex ?? 0;
+      if (ri > maxMpRi) maxMpRi = ri;
+    }
+    const crossRoundIndex = maxMpRi >= 0 ? maxMpRi + 1 : 0;
+    const crossRi = crossRoundIndex + 1;
+    const [lcWin1, lcWin2] = lcBlock.survivorTokens;
+    const crossLeft = n === 12 ? "Group A #3" : "BLR3";
+    const crossRight = n === 12 ? "Group B #3" : "BLR4";
+    addMatch(result, teams, "blast-playin", crossRoundIndex, 0, crossLeft, lcWin1, seriesRules, "blast-playin-cross", {
+      winToken: `PIR${crossRi}M1W`,
+    });
+    addMatch(result, teams, "blast-playin", crossRoundIndex, 1, crossRight, lcWin2, seriesRules, "blast-playin-cross", {
+      winToken: `PIR${crossRi}M2W`,
+    });
 
-    const playInRuleKeyR1 = roundRuleKey(sizes.playInBracketSize, "blast-playin-", "quarterfinal");
-    pairEntrants(result, teams, piLineup, "blast-playin", 0, seriesRules, playInRuleKeyR1, "PI");
-  }
-
-  if (sizes.mainPlayoffPath === "twelve_semis_top2") {
-    addMatch(result, teams, "blast-playoffs", 0, 0, "Group A #1", "Group B #2", seriesRules, "blast-po-semifinal", {
-      winToken: "BPO1M1W",
+    const [mw1, mw2] = mpBlock.survivorTokens;
+    const px1 = `PIR${crossRi}M1W`;
+    const px2 = `PIR${crossRi}M2W`;
+    // Cross seeds: crossover (#3/#4 vs LC finalists) feeds opposite middle-band survivors — avoids naive 1-vs-1, 2-vs-2 parallels.
+    addMatch(result, teams, "blast-playoffs", 0, 0, mw1, px2, seriesRules, "blast-po-quarterfinal", {
+      winToken: "QFR1M1W",
     });
-    addMatch(result, teams, "blast-playoffs", 0, 1, "Group B #1", "Group A #2", seriesRules, "blast-po-semifinal", {
-      winToken: "BPO1M2W",
+    addMatch(result, teams, "blast-playoffs", 0, 1, mw2, px1, seriesRules, "blast-po-quarterfinal", {
+      winToken: "QFR1M2W",
     });
-    addMatch(result, teams, "blast-playoffs", 1, 0, "BPO1M1W", "BPO1M2W", seriesRules, "blast-po-final", { winToken: "CHAMPION" });
-  } else if (sizes.mainPlayoffPath === "ten_qf_seconds") {
-    addMatch(result, teams, "blast-playoffs", 0, 0, "Group A #2", "PI1M1W", seriesRules, "blast-po-quarterfinal", {
-      winToken: "BPO1M1W",
+    const waitSF1 = n === 12 ? "Group A #1" : "BLR1";
+    const waitSF2 = n === 12 ? "Group B #1" : "BLR2";
+    addMatch(result, teams, "blast-playoffs", 1, 0, waitSF1, "QFR1M1W", seriesRules, "blast-po-semifinal", {
+      winToken: "SFR1M1W",
     });
-    addMatch(result, teams, "blast-playoffs", 0, 1, "Group B #2", "PI1M2W", seriesRules, "blast-po-quarterfinal", {
-      winToken: "BPO1M2W",
+    addMatch(result, teams, "blast-playoffs", 1, 1, waitSF2, "QFR1M2W", seriesRules, "blast-po-semifinal", {
+      winToken: "SFR1M2W",
     });
-    addMatch(result, teams, "blast-playoffs", 1, 0, "Group A #1", "BPO1M1W", seriesRules, "blast-po-semifinal", {
-      winToken: "BPO2M1W",
-    });
-    addMatch(result, teams, "blast-playoffs", 1, 1, "Group B #1", "BPO1M2W", seriesRules, "blast-po-semifinal", {
-      winToken: "BPO2M2W",
-    });
-    addMatch(result, teams, "blast-playoffs", 2, 0, "BPO2M1W", "BPO2M2W", seriesRules, "blast-po-final", { winToken: "CHAMPION" });
-  } else {
-    addMatch(result, teams, "blast-playoffs", 0, 0, "PI1M1W", "PI1M2W", seriesRules, "blast-po-quarterfinal", {
-      winToken: "BPO1M1W",
-    });
-    addMatch(result, teams, "blast-playoffs", 0, 1, "PI1M3W", "PI1M4W", seriesRules, "blast-po-quarterfinal", {
-      winToken: "BPO1M2W",
-    });
-    addMatch(result, teams, "blast-playoffs", 1, 0, "Group A #1", "BPO1M1W", seriesRules, "blast-po-semifinal", {
-      winToken: "BPO2M1W",
-    });
-    addMatch(result, teams, "blast-playoffs", 1, 1, "Group B #1", "BPO1M2W", seriesRules, "blast-po-semifinal", {
-      winToken: "BPO2M2W",
-    });
-    addMatch(result, teams, "blast-playoffs", 2, 0, "BPO2M1W", "BPO2M2W", seriesRules, "blast-po-final", { winToken: "CHAMPION" });
+    addMatch(result, teams, "blast-playoffs", 2, 0, "SFR1M1W", "SFR1M2W", seriesRules, "blast-po-final", { winToken: "CHAMPION" });
   }
 
   return result;
@@ -464,8 +504,7 @@ export function stageTabsForFormat(format, options = {}) {
       { id: "blast-group-b", label: "Group B (BO1)" },
     ];
     if (sizes) {
-      tabs.push({ id: "blast-lastchance", label: "Last Chance" });
-      tabs.push({ id: "blast-playin", label: "Play-In" });
+      tabs.push({ id: "blast-qualifiers", label: "Last Chance & Play-In" });
     }
     tabs.push({ id: "blast-playoffs", label: "Playoffs" });
     return tabs;
