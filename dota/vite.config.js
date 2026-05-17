@@ -16,6 +16,12 @@ export default defineConfig(({ mode }) => {
     );
   }
 
+  const apiProxyTarget = env.VITE_API_PROXY_TARGET || process.env.VITE_API_PROXY_TARGET || "http://localhost:3000";
+  const apiProxy = {
+    target: apiProxyTarget,
+    changeOrigin: true,
+  };
+
   return {
     plugins: [
       {
@@ -31,9 +37,14 @@ export default defineConfig(({ mode }) => {
       mode === "development"
         ? {
             proxy: {
-              "/api": process.env.VITE_API_PROXY_TARGET || "http://localhost:3000",
+              "/api": apiProxy,
             },
           }
         : undefined,
+    preview: {
+      proxy: {
+        "/api": apiProxy,
+      },
+    },
   };
 });

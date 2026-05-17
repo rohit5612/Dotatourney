@@ -721,6 +721,7 @@ function App() {
             bootstrapTournament={bootstrapTournament}
             exportData={exportData}
             importData={importData}
+            tournamentId={tournamentId}
             state={state}
             tournaments={tournamentList}
             refreshTournaments={loadTournaments}

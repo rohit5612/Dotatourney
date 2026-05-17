@@ -35,6 +35,7 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
   const [savingId, setSavingId] = useState("");
   const [lightboxSrc, setLightboxSrc] = useState("");
   const [lightboxName, setLightboxName] = useState("");
+  const [crmSheetSyncPending, setCrmSheetSyncPending] = useState(false);
 
   const filtered = useMemo(() => {
     const list = (registrations || [])
@@ -140,6 +141,59 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
     setMessage("Unsupported screenshot format — contact support if this persists.");
   }
 
+  function getStoredSpreadsheetId() {
+    if (!tournamentId) return "";
+    try {
+      return window.localStorage.getItem(`bpcl-google-sheet:${tournamentId}`)?.trim() || "";
+    } catch {
+      return "";
+    }
+  }
+
+  function getStoredSheetTabName() {
+    if (!tournamentId) return "";
+    try {
+      return window.localStorage.getItem(`bpcl-google-sheet-tab:${tournamentId}`)?.trim() || "";
+    } catch {
+      return "";
+    }
+  }
+
+  async function syncCrmToGoogleSheet() {
+    if (!tournamentId) return;
+    const spreadsheetId = getStoredSpreadsheetId();
+    if (!spreadsheetId) {
+      setMessage("Set the spreadsheet ID under Admin → Setup → Google Sheets, then try again.");
+      return;
+    }
+    const sheetTab = getStoredSheetTabName();
+    const n = filtered.length;
+    const tabHint = sheetTab ? `the “${sheetTab}” tab` : "the first worksheet tab";
+    const confirmed = window.confirm(
+      `Sync ${n} registration row(s) to Google Sheets?\n\n` +
+        `${tabHint} will be cleared from C5 through K2004, then filled from row 5:\n` +
+        "C name · D Steam name · E MMR · F roles · G Discord · H phone · I Steam profile link · J status · K notes",
+    );
+    if (!confirmed) return;
+    setMessage("");
+    setCrmSheetSyncPending(true);
+    try {
+      const payload = {
+        spreadsheetId,
+        registrationIds: filtered.map((r) => r.id),
+      };
+      if (sheetTab) payload.sheetName = sheetTab;
+      const result = await api.syncGoogleSheetsRegistrations(tournamentId, payload);
+      setMessage(
+        `Google Sheet updated — tab “${result.sheetTitle}”, ${result.rowsWritten} row(s) written (${result.range}).`,
+      );
+    } catch (error) {
+      setMessage(error.message || "Google Sheets sync failed.");
+    } finally {
+      setCrmSheetSyncPending(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       {message ? <p className="rounded-md border border-border bg-card p-2 text-sm text-secondary">{message}</p> : null}
@@ -152,7 +206,23 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
               rejected / waitlisted) send only when you save and the registration status has changed.
             </p>
           </div>
-          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="flex min-w-0 flex-col items-stretch gap-2 sm:items-end">
+            <button
+              type="button"
+              className="btn btn-outline btn-sm shrink-0"
+              onClick={syncCrmToGoogleSheet}
+              disabled={!tournamentId || crmSheetSyncPending}
+            >
+              {crmSheetSyncPending ? "Syncing…" : "Sync to Google Sheet"}
+            </button>
+            <p className="max-w-md text-right text-xs text-muted-foreground">
+              Uses spreadsheet ID + worksheet tab from Setup (per tournament). CRM writes <span className="font-mono text-foreground">C5:K…</span> on that tab; leave tab
+              name empty in Setup to use the first tab.
+            </p>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <input
               className="min-w-0 w-full rounded-md border border-input bg-background p-2 sm:w-56 sm:flex-1 md:max-w-xs lg:max-w-sm"
               placeholder="Search email, code, player, Steam, Discord"

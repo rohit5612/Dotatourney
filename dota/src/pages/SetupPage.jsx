@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { buildDefaultSeriesRules, blastTenTeamRulebookOverview, formatDetails, seriesOptions, seriesRuleTemplates } from "../constants/tournament";
 
 const formatTeamGuidance = {
@@ -193,9 +193,12 @@ export function SetupPage({
   unpublishTournament,
   deleteTournament,
   startNewTournament,
+  tournamentId = "",
 }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [googleSheetId, setGoogleSheetId] = useState("");
+  const [googleSheetTabName, setGoogleSheetTabName] = useState("");
   const teamCount = Number(setup.teamCount) || 0;
   const isPowerOfTwo = teamCount > 0 && (teamCount & (teamCount - 1)) === 0;
   const currentSeriesTemplates = seriesRuleTemplates[setup.format] || [];
@@ -205,6 +208,33 @@ export function SetupPage({
   const setupInsights = getSetupInsights(setup.format, teamCount, isPowerOfTwo, selectedGuidance);
   const prizeBreakdown = normalizePrizePoolBreakdown(setup.prizePoolBreakdown);
   const prizeEligibleCount = Math.min(teamCount || 1, Math.max(1, prizeBreakdown.length || 1));
+
+  useEffect(() => {
+    if (!tournamentId) {
+      setGoogleSheetId("");
+      setGoogleSheetTabName("");
+      return;
+    }
+    try {
+      const saved = window.localStorage.getItem(`bpcl-google-sheet:${tournamentId}`);
+      setGoogleSheetId(saved || "");
+      const savedTab = window.localStorage.getItem(`bpcl-google-sheet-tab:${tournamentId}`);
+      setGoogleSheetTabName(savedTab || "");
+    } catch {
+      setGoogleSheetId("");
+      setGoogleSheetTabName("");
+    }
+  }, [tournamentId]);
+
+  function persistGoogleSheetPrefsToStorage() {
+    if (!tournamentId) return;
+    try {
+      window.localStorage.setItem(`bpcl-google-sheet:${tournamentId}`, googleSheetId.trim());
+      window.localStorage.setItem(`bpcl-google-sheet-tab:${tournamentId}`, googleSheetTabName.trim());
+    } catch {
+      // Ignore storage write errors.
+    }
+  }
 
   function setPrizeBreakdownCount(nextCount) {
     const count = Math.max(1, Math.min(teamCount || 1, Number(nextCount) || 1));
@@ -725,16 +755,58 @@ export function SetupPage({
             ) : null}
 
             <div className="flex flex-wrap gap-2">
-        <button type="button" className="btn btn-primary" onClick={saveDraft} disabled={isSaving}>
-          {isSaving ? "Saving..." : "Save draft"}
-        </button>
-        <button type="button" className="btn btn-outline" onClick={exportData}>
-          Export JSON
-        </button>
-        <label className="btn btn-outline cursor-pointer">
-          Import JSON
-          <input type="file" accept="application/json" className="hidden" onChange={importData} />
-        </label>
+              <button type="button" className="btn btn-primary" onClick={saveDraft} disabled={isSaving}>
+                {isSaving ? "Saving..." : "Save draft"}
+              </button>
+              <button type="button" className="btn btn-outline" onClick={exportData}>
+                Export JSON
+              </button>
+              <label className="btn btn-outline cursor-pointer">
+                Import JSON
+                <input type="file" accept="application/json" className="hidden" onChange={importData} />
+              </label>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-3">
+              <p className="mb-2 text-sm font-medium text-foreground">Google Sheets (workbook settings — Setup only)</p>
+              <p className="mb-3 text-xs text-muted-foreground">
+                The app only sends data from <span className="font-medium text-foreground">Registration CRM</span> → Sync: fixed block{" "}
+                <span className="font-mono">C5:K…</span> on the tab you name below. No tournament/bracket data is written from Setup. Values save to this browser for
+                this tournament when you leave a field.
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+                <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-left text-xs text-muted-foreground">
+                  Spreadsheet ID (from the sheet URL)
+                  <input
+                    type="text"
+                    className="rounded-md border border-input bg-card px-2 py-1.5 text-sm text-foreground"
+                    placeholder="e.g. 1AbC…xyz"
+                    value={googleSheetId}
+                    onChange={(e) => setGoogleSheetId(e.target.value)}
+                    onBlur={persistGoogleSheetPrefsToStorage}
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={!tournamentId}
+                  />
+                </label>
+                <label className="flex min-w-[180px] flex-1 flex-col gap-1 text-left text-xs text-muted-foreground">
+                  Worksheet tab for CRM sync (exact name)
+                  <input
+                    type="text"
+                    className="rounded-md border border-input bg-card px-2 py-1.5 text-sm text-foreground"
+                    placeholder='e.g. Registrations — empty = first tab'
+                    value={googleSheetTabName}
+                    onChange={(e) => setGoogleSheetTabName(e.target.value)}
+                    onBlur={persistGoogleSheetPrefsToStorage}
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={!tournamentId}
+                  />
+                </label>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Share the workbook with your service account as Editor. Run sync from <span className="font-medium text-foreground">Registrations</span> only.
+              </p>
             </div>
           </div>
         </div>

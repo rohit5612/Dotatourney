@@ -56,6 +56,9 @@ export const env = {
   smtpConfigured: Boolean(emailUser && emailPass),
   /** Used to hash player registration OTPs. Set a strong secret in production. */
   registrationOtpSecret: process.env.REGISTRATION_OTP_SECRET?.trim() || "",
+  /** Service account JSON (minified one-line). Or use GOOGLE_SERVICE_ACCOUNT_JSON_B64 / GOOGLE_APPLICATION_CREDENTIALS. */
+  googleServiceAccountJson: process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim() || "",
+  googleServiceAccountJsonB64: process.env.GOOGLE_SERVICE_ACCOUNT_JSON_B64?.trim() || "",
 };
 
 const hasDiscreteDbCreds = Boolean(env.dbHost && env.dbName && env.dbUser);

@@ -9,6 +9,9 @@ dota/dist/
 build/
 coverage/
 
+# Server secrets (e.g. Google service account key file)
+server/secrets/
+
 # Environment files
 .env
 .env.*

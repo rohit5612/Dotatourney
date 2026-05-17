@@ -8,6 +8,7 @@ import { archivePlayerRegistration, getPlayerRegistrationById, listPlayerRegistr
 import { sendPlayerRegistrationDecisionEmail } from "../services/emailService.js";
 import { buildGroupedStandings, buildStandings } from "../services/standingsEngine.js";
 import { requireAdmin } from "../services/authService.js";
+import { syncCrmRegistrationsToGoogleSheet } from "../services/googleSheetsSync.js";
 import {
   approveRosterSnapshot,
   createRosterSnapshot,
@@ -104,6 +105,25 @@ async function validateRosterRegistrations(tournamentId, players) {
 }
 
 router.use(requireAdmin);
+
+router.post("/:id/google-sheets/sync-registrations", async (req, res, next) => {
+  try {
+    const payload = z
+      .object({
+        spreadsheetId: z.string().min(1),
+        registrationIds: z.array(z.string().uuid()).optional(),
+        sheetName: z.string().min(1).optional(),
+      })
+      .parse(req.body);
+    const result = await syncCrmRegistrationsToGoogleSheet(req.params.id, payload.spreadsheetId.trim(), {
+      registrationIds: payload.registrationIds,
+      sheetName: payload.sheetName,
+    });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.get("/", async (_req, res, next) => {
   try {

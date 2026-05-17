@@ -33,7 +33,8 @@ async function request(path, options = {}) {
     if (response.status === 401) {
       setAuthToken("");
     }
-    const err = new Error(body.message || "API request failed");
+    const hint = body.message || (response.status === 404 ? "Not found — check API is running and URL includes /api" : null);
+    const err = new Error(hint || `API request failed (${response.status})`);
     err.status = response.status;
     if (body.registrationConflict) err.registrationConflict = body.registrationConflict;
     throw err;
@@ -170,6 +171,11 @@ export const api = {
       body: JSON.stringify({ schedule }),
     }),
   exportTournament: (id) => request(`/tournaments/${id}/export`),
+  syncGoogleSheetsRegistrations: (id, payload) =>
+    request(`/tournaments/${id}/google-sheets/sync-registrations`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   getRegistrations: (id) => request(`/tournaments/${id}/registrations`),
   updateRegistration: (id, registrationId, payload) =>
     request(`/tournaments/${id}/registrations/${registrationId}`, {
