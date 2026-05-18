@@ -194,6 +194,7 @@ export function SetupPage({
   deleteTournament,
   startNewTournament,
   tournamentId = "",
+  setRegistrationsAccepting,
 }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -284,10 +285,27 @@ export function SetupPage({
       visibilityMode: "demo",
       bracketActive: false,
       status: "draft",
-    registrationCodePrefix: "BPC",
-    paymentQrImage: "",
-    paymentUpiId: "",
-  });
+      registrationCodePrefix: "BPC",
+      paymentQrImage: "",
+      paymentUpiId: "",
+      registrationsOpen: false,
+    });
+  }
+
+  function promptOpenRegistrations() {
+    const ok = window.confirm(
+      "Open public registrations? Published players will be able to use the full registration steps on /register.",
+    );
+    if (!ok) return;
+    void setRegistrationsAccepting?.(true);
+  }
+
+  function promptCloseRegistrations() {
+    const ok = window.confirm(
+      "Close public registrations? The form will disappear on /register until you open again. Anyone mid-registration cannot finish OTP or payment online.",
+    );
+    if (!ok) return;
+    void setRegistrationsAccepting?.(false);
   }
 
   async function saveDraft() {
@@ -563,14 +581,40 @@ export function SetupPage({
             onChange={(event) => setSetup((prev) => ({ ...prev, endDate: event.target.value }))}
           />
         </label>
+        <div className="md:col-span-2 space-y-3 rounded-md border border-border bg-muted/30 p-4">
+          <div>
+            <p className="font-medium text-foreground">Public registration</p>
+            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+              Use the cutoff below only as an <strong className="text-foreground">informational date</strong> on the hub and registration page.
+              Turning registration off hides the registration form regardless of that date.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`text-xs font-semibold uppercase tracking-wide ${setup.registrationsOpen ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
+              {setup.registrationsOpen ? "● Open on public site" : "● Closed"}
+            </span>
+            <button type="button" className="btn btn-primary btn-sm" onClick={promptOpenRegistrations}>
+              Open registrations
+            </button>
+            <button type="button" className="btn btn-outline btn-sm" onClick={promptCloseRegistrations}>
+              Close registrations
+            </button>
+          </div>
+          {!tournamentId ? (
+            <p className="text-xs text-muted-foreground">Save the tournament draft first — then toggles apply instantly.</p>
+          ) : null}
+        </div>
         <label className="text-sm text-muted-foreground">
-          Registration finish date
+          Public registration cutoff (display only)
           <input
             type="datetime-local"
             className="mt-1 w-full rounded-md border border-input bg-background p-2 text-foreground"
             value={setup.registrationDeadline || ""}
             onChange={(event) => setSetup((prev) => ({ ...prev, registrationDeadline: event.target.value }))}
           />
+          <span className="mt-1 block text-xs leading-snug text-muted-foreground">
+            Shown to players — does not auto-close the form (use Open / Close above).
+          </span>
         </label>
         <div className="md:col-span-2 rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
           <p className="font-medium text-foreground">Player registration IDs</p>

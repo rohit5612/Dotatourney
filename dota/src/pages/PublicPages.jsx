@@ -408,7 +408,7 @@ function PublicHeader({ path, navigate }) {
   );
 }
 
-function EventShell({ path, navigate, children }) {
+function EventShell({ path, navigate, children, registerClosedCentered = false }) {
   const isFullBleedBg = path === "/schedule" || path === "/register" || path === "/rules";
   const contentClass = path === "/schedule" ? "mx-auto max-w-7xl space-y-6 px-4 pb-10 pt-28" : "mx-auto max-w-6xl space-y-6 px-4 pb-10 pt-28";
   const fullBleedImage =
@@ -419,8 +419,18 @@ function EventShell({ path, navigate, children }) {
       : path === "/register"
         ? "bg-gradient-to-b from-background/86 via-background/78 to-background/84"
         : "bg-gradient-to-br from-background/87 via-background/78 to-background/80";
+
+  const footerFullBleedStyling = isFullBleedBg || registerClosedCentered;
+  const sectionClassName = registerClosedCentered
+    ? "relative z-10 flex min-h-0 flex-1 flex-col px-4 pt-24 sm:pt-28"
+    : path === "/"
+      ? "space-y-20"
+      : `${contentClass} relative z-10`;
+
   return (
-    <main className={`min-h-screen text-foreground ${isFullBleedBg ? "" : "bg-background"}`}>
+    <main
+      className={`min-h-screen text-foreground ${isFullBleedBg ? "" : "bg-background"} ${registerClosedCentered ? "flex flex-col" : ""}`}
+    >
       {isFullBleedBg && fullBleedImage ? (
         <div className="pointer-events-none fixed inset-0 z-0" aria-hidden="true">
           <img alt="" className="h-full w-full object-cover" src={fullBleedImage} />
@@ -428,8 +438,16 @@ function EventShell({ path, navigate, children }) {
         </div>
       ) : null}
       <PublicHeader path={path} navigate={navigate} />
-      <section className={path === "/" ? "space-y-20" : `${contentClass} relative z-10`}>{children}</section>
-      <div className={`relative z-10 ${isFullBleedBg ? "border-t border-border/60 bg-background/95 backdrop-blur-sm" : ""}`}>
+      <section className={sectionClassName}>
+        {registerClosedCentered ? (
+          <div className="flex min-h-[calc(100dvh-14rem)] flex-1 flex-col items-center justify-center py-10 sm:min-h-[calc(100dvh-12rem)] sm:py-16 md:py-20">
+            {children}
+          </div>
+        ) : (
+          children
+        )}
+      </section>
+      <div className={`relative z-10 ${footerFullBleedStyling ? "mt-auto border-t border-border/60 bg-background/95 backdrop-blur-sm" : ""}`}>
         <AppFooter navigate={navigate} />
       </div>
       <CookieConsentBanner navigate={navigate} />
@@ -475,9 +493,11 @@ export function PublicApp({ path, navigate }) {
     return <PageLoadingSpinner label="Loading event…" />;
   }
 
+  const registerClosedCentered = path === "/register" && event?.tournament?.registrations_open !== true;
+
   if (path === "/register") {
     return (
-      <EventShell path={path} navigate={navigate}>
+      <EventShell path={path} navigate={navigate} registerClosedCentered={registerClosedCentered}>
         <RegistrationPage event={event} message={message} setMessage={setMessage} />
       </EventShell>
     );
@@ -1041,7 +1061,7 @@ function TournamentInfo({ event, message }) {
               <Metric label="Format" value={`${getFormatName(tournament?.format)} ${tournament?.team_count || "TBA"} Teams`} />
               <Metric label="Registration fee" value={tournament?.entry_fee || "TBA"} />
               <Metric label="Prize pool" value={tournament?.prize_pool || "TBA"} />
-              <Metric label="Registration closes" value={formatDate(tournament?.registration_deadline)} />
+              <Metric label="Registration cutoff (display)" value={formatDate(tournament?.registration_deadline)} />
             </div>
           </section>
 
@@ -1617,7 +1637,9 @@ function RegistrationPage({ event, message, setMessage }) {
   const tournament = event?.tournament;
   const discordUrl = tournament?.discord_url || discordInviteUrl;
   const registrationDeadline = tournament?.registration_deadline;
-  const registrationClosed = registrationDeadline ? new Date(registrationDeadline) <= new Date() : false;
+  const registrationAccepting = tournament?.registrations_open === true;
+  /** When false: admin has closed signup (deadline remains display-only while open). */
+  const registrationGated = !registrationAccepting;
   const qrImage = tournament?.payment_qr_image || "";
   const paymentUpiId = (tournament?.payment_upi_id || "").trim();
   const registrationFeeDisplay = (tournament?.entry_fee || "").trim();
@@ -1657,6 +1679,10 @@ function RegistrationPage({ event, message, setMessage }) {
   }
 
   useEffect(() => {
+    if (!registrationAccepting) {
+      setResumeLoading(false);
+      return undefined;
+    }
     const qs = new URLSearchParams(window.location.search);
     const email = qs.get("email")?.trim();
     const code = qs.get("code")?.trim();
@@ -1707,7 +1733,7 @@ function RegistrationPage({ event, message, setMessage }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [registrationAccepting]);
 
   function toggleRole(role) {
     setForm((prev) => ({
@@ -1763,7 +1789,7 @@ function RegistrationPage({ event, message, setMessage }) {
   function onFormSubmit(e) {
     e.preventDefault();
     setMessage("");
-    if (registrationClosed) {
+    if (registrationGated) {
       setMessage("Registration is closed for this tournament.");
       return;
     }
@@ -1804,7 +1830,7 @@ function RegistrationPage({ event, message, setMessage }) {
       setMessage("Registration ID is required (for example BPC-001). Find it in your verification email.");
       return;
     }
-    if (registrationClosed) {
+    if (registrationGated) {
       setMessage("Registration is closed for this tournament.");
       return;
     }
@@ -1924,6 +1950,64 @@ function RegistrationPage({ event, message, setMessage }) {
     }
   }
 
+  if (!registrationAccepting) {
+    return (
+      <div className="mx-auto w-full max-w-2xl">
+        <div className="rounded-2xl border border-border/80 bg-black/45 p-6 shadow-2xl backdrop-blur-md sm:p-10 dark:bg-black/50">
+          <div className="text-center">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-secondary sm:text-xs">Registration closed</p>
+            <h1 className="mt-4 wrap-break-word font-serif text-3xl font-semibold tracking-tight text-foreground sm:text-4xl md:text-5xl">
+              {tournament?.name || SITE_BRAND_LINE}
+            </h1>
+            <p className="mt-8 text-pretty text-lg font-semibold leading-snug text-foreground sm:text-xl md:text-2xl">
+              Registrations have been closed for this season because our intended player slots have been filled.
+            </p>
+            <p className="mt-5 text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg">
+              Thank you for your interest — season updates and future registrations will be posted in our Discord community.
+            </p>
+            <p className="mt-6 text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
+              If you used a link from your email to continue registration or open the Complete payment flow, that route is unavailable while sign-ups are
+              closed. For questions about an existing signup, reach out on Discord.
+            </p>
+            {message ? (
+              <p
+                className="mx-auto mt-8 max-w-md rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm font-medium text-destructive dark:border-destructive/40 dark:bg-destructive/15"
+                role="alert"
+              >
+                {message}
+              </p>
+            ) : null}
+            <div className="mt-12 flex flex-col items-stretch gap-5 sm:items-center">
+              <a
+                className={`${REGISTRATION_DISCORD_BTN_CLASS} w-full justify-center rounded-xl px-8 py-4 text-lg font-semibold shadow-lg sm:w-auto sm:min-w-[min(92vw,22rem)] md:py-5 md:text-xl`}
+                href={discordUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Join the Discord server
+              </a>
+              <a
+                className="break-all text-center text-sm font-medium text-secondary underline underline-offset-4 transition hover:text-foreground sm:text-base"
+                href={discordUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {discordUrl}
+              </a>
+            </div>
+            <p className="mt-12 text-sm text-muted-foreground">
+              Email{" "}
+              <a className="text-secondary underline underline-offset-2 hover:text-foreground" href={`mailto:${PUBLIC_CONTACT_EMAIL}`}>
+                {PUBLIC_CONTACT_EMAIL}
+              </a>{" "}
+              for other inquiries.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const stepLabel =
     regTab === "payment" && step === "form"
       ? "Complete payment"
@@ -1978,8 +2062,8 @@ function RegistrationPage({ event, message, setMessage }) {
         </p>
         <p className="mt-2 text-xs uppercase tracking-wider text-secondary">{stepLabel}</p>
         {registrationDeadline ? (
-          <p className={`mt-2 rounded-md border border-border bg-background p-2 text-sm ${registrationClosed ? "text-destructive" : "text-secondary"}`}>
-            Registration {registrationClosed ? "closed" : "closes"} on {new Date(registrationDeadline).toLocaleString()}.
+          <p className="mt-2 rounded-md border border-border bg-background p-2 text-sm text-secondary">
+            Registrations will be closed on {new Date(registrationDeadline).toLocaleString()}. Follow Discord for any updates or extensions.
           </p>
         ) : null}
       </div>
@@ -2096,9 +2180,9 @@ function RegistrationPage({ event, message, setMessage }) {
               })}
             </div>
             <div className="mt-4 flex justify-end">
-              <button type="submit" className={REGISTRATION_CONTINUE_BTN_CLASS} disabled={registrationClosed || busy}>
+              <button type="submit" className={REGISTRATION_CONTINUE_BTN_CLASS} disabled={registrationGated || busy}>
                 {busy ? <RegistrationButtonSpinner /> : null}
-                {registrationClosed ? "Registration closed" : busy ? "Continuing…" : "Continue"}
+                {registrationGated ? "Registration closed" : busy ? "Continuing…" : "Continue"}
               </button>
             </div>
           </div>
@@ -2113,9 +2197,9 @@ function RegistrationPage({ event, message, setMessage }) {
           <Input label="Email" type="email" value={paymentLookupEmail} onChange={setPaymentLookupEmail} required />
           <Input label="Registration ID" value={paymentLookupCode} onChange={setPaymentLookupCode} required />
           <div className="flex justify-end">
-            <button type="submit" className={REGISTRATION_CONTINUE_BTN_CLASS} disabled={busy || registrationClosed}>
+            <button type="submit" className={REGISTRATION_CONTINUE_BTN_CLASS} disabled={busy || registrationGated}>
               {busy ? <RegistrationButtonSpinner /> : null}
-              {registrationClosed ? "Registration closed" : busy ? "Continuing…" : "Continue"}
+              {registrationGated ? "Registration closed" : busy ? "Continuing…" : "Continue"}
             </button>
           </div>
         </form>
@@ -2251,7 +2335,7 @@ function RegistrationPage({ event, message, setMessage }) {
             <img src={paymentScreenshot} alt="Payment screenshot preview" className="max-h-48 rounded-md border border-border object-contain" />
           ) : null}
           <div className="flex justify-end">
-            <button type="submit" className={REGISTRATION_CONTINUE_BTN_CLASS} disabled={busy || registrationClosed || !paymentScreenshot}>
+            <button type="submit" className={REGISTRATION_CONTINUE_BTN_CLASS} disabled={busy || registrationGated || !paymentScreenshot}>
               {busy ? <RegistrationButtonSpinner /> : null}
               {busy ? "Continuing…" : "Continue"}
             </button>

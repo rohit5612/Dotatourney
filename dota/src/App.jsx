@@ -51,6 +51,7 @@ function App() {
     paymentQrImage: "",
     paymentUpiId: "",
     registrationCodeSeq: 0,
+    registrationsOpen: false,
   });
   const [teamDraft, setTeamDraft] = useState([]);
   const [poolDraft, setPoolDraft] = useState([]);
@@ -172,6 +173,10 @@ function App() {
         paymentQrImage: payload.tournament.payment_qr_image ?? prev.paymentQrImage ?? "",
         paymentUpiId: payload.tournament.payment_upi_id ?? prev.paymentUpiId ?? "",
         registrationCodeSeq: payload.tournament.registration_code_seq ?? prev.registrationCodeSeq ?? 0,
+        registrationsOpen:
+          typeof payload.tournament.registrations_open === "boolean"
+            ? payload.tournament.registrations_open
+            : prev.registrationsOpen ?? false,
       }));
       setTournamentId(payload.tournament.id);
     }
@@ -252,6 +257,24 @@ function App() {
       await refreshTournament(tournamentId, { keepTeamPane: true });
       await loadTournaments();
       setMessage(nextMode === "demo" ? "Demo bracket mode saved." : "Tournament bracket mode saved.");
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function setRegistrationsAccepting(nextOpen) {
+    if (!tournamentId) {
+      setSetup((prev) => ({ ...prev, registrationsOpen: nextOpen }));
+      setMessage("Save the tournament draft first.");
+      return;
+    }
+    try {
+      const payload = buildTournamentPayload({ registrationsOpen: nextOpen });
+      await api.updateTournament(tournamentId, payload);
+      setSetup((prev) => ({ ...prev, registrationsOpen: nextOpen }));
+      await refreshTournament(tournamentId, { keepTeamPane: true });
+      await loadTournaments();
+      setMessage(nextOpen ? "Registration is open on the public site." : "Registration is closed on the public site.");
     } catch (error) {
       setMessage(error.message);
     }
@@ -740,6 +763,7 @@ function App() {
             publishTournament={publishCurrentTournament}
             unpublishTournament={unpublishCurrentTournament}
             deleteTournament={deleteDraftTournament}
+            setRegistrationsAccepting={setRegistrationsAccepting}
           />
         )}
 

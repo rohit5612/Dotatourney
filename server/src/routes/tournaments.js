@@ -78,6 +78,7 @@ const tournamentSchema = z.object({
   registrationCodePrefix: z.string().max(12).optional().default("BPC"),
   paymentQrImage: z.string().optional().default(""),
   paymentUpiId: z.string().optional().default(""),
+  registrationsOpen: z.boolean().optional().default(false),
 });
 
 async function validateRosterRegistrations(tournamentId, players) {

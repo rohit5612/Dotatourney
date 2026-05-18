@@ -107,6 +107,7 @@ function fallbackTournament(identifier) {
     payment_qr_image: "",
     payment_upi_id: "",
     registration_code_prefix: DEFAULT_REG_PREFIX,
+    registrations_open: false,
   };
 }
 
@@ -181,8 +182,10 @@ function assertPublishedOpen(data) {
     err.status = 404;
     throw err;
   }
-  if (data.tournament.registration_deadline && new Date(data.tournament.registration_deadline) <= new Date()) {
-    const err = new Error("Registration is closed for this tournament");
+  if (data.tournament.registrations_open !== true) {
+    const err = new Error(
+      "Registration is closed. New sign-ups, email verification, continuing from an email link (including Complete payment), and submitting payment online are disabled.",
+    );
     err.status = 403;
     throw err;
   }

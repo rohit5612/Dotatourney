@@ -91,7 +91,7 @@ export function applyPublishedSnapshot(data) {
   const snap = t.published_snapshot;
   const { published_snapshot: _snap, ...base } = t;
   if (snap && typeof snap === "object" && !Array.isArray(snap)) {
-    const { visibility_mode: _frozenVis, ...snapRest } = snap;
+    const { visibility_mode: _frozenVis, registrations_open: _frozenRegOpen, ...snapRest } = snap;
     /** Always use live copy for fields ops tweak often without re-publish. */
     const liveAnnouncements = base.announcements;
     const liveDescription = base.description;
@@ -115,10 +115,10 @@ export async function createTournament(payload) {
       id, name, slug, format, series_type, team_count, dark_mode, series_rules,
       description, prize_pool, prize_pool_breakdown, entry_fee, start_date, end_date, registration_deadline,
       discord_url, rulebook, announcements, visibility_mode, bracket_active, status,
-      registration_code_prefix, registration_code_seq, payment_qr_image, payment_upi_id
+      registration_code_prefix, registration_code_seq, payment_qr_image, payment_upi_id, registrations_open
     )
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, 'draft',
-      $21, $22, $23, $24)
+      $21, $22, $23, $24, $25)
     RETURNING *;
   `;
   const values = [
@@ -146,6 +146,7 @@ export async function createTournament(payload) {
     Number.isFinite(Number(payload.registrationCodeSeq)) ? Number(payload.registrationCodeSeq) : 0,
     payload.paymentQrImage || "",
     payload.paymentUpiId || "",
+    Boolean(payload.registrationsOpen),
   ];
   const { rows } = await pool.query(query, values);
   return rows[0];
@@ -177,6 +178,7 @@ export async function updateTournament(tournamentId, payload) {
         registration_code_prefix = $22,
         payment_qr_image = $23,
         payment_upi_id = $24,
+        registrations_open = $25,
         updated_at = NOW()
     WHERE id = $1
     RETURNING *;
@@ -206,6 +208,7 @@ export async function updateTournament(tournamentId, payload) {
     (payload.registrationCodePrefix || "BPC").toString().slice(0, 12).toUpperCase().replace(/[^A-Z0-9]/g, "") || "BPC",
     payload.paymentQrImage || "",
     payload.paymentUpiId || "",
+    Boolean(payload.registrationsOpen),
   ];
   const { rows } = await pool.query(query, values);
   return rows[0];
