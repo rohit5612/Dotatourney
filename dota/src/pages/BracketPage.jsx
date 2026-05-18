@@ -174,6 +174,7 @@ export function BracketPage({
         submitResult={submitResult}
         updateMatch={updateMatch}
         playoffFeedMatches={activeTab === "blast-qualifiers" ? blastPlayoffQuarterRows : undefined}
+        blastSeedMatches={state?.matches ?? []}
       />
     </div>
   );

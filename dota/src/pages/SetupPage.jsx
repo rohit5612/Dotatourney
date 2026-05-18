@@ -1,5 +1,14 @@
 import { useEffect, useState } from "react";
-import { buildDefaultSeriesRules, blastTenTeamRulebookOverview, formatDetails, seriesOptions, seriesRuleTemplates } from "../constants/tournament";
+import {
+  blastTenTeamRulebookOverview,
+  buildDefaultSeriesRules,
+  formatDetails,
+  getBlastPhaseSizesUi,
+  getBlastSeriesRuleTemplates,
+  mergeBlastSeriesRules,
+  seriesOptions,
+  seriesRuleTemplates,
+} from "../constants/tournament";
 
 const formatTeamGuidance = {
   se: { min: 2, recommended: "4, 8, 16, 32", odd: "Odd counts use byes to avoid fake teams." },
@@ -14,42 +23,6 @@ const formatTeamGuidance = {
     odd: "Minimum 10 teams. Two BO1 groups, then Last chance → Play-In → main playoffs (depth scales with entrants).",
   },
 };
-
-/** Mirrors server `getBlastPhaseSizes` for setup hints — keep in sync when server formula changes */
-function blastPhaseSizesUi(n) {
-  const x = Math.max(0, Number(n) || 0);
-  if (x < 10) return null;
-  const lcEntrants = Math.max(4, x - 8);
-
-  if (x === 10) {
-    const sidePoolExcluded = 4;
-    const remainder = x - sidePoolExcluded;
-    const playInFromGroups = remainder - lcEntrants;
-    if (playInFromGroups < 0) return null;
-    return {
-      lcEntrants,
-      playInFromGroups,
-      remainder,
-      piBracketSlots: 4,
-      middleBracketEntrants: null,
-      /** @type {"ten_qf_seconds"} */
-      mainPlayoffPath: "ten_qf_seconds",
-    };
-  }
-
-  const middleBracketEntrants = x - 4 - lcEntrants;
-  if (middleBracketEntrants < 1) return null;
-
-  return {
-    lcEntrants,
-    playInFromGroups: null,
-    remainder: null,
-    piBracketSlots: null,
-    middleBracketEntrants,
-    /** @type {"tiered_merged_standings"} */
-    mainPlayoffPath: "tiered_merged_standings",
-  };
-}
 
 function normalizePrizePoolBreakdown(value) {
   if (Array.isArray(value)) return value;
@@ -134,7 +107,7 @@ function getSetupInsights(format, teamCount, isPowerOfTwo, selectedGuidance) {
         label: "Elimination",
         value: (() => {
           if (count < 10) return "—";
-          const sizes = blastPhaseSizesUi(count);
+          const sizes = getBlastPhaseSizesUi(count);
           if (!sizes)
             return `Invalid team count (${count}). BLAST expects at least ${formatTeamGuidance.blast.min} teams with viable remainder sizing.`;
 
@@ -155,18 +128,31 @@ function getSetupInsights(format, teamCount, isPowerOfTwo, selectedGuidance) {
               `Play-In (${piBracketSlots}-team bracket: ${playInFromGroups} from groups + 2 from Last chance)`,
             );
             parts.push("Main playoffs: group 2nds in quarterfinals vs Play-In winners; group winners in semis; final.");
+          } else if (count === 12) {
+            parts.push(
+              `Play-In — middle knockout: each group's #3 and #4 (paired A3↔B4, B3↔A4 → 2 finalists).`,
+            );
+            parts.push(
+              `Play-In — crossover: each group's #2 faces a Last chance finalist (2 qualifiers into title quarterfinals).`,
+            );
+            parts.push(
+              `Quarterfinals pair crossover winners against opposite middle-band finalists with cross-feeding (avoid parallel 1–1 / 2–2 seed lanes).`,
+            );
+            parts.push(
+              `Main playoffs: four qualifier winners contest quarterfinals → two; group champions meet them in semifinals; final.`,
+            );
           } else {
             parts.push(
               `Play-In — middle knockout (${middleBracketEntrants} teams from merged standings after groups; single elimination → 2 finalists).`,
             );
             parts.push(
-              `Play-In — crossover: merged standings #3 and #4 each face one Last chance finalist (2 qualifiers into title quarterfinals).`,
+              `Play-In — crossover: merged standings crossover band (overall ~#3 and ~#4) each faces one Last chance finalist (2 qualifiers into title quarterfinals).`,
             );
             parts.push(
-              `Quarterfinals pair crossover winners (~#3 and ~#4 vs LC) against opposite middle-band finalists (avoid parallel 1–1 / 2–2 seed lanes).`,
+              `Quarterfinals pair crossover winners against opposite middle-band finalists (avoid parallel 1–1 / 2–2 seed lanes).`,
             );
             parts.push(
-              `Main playoffs: four qualifier winners contest quarterfinals → two; overall #1 and #2 meet them in semifinals; final.`,
+              `Main playoffs: four qualifier winners contest quarterfinals → two; merged top-two seeds meet them in semifinals; final.`,
             );
           }
           return parts.join(" ");
@@ -202,7 +188,8 @@ export function SetupPage({
   const [googleSheetTabName, setGoogleSheetTabName] = useState("");
   const teamCount = Number(setup.teamCount) || 0;
   const isPowerOfTwo = teamCount > 0 && (teamCount & (teamCount - 1)) === 0;
-  const currentSeriesTemplates = seriesRuleTemplates[setup.format] || [];
+  const currentSeriesTemplates =
+    setup.format === "blast" ? getBlastSeriesRuleTemplates(teamCount) : seriesRuleTemplates[setup.format] || [];
   const selectedGuidance = formatTeamGuidance[setup.format] || formatTeamGuidance.dse;
   const teamCountTooLow = teamCount < selectedGuidance.min;
   const quantityTooltip = `${formatDetails[setup.format]?.name || "Selected format"} requires minimum ${selectedGuidance.min} teams. Recommended: ${selectedGuidance.recommended}. ${selectedGuidance.odd}`;
@@ -424,12 +411,16 @@ export function SetupPage({
               teamCountTooLow ? "border-destructive" : "border-input"
             }`}
             value={setup.teamCount}
-            onChange={(event) =>
+            onChange={(event) => {
+              const nextCount = Math.max(selectedGuidance.min, Math.min(64, Number(event.target.value) || selectedGuidance.min));
               setSetup((prev) => ({
                 ...prev,
-                teamCount: Math.max(selectedGuidance.min, Math.min(64, Number(event.target.value) || selectedGuidance.min)),
-              }))
-            }
+                teamCount: nextCount,
+                ...(prev.format === "blast"
+                  ? { seriesRules: mergeBlastSeriesRules(prev.seriesRules, nextCount, prev.seriesType) }
+                  : {}),
+              }));
+            }}
             placeholder="Team count"
           />
           <span
@@ -757,6 +748,17 @@ export function SetupPage({
             Tournament default: <span className="uppercase">{setup.seriesType}</span>
           </p>
         </div>
+        {setup.format === "blast" && getBlastPhaseSizesUi(teamCount)?.mainPlayoffPath === "tiered_merged_standings" ? (
+          <p className="mb-3 text-xs text-muted-foreground">
+            For tiered BLAST ({teamCount} teams): bracket middle uses rule key <span className="font-mono">blast-mp-semifinal</span>, crossover rows use{" "}
+            <span className="font-mono">blast-playin-cross</span>; those map to Setup below and are stored in tournament config.
+          </p>
+        ) : setup.format === "blast" && getBlastPhaseSizesUi(teamCount)?.mainPlayoffPath === "ten_qf_seconds" ? (
+          <p className="mb-3 text-xs text-muted-foreground">
+            Ten-team BLAST: the single four-team Play-In round uses rule key{" "}
+            <span className="font-mono">blast-playin-semifinal</span> on generated matches (same naming as bracket depth — not necessarily a “semi” matchup).
+          </p>
+        ) : null}
         <div className="grid gap-2 md:grid-cols-2">
           {currentSeriesTemplates.map((rule) => (
             <label key={rule.key} className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">

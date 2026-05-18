@@ -85,13 +85,126 @@ export const formatDetails = {
     name: "BLAST-style slam",
     tag: "Groups → Last Chance → Play-In → playoffs",
     description:
-      "Two BO1 round-robin groups, Last chance single elimination, Play-In bracket, then main playoffs. Field sizes and how many LC/PI rounds you see follow the team count (minimum 10 through the admin UI cap). At 10 teams the main bracket uses quarterfinals (group 2nds vs Play-In) then semis (group winners). At 12 teams the main bracket is semifinals and final among the top two from each group only.",
+      "Two BO1 round-robin groups, Last chance elimination, Play-In layers, then main playoffs. Field sizes scale with team count (minimum 10). At 10 teams: #1 wait in semis, #2 enters QF vs Play-In finalists, #3 + two LC survivors fill a 4-slot Play-In, #4–#5 begin Last chance. At 12 teams: #1 wait in semis; #3/#4 fight a middle knockout (A3↔B4, B3↔A4); #5/#6 Last chance; each #2 meets a LC finalist in crossover; four QF winners feed cross-seeded semis vs the BO1 champions.",
     guidance:
       "Requires at least ten teams. Larger events add depth to the Last chance bracket; Play-In stays on a 4-slot (n=10) or 8-slot mini-bracket with seeds and byes from standings. Group winners still enter the main path at semis (or QF at 10 teams) per the generator rules.",
   },
 };
 
 export const seriesOptions = ["bo1", "bo2", "bo3", "bo5"];
+
+/** Mirrors server `getBlastPhaseSizes` for setup / series templates — keep sync with `formatGenerator.js`. */
+export function getBlastPhaseSizesUi(n) {
+  const x = Math.max(0, Number(n) || 0);
+  if (x < 10) return null;
+  const lcEntrants = Math.max(4, x - 8);
+
+  if (x === 10) {
+    const sidePoolExcluded = 4;
+    const remainder = x - sidePoolExcluded;
+    const playInFromGroups = remainder - lcEntrants;
+    if (playInFromGroups < 0) return null;
+    return {
+      lcEntrants,
+      playInFromGroups,
+      remainder,
+      piBracketSlots: 4,
+      middleBracketEntrants: null,
+      /** @type {"ten_qf_seconds"} */
+      mainPlayoffPath: "ten_qf_seconds",
+    };
+  }
+
+  const middleBracketEntrants = x - 4 - lcEntrants;
+  if (middleBracketEntrants < 1) return null;
+
+  return {
+    lcEntrants,
+    playInFromGroups: null,
+    remainder: null,
+    piBracketSlots: null,
+    middleBracketEntrants,
+    /** @type {"tiered_merged_standings"} */
+    mainPlayoffPath: "tiered_merged_standings",
+  };
+}
+
+/** Last chance series keys (depth depends on entrant count; generator picks among these). */
+const blastLcSeriesTemplates = [
+  { key: "blast-lc-quarterfinal", label: "Last Chance — bracket round of 8 (if used)", defaultSeries: "bo3" },
+  { key: "blast-lc-semifinal", label: "Last Chance — bracket round of 4 (semis / first LC round)", defaultSeries: "bo3" },
+  { key: "blast-lc-final", label: "Last Chance — bracket final pair (if used)", defaultSeries: "bo3" },
+  { key: "blast-lc-round", label: "Last Chance — oversized field mid rounds", defaultSeries: "bo3" },
+];
+
+const blastPlayoffSeriesTemplates = [
+  { key: "blast-po-quarterfinal", label: "Playoffs — quarterfinals", defaultSeries: "bo3" },
+  { key: "blast-po-semifinal", label: "Playoffs — semifinals", defaultSeries: "bo3" },
+  { key: "blast-po-final", label: "Playoffs — grand final", defaultSeries: "bo5" },
+];
+
+/** Group-phase rule key emitted by generator (`blast-group-bo1`). */
+const blastGroupTemplate = [{ key: "blast-group-bo1", label: "Group stage (BO1 pools)", defaultSeries: "bo1" }];
+
+/**
+ * Series-rule rows for Setup that match bracket `seriesRuleKey` strings from `formatGenerator.js`.
+ * @param {number} teamCount — BLAST bracket size (minimum 10 for valid layout).
+ */
+export function getBlastSeriesRuleTemplates(teamCount) {
+  const n = Math.max(10, Number(teamCount) || 10);
+  const sizes = getBlastPhaseSizesUi(n);
+  const playoffs = [...blastPlayoffSeriesTemplates];
+
+  if (!sizes) {
+    return [...blastGroupTemplate, ...blastLcSeriesTemplates, ...playoffs];
+  }
+
+  const lc = [...blastLcSeriesTemplates];
+
+  if (sizes.mainPlayoffPath === "ten_qf_seconds") {
+    return [
+      ...blastGroupTemplate,
+      ...lc,
+      {
+        key: "blast-playin-semifinal",
+        label: "Play-In — one round (#3 ranks + LC advancers)",
+        defaultSeries: "bo3",
+      },
+      ...playoffs,
+    ];
+  }
+
+  return [
+    ...blastGroupTemplate,
+    ...lc,
+    {
+      key: "blast-mp-semifinal",
+      label: "Play-In — middle (#3/#4)",
+      defaultSeries: "bo3",
+    },
+    {
+      key: "blast-playin-cross",
+      label: "Play-In — crossover (group #2 vs LC finalist)",
+      defaultSeries: "bo3",
+    },
+    ...playoffs,
+  ];
+}
+
+/**
+ * Fills defaults for BLAST-specific keys after team count crosses 10 ⇄ tiered paths.
+ */
+export function mergeBlastSeriesRules(seriesRules, teamCount, seriesTypeFallback = "bo3") {
+  const prev = typeof seriesRules === "object" && seriesRules !== null ? seriesRules : {};
+  const merged = { ...prev };
+  for (const rule of getBlastSeriesRuleTemplates(teamCount)) {
+    const v = merged[rule.key];
+    if (v == null || v === "") {
+      merged[rule.key] = rule.defaultSeries || seriesTypeFallback;
+    }
+  }
+  return merged;
+}
 
 export const seriesRuleTemplates = {
   dse: [
@@ -128,22 +241,16 @@ export const seriesRuleTemplates = {
     { key: "lower-playoff", label: "Lower Playoffs", defaultSeries: "bo3" },
     { key: "grand-final", label: "Grand Final", defaultSeries: "bo5" },
   ],
-  blast: [
-    { key: "blast-group-bo1", label: "Group stage (BO1)", defaultSeries: "bo1" },
-    { key: "blast-playin-quarterfinal", label: "Play-In (R1)", defaultSeries: "bo3" },
-    { key: "blast-playin-semifinal", label: "Play-In (semis)", defaultSeries: "bo3" },
-    { key: "blast-playin-final", label: "Play-In (final)", defaultSeries: "bo3" },
-    { key: "blast-lc-quarterfinal", label: "Last Chance (R1)", defaultSeries: "bo3" },
-    { key: "blast-lc-semifinal", label: "Last Chance (semis)", defaultSeries: "bo3" },
-    { key: "blast-lc-final", label: "Last Chance (final)", defaultSeries: "bo3" },
-    { key: "blast-lc-round", label: "Last Chance (mid bracket)", defaultSeries: "bo3" },
-    { key: "blast-po-quarterfinal", label: "Playoffs (quarterfinals)", defaultSeries: "bo3" },
-    { key: "blast-po-semifinal", label: "Playoffs (semis)", defaultSeries: "bo3" },
-    { key: "blast-po-final", label: "Grand final", defaultSeries: "bo5" },
-  ],
 };
 
-export function buildDefaultSeriesRules(format, fallback = "bo3") {
+export function buildDefaultSeriesRules(format, fallback = "bo3", blastTeamCount) {
+  if (format === "blast") {
+    const n = blastTeamCount != null ? Math.max(10, Number(blastTeamCount) || 10) : 12;
+    return getBlastSeriesRuleTemplates(n).reduce((acc, item) => {
+      acc[item.key] = item.defaultSeries || fallback;
+      return acc;
+    }, {});
+  }
   const template = seriesRuleTemplates[format] || [];
   return template.reduce((acc, item) => {
     acc[item.key] = item.defaultSeries || fallback;

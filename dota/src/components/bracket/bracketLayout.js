@@ -264,6 +264,101 @@ export function isBlastPlayInCrossMatch(match) {
 }
 
 /**
+ * Detect BLAST sizing from placeholder names in Last chance round 1 (explicit Group # ranks exist for 10 and 12 teams).
+ * @returns {"ten"|"twelve"|"tiered_generic"|null}
+ */
+export function inferBlastBracketVariant(matches) {
+  const samples = [];
+  for (const m of matches || []) {
+    if (m.stageKey !== "blast-lastchance") continue;
+    if ((m.roundIndex ?? 0) !== 0) continue;
+    samples.push(String(m.team1 || ""), String(m.team2 || ""));
+  }
+  const blob = samples.join("|");
+  if (!blob) return null;
+  if (blob.includes("Group A #5") || blob.includes("Group B #6")) return "twelve";
+  if (blob.includes("Group A #4") || blob.includes("Group B #4")) return "ten";
+  return "tiered_generic";
+}
+
+/**
+ * Tooltip copy for seeded `Group X #n` placeholders in BLAST (10-team vs 12-team paths).
+ */
+export function describeBlastGroupSeedPlaceholder(teamToken, variant) {
+  const m = String(teamToken || "").match(/^Group ([A-Z]) #(\d+)$/);
+  if (!m) return null;
+  const g = m[1];
+  const seed = Number(m[2]);
+  if (!Number.isFinite(seed)) return null;
+
+  if (variant === "ten") {
+    if (seed === 1) return `Group ${g} champion after BO1 group — seeded into the semifinals (waits on the quarterfinal tied to this side).`;
+    if (seed === 2) return `Group ${g} #2 — playoff quarterfinal entrant versus the complementary Play‑In winner.`;
+    if (seed === 3) return `Group ${g} #3 — one of four entrants in the single Play‑In hopper with two Last‑chance qualifiers.`;
+    if (seed === 4 || seed === 5) return `Group ${g} #${seed} — Last‑chance starter; finalists join both #3 finishers inside the Play‑In.`;
+    return null;
+  }
+
+  if (variant === "twelve") {
+    if (seed === 1)
+      return `Group ${g} champion after BO1 — semifinal bye until a quarterfinal winner arrives on this playoff lane.`;
+    if (seed === 2)
+      return `Group ${g} #2 — crossover Play‑In slot opposite a Last‑chance finalist; winner reaches the semifinal chase through quarterfinal cross-seeding.`;
+    if (seed === 3 || seed === 4)
+      return `Group ${g} #${seed} — middle Play‑In knockout with both groups’ #3 and #4 (paired A3↔B4, B3↔A4 style); finalist feeds quarterfinal cross-seeding.`;
+    if (seed === 5 || seed === 6) return `Group ${g} #${seed} — Last‑chance band; finalists face each group's #2 in crossover Play‑Ins.`;
+    return null;
+  }
+
+  return null;
+}
+
+/** Match-card level summary explaining structural outcome (shown as supplemental tooltip content). */
+export function describeBlastMatchFlow(match, variant) {
+  if (!match || (variant !== "ten" && variant !== "twelve")) return "";
+
+  const sk = match.stageKey;
+  const ri = match.roundIndex ?? 0;
+
+  if (sk === "blast-lastchance") {
+    if (variant === "twelve")
+      return "Last chance — #5/#6 placements from both BO1 groups slug out until two finalists remain; both feed crossover matches against Group #2.";
+    if (variant === "ten")
+      return "Last chance — #4/#5 bands from both groups; two qualifiers advance into the 4-slot Play‑In with both group #3 teams.";
+    return "";
+  }
+
+  if (sk === "blast-playin") {
+    if (isBlastPlayInCrossMatch(match)) {
+      if (variant === "twelve")
+        return "Cross Play‑In — Group #2 vs Last‑chance finalist. Winner punches a semifinal berth after the quarterfinal cross-feed.";
+      return "Cross Play‑In — feeds the semifinal chase via main playoffs.";
+    }
+    if (variant === "ten") return "Play‑In — four entrants (#3 ranks + LC movers) collide once; survivors jump the Group #2 quarterfinal hurdles.";
+    if (variant === "twelve" && ri === 0) {
+      return "Middle Play‑In — #3 and #4 seeds from both sides (paired A3↔B4, B3↔A4) until two contenders remain for crossover-fed quarterfinals.";
+    }
+    if (variant === "twelve") return "Qualifier row feeding the semifinal chase.";
+    return "";
+  }
+
+  if (sk === "blast-playoffs") {
+    if (variant === "twelve") {
+      if (ri === 0) return "Championship quarterfinals — crossover winners duel middle survivors (cross seeded) before meeting Group champions.";
+      if (ri === 1) return "Semifinals — awaiting BO1 champions on each rail; sends the finalist to crown.";
+      if (ri === 2) return "BLAST championship final.";
+    }
+    if (variant === "ten") {
+      if (ri === 0) return "Quarterfinals — complementary Play‑In winners challenge each group's #2; victors duel Group champions next.";
+      if (ri === 1) return "Semifinals — Group winners vs surviving quarter finalists.";
+      if (ri === 2) return "BLAST championship final.";
+    }
+  }
+
+  return "";
+}
+
+/**
  * BLAST tiered qualifiers: ensure Last chance winner tokens draw into crossover Play-In slots
  * (those matches may sit after middle Play-In rows in the combined column).
  * @param {Array<[string, object[]]>} sortedRoundsPairs

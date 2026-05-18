@@ -136,7 +136,7 @@ describe("BLAST formatGenerator", () => {
     assert.ok(teamsQf.has("PIR1M2W"));
   });
 
-  it("n=12 tiered BLAST: quarterfinals then semis (group #1/#2 paths), PIR + LCR tokens", () => {
+  it("n=12 tiered BLAST: middle #3/#4, crossover group #2 vs LC, QF/SF playoff path, PIR + LCR tokens", () => {
     const teams = teamList(12);
     const matches = generateMatches("blast", teams.map((t) => t.name), {});
     const pi = matches.filter((m) => m.stageKey === "blast-playin");
@@ -153,6 +153,26 @@ describe("BLAST formatGenerator", () => {
     assert.ok(tSf.has("Group B #1"));
     const cross = matches.filter((m) => m.meta?.seriesRuleKey === "blast-playin-cross");
     assert.equal(cross.length, 2);
+    const crossGroupSeeds = new Set(cross.map((m) => m.team1));
+    assert.ok(crossGroupSeeds.has("Group A #2"));
+    assert.ok(crossGroupSeeds.has("Group B #2"));
+    const piMid = pi.filter((m) => (m.roundIndex ?? 0) === 0);
+    const midEntrants = new Set(piMid.flatMap((m) => [m.team1, m.team2]));
+    for (const x of ["Group A #3", "Group B #3", "Group A #4", "Group B #4"]) {
+      assert.ok(midEntrants.has(x), `middle round 0 includes ${x}`);
+    }
+    assert.ok(!midEntrants.has("Group A #2") && !midEntrants.has("Group B #2"), "group #2 not in middle knockout");
+    assert.ok(piMid.every((m) => m.meta?.seriesRuleKey === "blast-mp-semifinal"), "tiered middle Play-In uses blast-mp-semifinal");
+    assert.ok(cross.every((m) => m.meta?.seriesRuleKey === "blast-playin-cross"), "crossover uses blast-playin-cross");
+    const custom = generateMatches("blast", teams.map((t) => t.name), {
+      "blast-mp-semifinal": "bo1",
+      "blast-playin-cross": "bo5",
+    });
+    assert.equal(
+      custom.find((m) => m.stageKey === "blast-playin" && m.meta?.seriesRuleKey === "blast-mp-semifinal")?.meta?.seriesType,
+      "bo1",
+    );
+    assert.equal(custom.find((m) => m.meta?.seriesRuleKey === "blast-playin-cross")?.meta?.seriesType, "bo5");
     const cx1 = cross[0].meta?.winToken;
     const cx2 = cross[1].meta?.winToken;
     const qp = (tok) => {

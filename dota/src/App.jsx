@@ -4,7 +4,7 @@ import { AdminUsersPage } from "./pages/AdminUsersPage";
 import { AppFooter } from "./components/AppFooter";
 import { AppHeader } from "./components/AppHeader";
 import { ScrollToTopButton } from "./components/ScrollToTopButton";
-import { buildDefaultSeriesRules, roles } from "./constants/tournament";
+import { buildDefaultSeriesRules, mergeBlastSeriesRules, roles } from "./constants/tournament";
 import { api, getAuthToken, setAuthToken } from "./lib/api";
 import { toDateInputValue, toDatetimeLocalValue } from "./utils/datetime";
 import { announcementsToAdminFormState, announcementsToApiPayload } from "./lib/announcementEntries.js";
@@ -151,10 +151,18 @@ function App() {
         format: payload.tournament.format ?? prev.format,
         seriesType: payload.tournament.series_type ?? prev.seriesType,
         teamCount: payload.tournament.team_count ?? prev.teamCount,
-        seriesRules:
-          payload.tournament.series_rules && Object.keys(payload.tournament.series_rules).length > 0
-            ? payload.tournament.series_rules
-            : prev.seriesRules,
+        seriesRules: (() => {
+          const fmt = payload.tournament.format ?? prev.format;
+          const tc = payload.tournament.team_count ?? prev.teamCount;
+          const st = payload.tournament.series_type ?? prev.seriesType;
+          const fromServer =
+            payload.tournament.series_rules && Object.keys(payload.tournament.series_rules).length > 0
+              ? payload.tournament.series_rules
+              : null;
+          const base = fromServer ?? prev.seriesRules ?? {};
+          if (fmt === "blast") return mergeBlastSeriesRules(base, tc, st);
+          return fromServer ?? prev.seriesRules;
+        })(),
         description: payload.tournament.description ?? prev.description,
         prizePool: payload.tournament.prize_pool ?? prev.prizePool,
         prizePoolBreakdown: payload.tournament.prize_pool_breakdown ?? prev.prizePoolBreakdown,
@@ -738,7 +746,7 @@ function App() {
               setSetup((prev) => ({
                 ...prev,
                 format: nextFormat,
-                seriesRules: buildDefaultSeriesRules(nextFormat, prev.seriesType),
+                seriesRules: buildDefaultSeriesRules(nextFormat, prev.seriesType, nextFormat === "blast" ? prev.teamCount : undefined),
               }));
             }}
             bootstrapTournament={bootstrapTournament}

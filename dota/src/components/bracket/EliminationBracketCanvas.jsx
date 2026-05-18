@@ -7,6 +7,7 @@ import {
   bracketColumnTitle,
   buildBlastQualifierDisplayColumns,
   compareRoundKeys,
+  describeBlastMatchFlow,
   isBlastPlayInCrossMatch,
   matchRoundKey,
   orderLastChanceMatchesForCrossover,
@@ -24,7 +25,7 @@ function roundColumnSpacingClass(columnIndex) {
 }
 
 /** One row in the elimination canvas (anchor wiring for SVG connectors). */
-function MatchCardRow({ match, editable, scores, setScores, submitResult, updateMatch, blastBracketDepths, registerAnchor }) {
+function MatchCardRow({ match, editable, scores, setScores, submitResult, updateMatch, blastBracketDepths, blastVariant, registerAnchor }) {
   return (
     <div ref={(el) => registerAnchor(match.id, el)} className="relative w-full shrink-0">
       <MatchCard
@@ -51,6 +52,7 @@ function MatchCardRow({ match, editable, scores, setScores, submitResult, update
         submitResult={submitResult}
         updateMatch={updateMatch}
         blastBracketDepths={blastBracketDepths}
+        blastVariant={blastVariant}
       />
     </div>
   );
@@ -65,6 +67,7 @@ function MatchCardRow({ match, editable, scores, setScores, submitResult, update
  * @property {function} [submitResult]
  * @property {function} [updateMatch]
  * @property {object[]} [playoffFeedMatches] — optional blast main QF rows to detect PI→playoff feed
+ * @property {"ten"|"twelve"|"tiered_generic"|null} [blastVariant] — inferred BLAST naming path for hover copy
  */
 
 export function EliminationBracketCanvas({
@@ -75,6 +78,7 @@ export function EliminationBracketCanvas({
   submitResult,
   updateMatch,
   playoffFeedMatches = null,
+  blastVariant = null,
 }) {
   const rootRef = useRef(null);
   const anchorsRef = useRef(/** @type {Record<string, HTMLElement | null>} */ ({}));
@@ -183,6 +187,7 @@ export function EliminationBracketCanvas({
               submitResult,
               updateMatch,
               blastBracketDepths,
+              blastVariant,
               registerAnchor,
             };
 
@@ -192,14 +197,24 @@ export function EliminationBracketCanvas({
                   {compositePlayin ? (
                     <div className="space-y-2 normal-case tracking-normal">
                       <div>
-                        <div className="text-[11px] font-semibold uppercase tracking-wide text-foreground">Play-Ins</div>
-                        <div className="text-[10px] text-muted-foreground/90">Mid-pack knockout (no Last chance feed)</div>
+                        <div className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
+                          {blastVariant === "twelve" ? "Middle Play-In knockout" : "Middle Play-In"}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground/90">
+                          {blastVariant === "twelve"
+                            ? "Group #3 & #4 finishers · paired A3↔B4, B3↔A4 — two survivors move on"
+                            : "Mid-pack knockout feeding crossover rows"}
+                        </div>
                       </div>
                       <div className="border-t border-border/70 pt-2">
                         <div className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
-                          Vs Last chance survivors
+                          {blastVariant === "twelve" ? "Cross Play-In (#2 × LC)" : "Crossover"}
                         </div>
-                        <div className="text-[10px] text-muted-foreground/90">Crossover → playoffs</div>
+                        <div className="text-[10px] text-muted-foreground/90">
+                          {blastVariant === "twelve"
+                            ? "Each group #2 plays a Last chance finalist — crossover winners hit quarterfinals"
+                            : "Crossover survivors feed the playoff bracket"}
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -250,16 +265,24 @@ export function EliminationBracketCanvas({
                   const midPath =
                     !isBlastPlayInCrossMatch(m) &&
                     (tok.startsWith("PIR") || tok.startsWith("MID_R") || tok.startsWith("PIN_R") || tok.startsWith("MP") || tok.startsWith("PI"));
+                  const detail =
+                    blastVariant === "twelve"
+                      ? midPath
+                        ? "Middle Play-In survivor → QF (cross-fed)"
+                        : "Cross Play-In survivor (#2×LC) → QF"
+                      : midPath
+                        ? "Play-In finalist"
+                        : "Crossover finalist";
                   return (
                     <div
                       key={`stub-pi-${m.id}`}
                       ref={(el) => registerAnchor(`stub-pi-${m.id}`, el)}
                       className="relative shrink-0 rounded-lg border border-dashed border-border/80 bg-background/60 px-3 py-6 text-sm text-muted-foreground shadow-sm backdrop-blur-[1px]"
+                      title={describeBlastMatchFlow(m, blastVariant) || undefined}
                     >
                       <div className="text-xs font-semibold uppercase tracking-wide text-foreground/90">Advances</div>
                       <div className="mt-1 truncate" title={m.meta?.winToken}>
-                        {midPath ? "Play-In finalist" : "Crossover finalist"} · R{(m.roundIndex ?? 0) + 1} · M
-                        {Number(m.matchIndex ?? 0) + 1}
+                        {detail} · R{(m.roundIndex ?? 0) + 1} · M{Number(m.matchIndex ?? 0) + 1}
                       </div>
                       {m.meta?.winToken ? (
                         <div className="mt-1 font-mono text-[10px] tracking-tight text-muted-foreground">{m.meta.winToken}</div>

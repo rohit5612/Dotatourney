@@ -5,6 +5,7 @@ import {
   blastStageRoundColumnCount,
   bracketColumnTitle,
   compareRoundKeys,
+  inferBlastBracketVariant,
   isRoundRobinStyleStage,
   matchRoundKey,
   parseRoundKey,
@@ -19,8 +20,15 @@ export function BracketDiagram({
   submitResult,
   updateMatch,
   playoffFeedMatches = null,
+  /** Full tournament matches (used so Playoffs-only tabs still infer BLAST 10 vs 12 tooltips). */
+  blastSeedMatches = null,
 }) {
   const columnStructure = useMemo(() => stageRoundStructure(matches), [matches]);
+
+  const blastVariant = useMemo(
+    () => inferBlastBracketVariant((blastSeedMatches?.length ? blastSeedMatches : matches) || []),
+    [blastSeedMatches, matches],
+  );
 
   const blastBracketDepths = useMemo(
     () => ({
@@ -62,6 +70,7 @@ export function BracketDiagram({
           submitResult={submitResult}
           updateMatch={updateMatch}
           playoffFeedMatches={playoffFeedMatches || undefined}
+          blastVariant={blastVariant}
         />
       </div>
     );
@@ -106,6 +115,7 @@ export function BracketDiagram({
                       submitResult={submitResult}
                       updateMatch={updateMatch}
                       blastBracketDepths={blastBracketDepths}
+                      blastVariant={blastVariant}
                     />
                   ))}
               </div>

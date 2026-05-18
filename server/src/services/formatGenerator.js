@@ -348,7 +348,7 @@ export function blastSideBracketSizes(teamCount) {
  *
  * - **n=10**: Group **A/B #1** wait in semis; **#2** in QFs vs Play-In winners; **#3** + Last chance survivors in the 4-team Play-In;
  *   **#4–#5** in each group start Last chance.
- * - **n=12**: tiered as **#1** semis, **#2/#4** middle Play-In, **#3** crossover vs LC, **#5/#6** Last chance (merged logic for other counts unchanged).
+ * - **n=12**: **#1** wait in semifinals; **#3/#4** meet in a middle knockout (A3↔B4, B3↔A4); **#2** faces a Last chance finalist in crossover; **#5/#6** start Last chance. Four playoff quarterfinalists emerge from middle + crossover survivors, then cross-seeded semis vs #1s.
  */
 function generateBlast(teams, seriesRules) {
   const n = teams.length;
@@ -416,7 +416,7 @@ function generateBlast(teams, seriesRules) {
     }
     const midSeeds =
       n === 12
-        ? ["Group A #2", "Group B #2", "Group A #4", "Group B #4"]
+        ? ["Group A #3", "Group B #3", "Group A #4", "Group B #4"]
         : Array.from({ length: middleCount }, (_, i) => `MID${i + 1}`);
     const mpBlock = generateEliminationUntilSurvivors(
       midSeeds,
@@ -436,8 +436,8 @@ function generateBlast(teams, seriesRules) {
     const crossRoundIndex = maxMpRi >= 0 ? maxMpRi + 1 : 0;
     const crossRi = crossRoundIndex + 1;
     const [lcWin1, lcWin2] = lcBlock.survivorTokens;
-    const crossLeft = n === 12 ? "Group A #3" : "BLR3";
-    const crossRight = n === 12 ? "Group B #3" : "BLR4";
+    const crossLeft = n === 12 ? "Group A #2" : "BLR3";
+    const crossRight = n === 12 ? "Group B #2" : "BLR4";
     addMatch(result, teams, "blast-playin", crossRoundIndex, 0, crossLeft, lcWin1, seriesRules, "blast-playin-cross", {
       winToken: `PIR${crossRi}M1W`,
     });
@@ -448,7 +448,7 @@ function generateBlast(teams, seriesRules) {
     const [mw1, mw2] = mpBlock.survivorTokens;
     const px1 = `PIR${crossRi}M1W`;
     const px2 = `PIR${crossRi}M2W`;
-    // Cross seeds: crossover (#3/#4 vs LC finalists) feeds opposite middle-band survivors — avoids naive 1-vs-1, 2-vs-2 parallels.
+    // Cross seeds: crossover (#2 vs LC finalists) feeds opposite middle-band (#3/#4) survivors — avoids parallel 1–1 / 2–2 lanes.
     addMatch(result, teams, "blast-playoffs", 0, 0, mw1, px2, seriesRules, "blast-po-quarterfinal", {
       winToken: "QFR1M1W",
     });

@@ -1,5 +1,9 @@
 import { useState } from "react";
-import { blastTokenRoundClause } from "./bracketLayout.js";
+import {
+  blastTokenRoundClause,
+  describeBlastGroupSeedPlaceholder,
+  describeBlastMatchFlow,
+} from "./bracketLayout.js";
 
 /** 1-based round index from bracket win-token prefixes → Quarterfinals / Semifinals / Finals when applicable */
 function bracketTokenRoundLabel(roundStr) {
@@ -11,7 +15,7 @@ function bracketTokenRoundLabel(roundStr) {
   return `Round ${r}`;
 }
 
-export function describeBracketToken(value, blastBracketDepths) {
+export function describeBracketToken(value, blastBracketDepths, blastVariant = null) {
   const text = String(value || "").trim();
   if (!text) return "";
 
@@ -39,12 +43,47 @@ export function describeBracketToken(value, blastBracketDepths) {
     const kind = blastReadable[1];
     const round = blastReadable[2];
     const matchNum = blastReadable[3];
+    const rn = Number(round);
     const labels = {
       LCR: "Last chance",
       PIR: "Play-In",
       QFR: "Quarterfinal",
       SFR: "Semifinal",
     };
+
+    if (blastVariant === "twelve") {
+      if (kind === "LCR") {
+        return `${role} of Last chance (#5/#6 band), round ${round}, match ${matchNum} — finalist meets a Group #2 in crossover.`;
+      }
+      if (kind === "PIR" && rn === 1) {
+        return `${role} of Middle Play-In (#3/#4 knockout · A3↔B4, B3↔A4), round ${round}, match ${matchNum} — finalist feeds quarterfinal cross-seeding.`;
+      }
+      if (kind === "PIR" && rn >= 2) {
+        return `${role} of Cross Play-In (#2 vs LC finalist), round ${round}, match ${matchNum} — advances to championship quarterfinal.`;
+      }
+      if (kind === "QFR") {
+        return `${role} of Championship quarterfinal, match ${matchNum} — winner faces Group BO1 champion in semifinal.`;
+      }
+      if (kind === "SFR") {
+        return `${role} of Semifinal, match ${matchNum} — winner plays BLAST final.`;
+      }
+    }
+
+    if (blastVariant === "ten") {
+      if (kind === "LCR") {
+        return `${role} of Last chance (#4/#5 band), round ${round}, match ${matchNum} — finalist joins 4-team Play-In with both #3 seeds.`;
+      }
+      if (kind === "PIR") {
+        return `${role} of Play-In (Group #3 + LC mix), round ${round}, match ${matchNum} — finalist faces paired Group #2 in quarterfinal.`;
+      }
+      if (kind === "QFR") {
+        return `${role} of Championship quarterfinal, match ${matchNum} — winner challenges Group champion in semifinal.`;
+      }
+      if (kind === "SFR") {
+        return `${role} of Semifinal, match ${matchNum} — punches BLAST final ticket.`;
+      }
+    }
+
     return `${role} of ${labels[kind] ?? kind}, round ${round}, match ${matchNum} — next bracket slot.`;
   }
 
@@ -82,7 +121,7 @@ export function describeBracketToken(value, blastBracketDepths) {
         tag === "MP"
           ? "middle Play-In knockout (merged middle band)"
           : tag === "XP"
-            ? "cross Play-In (#3/#4 vs Last chance finalists)"
+            ? "cross Play-In (group entrant vs Last chance finalist)"
             : "Play-In path";
       return `${role} of ${clause}, match ${matchNum} — feeds the next slot on the ${path}.`;
     }
@@ -98,8 +137,15 @@ export function describeBracketToken(value, blastBracketDepths) {
   const swissSlot = text.match(/^Swiss #(\d+)$/);
   if (swissSlot) return `Swiss standings seed #${swissSlot[1]} after Swiss rounds.`;
 
-  const groupSlot = text.match(/^Group ([A-Z]) #(\d+)$/);
-  if (groupSlot) return `Group ${groupSlot[1]} seed #${groupSlot[2]} after group-stage standings.`;
+  const groupSlotBlast = text.match(/^Group ([A-Z]) #(\d+)$/);
+  if (groupSlotBlast) {
+    const blurb =
+      blastVariant === "twelve" || blastVariant === "ten"
+        ? describeBlastGroupSeedPlaceholder(text, blastVariant)
+        : null;
+    if (blurb) return blurb;
+    return `Group ${groupSlotBlast[1]} seed #${groupSlotBlast[2]} after group-stage standings.`;
+  }
 
   const bpi = text.match(/^BPI(\d+)$/);
   if (bpi)
@@ -157,8 +203,8 @@ function scoreLineValue(scoreDraft, key, base, isEditing) {
   return base;
 }
 
-export function TeamLine({ name, winner, editable, score, onScoreChange, onWin, blastBracketDepths }) {
-  const tokenHelp = describeBracketToken(name, blastBracketDepths);
+export function TeamLine({ name, winner, editable, score, onScoreChange, onWin, blastBracketDepths, blastVariant }) {
+  const tokenHelp = describeBracketToken(name, blastBracketDepths, blastVariant);
   return (
     <div
       className={`mt-1 flex items-center gap-2 rounded-md border px-2 py-1 text-sm ${winner ? "border-primary bg-primary/10 text-primary" : "border-border bg-background"}`}
@@ -209,6 +255,7 @@ export function MatchCard({
   submitResult,
   updateMatch,
   blastBracketDepths,
+  blastVariant = null,
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -221,6 +268,7 @@ export function MatchCard({
   const slotValue = match.slotAt ? new Date(match.slotAt).toISOString().slice(0, 16) : "";
   const seriesLabel = String(match.meta?.seriesType || "").toUpperCase();
   const requiredWins = Math.max(1, Math.ceil((Number(seriesLabel.replace("BO", "")) || 1) / 2));
+  const matchFlowTip = blastVariant === "ten" || blastVariant === "twelve" ? describeBlastMatchFlow(match, blastVariant) : "";
   const leftScore = team1Score === "" ? null : Number(team1Score);
   const rightScore = team2Score === "" ? null : Number(team2Score);
   const scoreComplete =
@@ -286,6 +334,7 @@ export function MatchCard({
       className={`relative rounded-lg border border-border bg-card p-3 shadow-sm ${
         editable && !isEditing ? "border-border/80" : ""
       }`}
+      title={matchFlowTip || undefined}
     >
       <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span>Match {match.matchIndex + 1}</span>
@@ -295,7 +344,7 @@ export function MatchCard({
             <span
               className="cursor-help rounded border border-border px-1.5 py-0.5"
               title={
-                describeBracketToken(match.meta.winToken, blastBracketDepths) ||
+                describeBracketToken(match.meta.winToken, blastBracketDepths, blastVariant) ||
                 `${match.meta.winToken}: winner of this match feeds into the next bracket slot.`
               }
             >
@@ -319,6 +368,7 @@ export function MatchCard({
           onScoreChange={(value) => setScoreDraft?.({ team1Score: value })}
           onWin={() => void recordWin(match.team1)}
           blastBracketDepths={blastBracketDepths}
+          blastVariant={blastVariant}
         />
         <TeamLine
           name={match.team2}
@@ -328,6 +378,7 @@ export function MatchCard({
           onScoreChange={(value) => setScoreDraft?.({ team2Score: value })}
           onWin={() => void recordWin(match.team2)}
           blastBracketDepths={blastBracketDepths}
+          blastVariant={blastVariant}
         />
       </div>
       {match.winner ? <div className="mt-2 text-xs text-secondary">Winner: {match.winner}</div> : null}

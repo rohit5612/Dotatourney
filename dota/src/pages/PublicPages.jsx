@@ -1248,6 +1248,7 @@ function PublicSchedule({ event, message }) {
               </div>
               <BracketDiagram
                 matches={matches}
+                blastSeedMatches={event?.matches ?? []}
                 playoffFeedMatches={
                   tab.id === "blast-qualifiers"
                     ? (groupedMatches["blast-playoffs"] || []).filter((m) => (m.roundIndex ?? 0) === 0)
