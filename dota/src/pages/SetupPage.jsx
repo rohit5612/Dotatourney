@@ -269,6 +269,7 @@ export function SetupPage({
       discordUrl: "https://discord.gg/sV2PhYc6A3",
       rulebook: "",
       announcements: [],
+      bannerAnnouncement: { body: "", postedAt: "" },
       visibilityMode: "demo",
       bracketActive: false,
       status: "draft",

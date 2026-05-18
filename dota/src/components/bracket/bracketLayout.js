@@ -62,6 +62,50 @@ export function isRoundRobinStyleStage(stageKey) {
   );
 }
 
+/** Admin/public schedule: group-stage bucket for tabs and filters */
+export const SCHEDULE_PHASE_GROUPS = "groups";
+/** Last chance, play-ins, merged qualifier UI */
+export const SCHEDULE_PHASE_QUALIFIERS = "qualifiers";
+/** Elimination playoffs and unknown keys (conservative: treat as playoffs) */
+export const SCHEDULE_PHASE_PLAYOFFS = "playoffs";
+
+/**
+ * Bucket by match `stageKey` for schedule rows. LC/PI (and composite play-in) → qualifiers;
+ * round-robin-style → groups; everything else → playoffs.
+ * @param {string} [stageKey]
+ * @returns {"groups"|"qualifiers"|"playoffs"}
+ */
+export function getSchedulePhase(stageKey) {
+  const sk = stageKey || "";
+  if (
+    sk === "blast-lastchance" ||
+    sk === "blast-playin" ||
+    sk === "blast-qualifiers-playin"
+  ) {
+    return SCHEDULE_PHASE_QUALIFIERS;
+  }
+  if (isRoundRobinStyleStage(sk)) {
+    return SCHEDULE_PHASE_GROUPS;
+  }
+  return SCHEDULE_PHASE_PLAYOFFS;
+}
+
+/**
+ * Bucket for bracket diagram tabs (tab id may be merged `blast-qualifiers`).
+ * @param {string} [tabId]
+ * @returns {"groups"|"qualifiers"|"playoffs"}
+ */
+export function getBracketPhaseForTab(tabId) {
+  if (!tabId) return SCHEDULE_PHASE_PLAYOFFS;
+  if (tabId === "blast-qualifiers" || tabId === "blast-lastchance" || tabId === "blast-playin") {
+    return SCHEDULE_PHASE_QUALIFIERS;
+  }
+  if (isRoundRobinStyleStage(tabId)) {
+    return SCHEDULE_PHASE_GROUPS;
+  }
+  return SCHEDULE_PHASE_PLAYOFFS;
+}
+
 export function humanizeStageKey(stageKey) {
   return String(stageKey || "bracket").replace(/-/g, " ");
 }
@@ -196,13 +240,24 @@ export function formatMatchRoundSummary(match, sortedRoundsByStageFull) {
   return `${eliminationRoundLabel(ord, total)} · Match ${mi}`;
 }
 
-/** @param {object[]} matches */
+const BRACKET_TOKEN_REGEX = /^[A-Z0-9_]+$/;
+
+/**
+ * Resolve feeder matches for bracket connectors.
+ * Connector edges are primarily token-driven (`meta.winToken`, plus the implied loser token).
+ * @param {object[]} matches
+ */
 export function buildWinTokenLookup(matches) {
   /** @type {Map<string, object>} */
   const map = new Map();
   for (const m of matches || []) {
     const tok = m.meta?.winToken;
-    if (tok && typeof tok === "string") map.set(tok, m);
+    if (tok && typeof tok === "string") {
+      map.set(tok, m);
+      if (tok.endsWith("W")) {
+        map.set(tok.replace(/W$/, "L"), m);
+      }
+    }
   }
   return map;
 }
@@ -230,23 +285,39 @@ export function dedupeConnectorEdges(edges) {
  */
 export function eliminationFeederEdges(sortedRoundsPairs) {
   const edges = [];
-  const flat =
-    sortedRoundsPairs?.flatMap(([, rounds]) =>
-      [...rounds].sort((a, b) => (a.matchIndex ?? 0) - (b.matchIndex ?? 0)),
-    ) || [];
+  const columns =
+    sortedRoundsPairs?.map(([key, rounds]) => {
+      const { stageKey } = parseRoundKey(key);
+      const sorted =
+        stageKey === "blast-qualifiers-playin"
+          ? [...rounds]
+          : [...rounds].sort((a, b) => (a.matchIndex ?? 0) - (b.matchIndex ?? 0));
+      return { key, stageKey, rounds: sorted };
+    }) || [];
+  const flat = columns.flatMap((c) => c.rounds);
   const tokenLookup = buildWinTokenLookup(flat);
 
-  for (let i = 0; i < sortedRoundsPairs.length - 1; i += 1) {
-    const [, rawNext] = sortedRoundsPairs[i + 1];
-    const nextKey = sortedRoundsPairs[i + 1][0];
-    const { stageKey: nextSk } = parseRoundKey(nextKey);
-    const nextRoundMatches =
-      nextSk === "blast-qualifiers-playin"
-        ? [...rawNext]
-        : [...rawNext].sort((a, b) => (a.matchIndex ?? 0) - (b.matchIndex ?? 0));
+  /** Prior matches in UI column order (for name-based fallback after progression). */
+  const prior = [];
+
+  for (let i = 0; i < columns.length - 1; i += 1) {
+    prior.push(...columns[i].rounds);
+    const nextRoundMatches = columns[i + 1].rounds;
     for (const m of nextRoundMatches) {
       for (const slot of [m.team1, m.team2]) {
-        const feeder = tokenLookup.get(String(slot || ""));
+        const s = String(slot || "");
+        let feeder = tokenLookup.get(s);
+        if (!feeder && s && !BRACKET_TOKEN_REGEX.test(s)) {
+          // After a result save, the server may replace token placeholders with real team names.
+          // Find the closest upstream match (in UI column order) that produced this winner name.
+          for (let k = prior.length - 1; k >= 0; k -= 1) {
+            const cand = prior[k];
+            if (cand?.winner && String(cand.winner) === s) {
+              feeder = cand;
+              break;
+            }
+          }
+        }
         if (!feeder || feeder.id === m.id) continue;
         edges.push({ fromId: feeder.id, toId: m.id });
       }
@@ -376,6 +447,7 @@ export function blastQualifierFeederEdges(sortedRoundsPairs, matches) {
     if (m.stageKey !== "blast-lastchance") continue;
     const tok = m.meta?.winToken;
     if (tok && typeof tok === "string") lcByWinner.set(tok, m);
+    if (m.winner) lcByWinner.set(String(m.winner), m);
   }
 
   /** @type {BracketConnectorEdge[]} */
@@ -386,8 +458,12 @@ export function blastQualifierFeederEdges(sortedRoundsPairs, matches) {
     if (!isBlastPlayInCrossMatch(xm)) continue;
     for (const slot of [xm.team1, xm.team2]) {
       const s = String(slot || "");
-      if (!lcTokRe.test(s)) continue;
-      const feeder = lcByWinner.get(s);
+      let feeder = null;
+      if (lcTokRe.test(s)) {
+        feeder = lcByWinner.get(s);
+      } else if (s && !BRACKET_TOKEN_REGEX.test(s)) {
+        feeder = lcByWinner.get(s);
+      }
       if (feeder) extra.push({ fromId: feeder.id, toId: xm.id });
     }
   }
@@ -402,10 +478,14 @@ const QUALIFIER_FEED_RE = /^(?:PIR\d+M\d+W|PI\d+M\d+W|MP\d+M\d+W|XP\d+M\d+W)$/;
  */
 export function playoffUsesPlayInWinners(match) {
   if (!match) return false;
-  return (
+  if (
     QUALIFIER_FEED_RE.test(String(match.team1 || "")) ||
     QUALIFIER_FEED_RE.test(String(match.team2 || ""))
-  );
+  ) {
+    return true;
+  }
+  // After progression, QF slots hold team names — still a PI-fed quarterfinal row.
+  return match.stageKey === "blast-playoffs" && (match.roundIndex ?? 0) === 0;
 }
 
 /**
@@ -414,22 +494,33 @@ export function playoffUsesPlayInWinners(match) {
  * @param {object[]} playoffFeedMatches
  */
 export function blastQualifierMatchesFeedPlayoffs(playInMatches, playoffFeedMatches) {
-  const want = new Set();
-  for (const m of playoffFeedMatches || []) {
-    const r = Number(m.roundIndex ?? 0);
-    if (r !== 0) continue;
+  const qfMatches = (playoffFeedMatches || []).filter((m) => Number(m.roundIndex ?? 0) === 0);
+  if (!qfMatches.length) return [];
+
+  const wantTokens = new Set();
+  const wantWinners = new Set();
+  for (const m of qfMatches) {
     for (const slot of [m.team1, m.team2]) {
-      const s = String(slot || "");
-      if (QUALIFIER_FEED_RE.test(s)) want.add(s);
+      const s = String(slot || "").trim();
+      if (!s) continue;
+      if (QUALIFIER_FEED_RE.test(s)) wantTokens.add(s);
+      else if (!BRACKET_TOKEN_REGEX.test(s)) wantWinners.add(s);
     }
   }
-  if (!want.size) return [];
+
   /** @type {object[]} */
   const out = [];
+  const seen = new Set();
   for (const m of playInMatches || []) {
     const tok = m.meta?.winToken;
-    if (tok && want.has(tok)) out.push(m);
+    const winner = m.winner ? String(m.winner) : "";
+    const feeds = (tok && wantTokens.has(tok)) || (winner && wantWinners.has(winner));
+    if (!feeds) continue;
+    if (seen.has(m.id)) continue;
+    seen.add(m.id);
+    out.push(m);
   }
+
   return out.sort((a, b) => {
     const ca = isBlastPlayInCrossMatch(a) ? 1 : 0;
     const cb = isBlastPlayInCrossMatch(b) ? 1 : 0;

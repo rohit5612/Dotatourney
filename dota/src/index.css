@@ -382,3 +382,626 @@
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
   }
 }
+
+@keyframes schedule-live-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.schedule-live-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background-color: var(--destructive);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--destructive) 40%, transparent);
+  animation: schedule-live-blink 1s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .schedule-live-dot {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+.schedule-day-heading {
+  margin: 0 auto;
+  padding-bottom: 0.625rem;
+  text-align: center;
+  font-family: var(--font-serif);
+  font-size: 1.375rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+  background: linear-gradient(105deg, var(--primary) 0%, var(--secondary) 55%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.schedule-day-heading::after {
+  content: "";
+  display: block;
+  width: min(14rem, 72%);
+  height: 2px;
+  margin: 0.625rem auto 0;
+  border-radius: 9999px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--primary) 70%, transparent) 25%,
+    color-mix(in srgb, var(--secondary) 85%, transparent) 50%,
+    color-mix(in srgb, var(--accent) 70%, transparent) 75%,
+    transparent 100%
+  );
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .schedule-day-heading {
+    filter: drop-shadow(0 1px 8px color-mix(in srgb, var(--primary) 18%, transparent));
+  }
+}
+
+/* —— Bracket / Schedule primary view tabs —— */
+.view-tabs-primary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 42%, var(--border));
+  background:
+    radial-gradient(120% 180% at 0% 0%, color-mix(in srgb, var(--primary) 24%, transparent), transparent 55%),
+    radial-gradient(100% 160% at 100% 100%, color-mix(in srgb, var(--secondary) 20%, transparent), transparent 50%),
+    linear-gradient(165deg, color-mix(in srgb, var(--card) 94%, var(--background)), var(--card));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--foreground) 5%, transparent) inset,
+    0 16px 48px -20px color-mix(in srgb, var(--primary) 45%, transparent);
+}
+
+@media (min-width: 640px) {
+  .view-tabs-primary {
+    flex-direction: row;
+    justify-content: center;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+  }
+}
+
+.view-tabs-primary__tab {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  flex: 1;
+  min-height: 3.75rem;
+  max-width: 22rem;
+  margin-inline: auto;
+  width: 100%;
+  padding: 1rem 1.5rem;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  background: color-mix(in srgb, var(--background) 72%, transparent);
+  font-family: var(--font-serif);
+  font-size: clamp(1.2rem, 2.5vw, 1.45rem);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    border-color 220ms ease,
+    box-shadow 220ms ease,
+    color 220ms ease,
+    transform 220ms ease,
+    background 220ms ease;
+}
+
+@media (min-width: 640px) {
+  .view-tabs-primary__tab {
+    margin-inline: 0;
+  }
+}
+
+.view-tabs-primary__glow {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--accent) 55%, transparent), transparent 65%);
+  transition: opacity 220ms ease;
+  pointer-events: none;
+}
+
+.view-tabs-primary__label {
+  position: relative;
+  z-index: 1;
+}
+
+.view-tabs-primary__tab:hover:not(.view-tabs-primary__tab--active) {
+  border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
+  color: var(--foreground);
+  box-shadow: 0 0 28px color-mix(in srgb, var(--primary) 22%, transparent);
+  transform: translateY(-1px);
+}
+
+.view-tabs-primary__tab:hover .view-tabs-primary__glow {
+  opacity: 0.35;
+}
+
+.view-tabs-primary__tab--active {
+  border-color: color-mix(in srgb, var(--primary) 75%, var(--accent));
+  background: linear-gradient(
+    135deg,
+    var(--primary) 0%,
+    color-mix(in srgb, var(--accent) 50%, var(--primary)) 48%,
+    color-mix(in srgb, var(--secondary) 65%, var(--primary)) 100%
+  );
+  color: var(--primary-foreground);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--primary-foreground) 22%, transparent) inset,
+    0 10px 36px -6px color-mix(in srgb, var(--primary) 55%, transparent),
+    0 0 56px -10px color-mix(in srgb, var(--accent) 45%, transparent);
+  transform: translateY(-2px);
+}
+
+.view-tabs-primary__tab--active .view-tabs-primary__glow {
+  opacity: 0.5;
+}
+
+.view-tabs-primary__tab:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+/* —— Schedule phase tabs (Groups / Play-ins / Playoffs) —— */
+.schedule-phase-nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem;
+  border-radius: 0.875rem;
+  border: 1px solid color-mix(in srgb, var(--secondary) 38%, var(--border));
+  background:
+    radial-gradient(ellipse 80% 120% at 50% 0%, color-mix(in srgb, var(--primary) 14%, transparent), transparent 60%),
+    linear-gradient(180deg, color-mix(in srgb, var(--card) 90%, transparent), color-mix(in srgb, var(--background) 96%, transparent));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--foreground) 4%, transparent) inset,
+    0 10px 32px -18px color-mix(in srgb, var(--secondary) 50%, transparent);
+}
+
+.schedule-phase-tab {
+  position: relative;
+  padding: 0.65rem 1.2rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--background) 55%, transparent);
+  font-family: var(--font-serif);
+  font-size: clamp(0.72rem, 1.8vw, 0.875rem);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1.25;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    border-color 200ms ease,
+    box-shadow 200ms ease,
+    color 200ms ease,
+    transform 200ms ease,
+    background 200ms ease;
+}
+
+.schedule-phase-tab__text {
+  position: relative;
+  z-index: 1;
+}
+
+.schedule-phase-tab:hover:not(.schedule-phase-tab--active) {
+  border-color: color-mix(in srgb, var(--secondary) 45%, var(--border));
+  color: var(--foreground);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--secondary) 18%, transparent);
+  transform: translateY(-1px);
+}
+
+.schedule-phase-tab--active {
+  border-color: color-mix(in srgb, var(--secondary) 65%, var(--primary));
+  background: linear-gradient(
+    125deg,
+    color-mix(in srgb, var(--primary) 95%, #000) 0%,
+    color-mix(in srgb, var(--secondary) 80%, var(--primary)) 55%,
+    color-mix(in srgb, var(--accent) 70%, var(--primary)) 100%
+  );
+  color: var(--primary-foreground);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--primary-foreground) 18%, transparent) inset,
+    0 6px 22px -4px color-mix(in srgb, var(--primary) 50%, transparent),
+    0 0 32px -8px color-mix(in srgb, var(--secondary) 40%, transparent);
+  transform: translateY(-2px);
+}
+
+.schedule-phase-tab:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* —— Bracket stage tabs (admin bracket view) —— */
+.bracket-stage-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--card) 88%, transparent), var(--background));
+  box-shadow: 0 8px 24px -16px color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+.bracket-stage-tab {
+  padding: 0.45rem 0.9rem;
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  background: color-mix(in srgb, var(--background) 70%, transparent);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    border-color 200ms ease,
+    box-shadow 200ms ease,
+    color 200ms ease,
+    background 200ms ease;
+}
+
+.bracket-stage-tab:hover:not(.bracket-stage-tab--active) {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+  color: var(--foreground);
+}
+
+.bracket-stage-tab--active {
+  border-color: color-mix(in srgb, var(--primary) 60%, var(--accent));
+  background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--accent) 45%, var(--primary)));
+  color: var(--primary-foreground);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+.bracket-stage-tab:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.bracket-connectors-layer {
+  pointer-events: none;
+  overflow: visible;
+}
+
+.bracket-connectors-layer path {
+  fill: none;
+  stroke: color-mix(in srgb, var(--foreground) 48%, transparent);
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+}
+
+.standings-cell-wins {
+  font-weight: 600;
+  color: color-mix(in srgb, var(--accent) 88%, var(--foreground));
+}
+
+.standings-cell-losses {
+  font-weight: 600;
+  color: color-mix(in srgb, var(--destructive) 88%, var(--foreground));
+}
+
+@keyframes announcement-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes announcement-accent-shimmer {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.72;
+  }
+}
+
+@keyframes announcement-panel-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 color-mix(in srgb, var(--primary) 18%, transparent),
+      0 18px 40px -24px color-mix(in srgb, var(--primary) 35%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--primary) 22%, transparent),
+      0 22px 48px -20px color-mix(in srgb, var(--primary) 45%, transparent);
+  }
+}
+
+.announcement-panel {
+  animation: announcement-panel-glow 4.5s ease-in-out infinite;
+}
+
+.announcement-panel-accent {
+  animation: announcement-accent-shimmer 3.2s ease-in-out infinite;
+}
+
+.announcement-card {
+  animation: announcement-enter 0.6s ease-out both;
+}
+
+.announcement-card:nth-child(1) {
+  animation-delay: 0.04s;
+}
+
+.announcement-card:nth-child(2) {
+  animation-delay: 0.12s;
+}
+
+.announcement-card:nth-child(3) {
+  animation-delay: 0.2s;
+}
+
+.announcement-card:nth-child(4) {
+  animation-delay: 0.28s;
+}
+
+.prize-podium-slot {
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.prize-podium-slot--first {
+  padding: 1.5rem;
+}
+
+.prize-podium-slot--second {
+  padding: 1.125rem 1.25rem;
+}
+
+.prize-podium-slot--third {
+  padding: 1rem 1.125rem;
+}
+
+@media (min-width: 768px) {
+  .prize-podium-slot--first {
+    padding: 2rem 2rem 2.25rem;
+    min-height: 13.5rem;
+  }
+
+  .prize-podium-slot--second {
+    margin-top: 2rem;
+    padding: 1.25rem 1.375rem 1.5rem;
+    min-height: 10.5rem;
+  }
+
+  .prize-podium-slot--third {
+    margin-top: 2.75rem;
+    padding: 1.125rem 1.25rem 1.375rem;
+    min-height: 9.5rem;
+  }
+}
+
+@media (min-width: 640px) {
+  .prize-podium-slot--first {
+    padding: 1.75rem 1.75rem 2rem;
+  }
+}
+
+.prize-podium-slot:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 32px -20px color-mix(in srgb, var(--primary) 55%, transparent);
+}
+
+.meet-team-card {
+  transition:
+    transform 0.28s ease,
+    border-color 0.28s ease,
+    box-shadow 0.28s ease;
+}
+
+.meet-team-card:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  box-shadow: 0 20px 40px -28px color-mix(in srgb, var(--primary) 40%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .announcement-panel,
+  .announcement-panel-accent,
+  .announcement-card {
+    animation: none;
+  }
+
+  .prize-podium-slot:hover,
+  .meet-team-card:hover {
+    transform: none;
+  }
+}
+
+.landing-banner-overlay {
+  padding-top: max(1rem, env(safe-area-inset-top, 0px));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  background: rgba(2, 2, 8, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.landing-banner-enter {
+  animation: landing-banner-enter 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes landing-banner-enter {
+  from {
+    opacity: 0;
+    transform: translateY(calc(50vh + 2rem));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.landing-banner-announcement {
+  max-height: min(50vh, 22rem);
+  padding: 0.875rem 1rem;
+  border-radius: 0.875rem;
+  border: 2px solid #0f0f14;
+  background: linear-gradient(135deg, #ffe08a 0%, #f0b429 38%, #e9a84a 100%);
+  color: #14110c;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.35) inset,
+    0 20px 50px -20px rgba(0, 0, 0, 0.65);
+  animation:
+    landing-banner-float 4.5s ease-in-out 0.8s infinite,
+    landing-banner-glow 3.2s ease-in-out 0.8s infinite;
+}
+
+.landing-banner-announcement__icon {
+  background: #14110c;
+  color: #5eead4;
+  box-shadow: 0 0 0 2px rgba(94, 234, 212, 0.45);
+}
+
+.landing-banner-announcement__label {
+  display: inline-block;
+  margin-bottom: 0.375rem;
+  border-radius: 999px;
+  background: #042f2e;
+  color: #5eead4;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+@media (min-width: 640px) {
+  .landing-banner-announcement__label {
+    font-size: 0.6875rem;
+  }
+}
+
+.landing-banner-announcement__body {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.45;
+  color: #0f0f14;
+}
+
+@media (min-width: 640px) {
+  .landing-banner-announcement {
+    padding: 1rem 1.125rem;
+  }
+
+  .landing-banner-announcement__body {
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+}
+
+.landing-banner-announcement__date {
+  margin-top: 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #3d2e0a;
+}
+
+.landing-banner-announcement__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.5rem;
+  border: 2px solid #14110c;
+  background: rgba(255, 255, 255, 0.45);
+  color: #14110c;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.landing-banner-announcement__close:hover {
+  background: #14110c;
+  color: #ffe08a;
+  transform: scale(1.05);
+}
+
+.landing-banner-announcement__close:focus-visible {
+  outline: 2px solid #042f2e;
+  outline-offset: 2px;
+}
+
+@keyframes landing-banner-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-14px) rotate(-0.4deg);
+  }
+  50% {
+    transform: translateY(-6px) rotate(0deg);
+  }
+  75% {
+    transform: translateY(-16px) rotate(0.4deg);
+  }
+}
+
+@keyframes landing-banner-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.35) inset,
+      0 0 0 0 rgba(94, 234, 212, 0),
+      0 20px 50px -20px rgba(0, 0, 0, 0.65);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.45) inset,
+      0 0 0 5px rgba(94, 234, 212, 0.35),
+      0 24px 56px -18px rgba(0, 0, 0, 0.7);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-banner-enter {
+    animation: none;
+  }
+
+  .landing-banner-announcement {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view-tabs-primary__tab,
+  .schedule-phase-tab,
+  .bracket-stage-tab {
+    transition: none;
+  }
+
+  .view-tabs-primary__tab--active,
+  .schedule-phase-tab--active {
+    transform: none;
+  }
+}

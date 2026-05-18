@@ -88,6 +88,41 @@ export function announcementsToApiPayload(rows) {
     .filter((row) => row.body.length > 0);
 }
 
+/** Admin form: single banner slot (newest entry if legacy array has multiple). */
+export function bannerAnnouncementsToAdminFormState(value) {
+  const entries = parseAnnouncementEntries(value);
+  if (!entries.length) return { body: "", postedAt: "" };
+  const rank = (postedAt) => {
+    if (!postedAt) return Number.NEGATIVE_INFINITY;
+    const t = new Date(postedAt).getTime();
+    return Number.isFinite(t) ? t : Number.NEGATIVE_INFINITY;
+  };
+  const latest = [...entries].sort((a, b) => rank(b.postedAt) - rank(a.postedAt))[0];
+  return {
+    body: latest.body,
+    postedAt: latest.postedAt ? toDatetimeLocalValue(latest.postedAt) : "",
+  };
+}
+
+export function bannerAnnouncementsToApiPayload(row) {
+  if (!row || typeof row !== "object") return [];
+  const body = String(row.body ?? "").trim();
+  if (!body) return [];
+  return [{ body, postedAt: datetimeLocalToIso(row.postedAt) }];
+}
+
+/** Public landing page: one banner — newest by posted time. */
+export function pickBannerAnnouncement(value) {
+  const entries = parseAnnouncementEntries(value).filter((entry) => entry.body.trim());
+  if (!entries.length) return null;
+  const rank = (postedAt) => {
+    if (!postedAt) return Number.NEGATIVE_INFINITY;
+    const t = new Date(postedAt).getTime();
+    return Number.isFinite(t) ? t : Number.NEGATIVE_INFINITY;
+  };
+  return [...entries].sort((a, b) => rank(b.postedAt) - rank(a.postedAt))[0];
+}
+
 export function formatAnnouncementPostedAt(iso) {
   if (!iso) return "—";
   const d = new Date(iso);

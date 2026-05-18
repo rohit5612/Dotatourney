@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { BracketDiagram } from "../components/BracketDiagram";
+import { BracketStageTabs } from "../components/navigation/TournamentTabs.jsx";
 import { normalizedBlastBracketTabs } from "../components/bracket/bracketLayout.js";
 
 export function BracketPage({
@@ -151,18 +152,7 @@ export function BracketPage({
       <div className="h-2 w-full overflow-hidden rounded bg-muted">
         <div className="h-full bg-primary transition-all" style={{ width: `${completionPct}%` }} />
       </div>
-      <div className="flex gap-2">
-        {displayTabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveTab(tab.id)}
-            className={`btn btn-sm ${activeTab === tab.id ? "btn-primary" : "btn-outline"}`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <BracketStageTabs value={activeTab} onChange={setActiveTab} tabs={displayTabs} />
       <div className="rounded-md border border-border bg-background p-3 text-sm text-muted-foreground">
         Record winners to auto-propagate teams into downstream matches. Use tabs to manage upper/lower/finals or stage-specific group brackets.
       </div>

@@ -79,6 +79,7 @@ export function buildPublishedSnapshotFromRow(row) {
     discord_url: row.discord_url,
     rulebook: row.rulebook,
     announcements: row.announcements,
+    banner_announcements: row.banner_announcements,
     registration_code_prefix: row.registration_code_prefix,
     payment_qr_image: row.payment_qr_image,
     payment_upi_id: row.payment_upi_id,
@@ -94,6 +95,7 @@ export function applyPublishedSnapshot(data) {
     const { visibility_mode: _frozenVis, registrations_open: _frozenRegOpen, ...snapRest } = snap;
     /** Always use live copy for fields ops tweak often without re-publish. */
     const liveAnnouncements = base.announcements;
+    const liveBannerAnnouncements = base.banner_announcements;
     const liveDescription = base.description;
     return {
       ...data,
@@ -101,6 +103,9 @@ export function applyPublishedSnapshot(data) {
         ...base,
         ...snapRest,
         ...(liveAnnouncements !== undefined && liveAnnouncements !== null ? { announcements: liveAnnouncements } : {}),
+        ...(liveBannerAnnouncements !== undefined && liveBannerAnnouncements !== null
+          ? { banner_announcements: liveBannerAnnouncements }
+          : {}),
         description: liveDescription,
       },
     };
@@ -114,11 +119,11 @@ export async function createTournament(payload) {
     INSERT INTO tournaments (
       id, name, slug, format, series_type, team_count, dark_mode, series_rules,
       description, prize_pool, prize_pool_breakdown, entry_fee, start_date, end_date, registration_deadline,
-      discord_url, rulebook, announcements, visibility_mode, bracket_active, status,
+      discord_url, rulebook, announcements, banner_announcements, visibility_mode, bracket_active, status,
       registration_code_prefix, registration_code_seq, payment_qr_image, payment_upi_id, registrations_open
     )
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, 'draft',
-      $21, $22, $23, $24, $25)
+      $21, $22, $23, $24, $25, $26)
     RETURNING *;
   `;
   const values = [
@@ -140,6 +145,7 @@ export async function createTournament(payload) {
     payload.discordUrl || "",
     payload.rulebook || "",
     JSON.stringify(payload.announcements || []),
+    JSON.stringify(payload.bannerAnnouncements || []),
     payload.visibilityMode || "demo",
     Boolean(payload.bracketActive),
     (payload.registrationCodePrefix || "BPC").toString().slice(0, 12).toUpperCase().replace(/[^A-Z0-9]/g, "") || "BPC",
@@ -172,13 +178,14 @@ export async function updateTournament(tournamentId, payload) {
         discord_url = $16,
         rulebook = $17,
         announcements = $18,
-        visibility_mode = $19,
-        bracket_active = $20,
-        status = CASE WHEN is_published THEN status ELSE COALESCE($21, status) END,
-        registration_code_prefix = $22,
-        payment_qr_image = $23,
-        payment_upi_id = $24,
-        registrations_open = $25,
+        banner_announcements = $19,
+        visibility_mode = $20,
+        bracket_active = $21,
+        status = CASE WHEN is_published THEN status ELSE COALESCE($22, status) END,
+        registration_code_prefix = $23,
+        payment_qr_image = $24,
+        payment_upi_id = $25,
+        registrations_open = $26,
         updated_at = NOW()
     WHERE id = $1
     RETURNING *;
@@ -202,6 +209,7 @@ export async function updateTournament(tournamentId, payload) {
     payload.discordUrl || "",
     payload.rulebook || "",
     JSON.stringify(payload.announcements || []),
+    JSON.stringify(payload.bannerAnnouncements || []),
     payload.visibilityMode || "demo",
     Boolean(payload.bracketActive),
     payload.status || "draft",
@@ -233,7 +241,10 @@ export async function getTournament(tournamentId) {
   }
 
   const teamsResult = await pool.query(
-    "SELECT id, name, captain, abbr, seed FROM teams WHERE tournament_id = $1 ORDER BY seed ASC NULLS LAST, created_at ASC",
+    `SELECT id, name, captain, abbr, seed, logo_url AS "logoUrl"
+     FROM teams
+     WHERE tournament_id = $1
+     ORDER BY seed ASC NULLS LAST, created_at ASC`,
     [tournamentId],
   );
   const playersResult = await pool.query(
@@ -253,7 +264,7 @@ export async function getTournament(tournamentId) {
     [tournamentId],
   );
   const scheduleResult = await pool.query(
-    "SELECT id, match_id AS \"matchId\", start_at AS \"startAt\", stream, status, notes FROM schedule_slots WHERE tournament_id = $1 ORDER BY start_at ASC",
+    "SELECT id, match_id AS \"matchId\", start_at AS \"startAt\", stream, stream_url AS \"streamUrl\", status, notes FROM schedule_slots WHERE tournament_id = $1 ORDER BY start_at ASC",
     [tournamentId],
   );
 
@@ -275,8 +286,8 @@ export async function replaceTeamsAndPlayers(tournamentId, teams, players, teamP
 
   for (const team of teams) {
     await pool.query(
-      "INSERT INTO teams (id, tournament_id, name, captain, abbr, seed) VALUES ($1, $2, $3, $4, $5, $6)",
-      [team.id, tournamentId, team.name, team.captain, team.abbr, team.seed],
+      "INSERT INTO teams (id, tournament_id, name, captain, abbr, seed, logo_url) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+      [team.id, tournamentId, team.name, team.captain, team.abbr, team.seed, team.logoUrl || team.logo_url || ""],
     );
   }
 
@@ -314,7 +325,10 @@ export async function replaceTeamsAndPlayers(tournamentId, teams, players, teamP
 
 async function loadWorkingRoster(client, tournamentId) {
   const teamsResult = await client.query(
-    "SELECT id, name, captain, abbr, seed FROM teams WHERE tournament_id = $1 ORDER BY seed ASC NULLS LAST, created_at ASC",
+    `SELECT id, name, captain, abbr, seed, logo_url AS "logoUrl"
+     FROM teams
+     WHERE tournament_id = $1
+     ORDER BY seed ASC NULLS LAST, created_at ASC`,
     [tournamentId],
   );
   const playersResult = await client.query(
@@ -350,9 +364,9 @@ async function replaceRosterSnapshotContents(client, tournamentId, rosterId) {
     const snapshotTeamId = randomUUID();
     teamIdMap.set(team.id, snapshotTeamId);
     await client.query(
-      `INSERT INTO roster_snapshot_teams (id, roster_snapshot_id, tournament_id, source_team_id, name, captain, abbr, seed)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [snapshotTeamId, rosterId, tournamentId, team.id, team.name, team.captain, team.abbr, team.seed],
+      `INSERT INTO roster_snapshot_teams (id, roster_snapshot_id, tournament_id, source_team_id, name, captain, abbr, seed, logo_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [snapshotTeamId, rosterId, tournamentId, team.id, team.name, team.captain, team.abbr, team.seed, team.logoUrl || team.logo_url || ""],
     );
   }
 
@@ -432,7 +446,7 @@ export async function getRosterSnapshot(tournamentId, rosterId) {
   if (!snapshot) return null;
 
   const teamsResult = await pool.query(
-    `SELECT id, source_team_id AS "sourceTeamId", name, captain, abbr, seed
+    `SELECT id, source_team_id AS "sourceTeamId", name, captain, abbr, seed, logo_url AS "logoUrl"
      FROM roster_snapshot_teams
      WHERE roster_snapshot_id = $1
      ORDER BY seed ASC NULLS LAST, created_at ASC`,
@@ -695,8 +709,17 @@ export async function replaceSchedule(tournamentId, schedule) {
   await pool.query("DELETE FROM schedule_slots WHERE tournament_id = $1", [tournamentId]);
   for (const slot of schedule) {
     await pool.query(
-      "INSERT INTO schedule_slots (id, tournament_id, match_id, start_at, stream, status, notes) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-      [slot.id, tournamentId, slot.matchId, slot.startAt, slot.stream, slot.status, slot.notes],
+      "INSERT INTO schedule_slots (id, tournament_id, match_id, start_at, stream, stream_url, status, notes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+      [
+        slot.id,
+        tournamentId,
+        slot.matchId,
+        slot.startAt,
+        slot.stream,
+        slot.streamUrl ?? null,
+        slot.status,
+        slot.notes,
+      ],
     );
   }
 }

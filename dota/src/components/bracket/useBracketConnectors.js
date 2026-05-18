@@ -15,9 +15,9 @@ function buildPathsFromAnchors(edges, anchors, root) {
   function connectorPoint(el, side) {
     const r = el.getBoundingClientRect();
     const midY = r.top + r.height / 2 - rr.top;
-    const pad = 6;
-    if (side === "right") return { x: r.right - rr.left - pad, y: midY };
-    return { x: r.left - rr.left + pad, y: midY };
+    // Connect at outer box edges so lines run in the column gutter, not over card content.
+    if (side === "right") return { x: r.right - rr.left, y: midY };
+    return { x: r.left - rr.left, y: midY };
   }
 
   const rows = [];
@@ -39,19 +39,20 @@ function buildPathsFromAnchors(edges, anchors, root) {
  * @param {import("./bracketLayout.js").BracketConnectorEdge[]} edges
  * @param {import("react").MutableRefObject<Record<string, HTMLElement | null>>} anchorsRef — updated by ref callbacks
  * @param {number} anchorVersion bump when any anchor element is set/cleared
+ * @param {string} [contentKey] bump when match winners / team slots change (e.g. after saving results)
  */
-export function useBracketConnectors(rootRef, edges, anchorsRef, anchorVersion) {
+export function useBracketConnectors(rootRef, edges, anchorsRef, anchorVersion, contentKey = "") {
   const [paths, setPaths] = useState(() => []);
 
   useLayoutEffect(() => {
     const root = rootRef.current;
-    if (!root || !edges.length) {
+    if (!root) {
       setPaths([]);
       return undefined;
     }
 
     function compute() {
-      const next = buildPathsFromAnchors(edges, anchorsRef.current || {}, root);
+      const next = edges.length ? buildPathsFromAnchors(edges, anchorsRef.current || {}, root) : [];
       setPaths(next);
     }
 
@@ -79,7 +80,7 @@ export function useBracketConnectors(rootRef, edges, anchorsRef, anchorVersion) 
       window.removeEventListener("resize", compute);
       scrollParent?.removeEventListener("scroll", compute);
     };
-  }, [rootRef, edges, anchorVersion, anchorsRef]);
+  }, [rootRef, edges, anchorVersion, anchorsRef, contentKey]);
 
   return paths;
 }

@@ -103,6 +103,7 @@ function fallbackTournament(identifier) {
     discord_url: "https://discord.gg/sV2PhYc6A3",
     rulebook: "Rules will be published before tournament lock-in.",
     announcements: ["Tournament setup is in progress."],
+    banner_announcements: [],
     visibility_mode: "demo",
     payment_qr_image: "",
     payment_upi_id: "",
@@ -147,14 +148,31 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
 
   const visibilityMode = data.tournament.visibility_mode || "demo";
   const matches = data.matches.map((match) => publicMatch(match, visibilityMode));
+  const workingTeamLogos = new Map(
+    (data.teams || []).flatMap((team) => {
+      const logo = team.logoUrl || team.logo_url || "";
+      if (!logo) return [];
+      return [
+        [team.id, logo],
+        [String(team.name || "").trim().toLowerCase(), logo],
+      ];
+    }),
+  );
+  const resolveTeamLogo = (team) =>
+    team.logoUrl ||
+    team.logo_url ||
+    workingTeamLogos.get(team.sourceTeamId) ||
+    workingTeamLogos.get(String(team.name || "").trim().toLowerCase()) ||
+    "";
   const publicTeams = data.approvedRoster
     ? data.approvedRoster.teams.map((team) => ({
         ...team,
+        logoUrl: resolveTeamLogo(team),
         players: data.approvedRoster.players.filter((player) =>
           data.approvedRoster.teamPlayers.some((record) => record.team_id === team.id && record.player_id === player.id),
         ),
       }))
-    : data.teams;
+    : (data.teams || []).map((team) => ({ ...team, logoUrl: resolveTeamLogo(team) }));
   const standingsTeams =
     visibilityMode === "demo"
       ? Array.from({ length: data.tournament.team_count }, (_, index) => ({ name: `Team ${index + 1}` }))

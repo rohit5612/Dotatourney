@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { HiOutlineBolt, HiOutlineChatBubbleLeftRight, HiOutlineTrophy } from "react-icons/hi2";
+import { FaYoutube } from "react-icons/fa";
 import { AppFooter } from "../components/AppFooter";
 import { PageLoadingSpinner } from "../components/PageLoadingSpinner";
 import { BracketDiagram } from "../components/BracketDiagram";
@@ -8,7 +9,11 @@ import {
   augmentGroupedBracketMatches,
   buildStageTabLabels,
   formatMatchRoundSummary,
+  getSchedulePhase,
   normalizedBlastBracketTabs,
+  SCHEDULE_PHASE_GROUPS,
+  SCHEDULE_PHASE_PLAYOFFS,
+  SCHEDULE_PHASE_QUALIFIERS,
   stageRoundStructure,
 } from "../components/bracket/bracketLayout.js";
 import { ScrollToTopButton } from "../components/ScrollToTopButton";
@@ -21,6 +26,10 @@ import { COOKIE_CONSENT_KEY, PUBLIC_CONTACT_EMAIL, VALVE_DISCLAIMER } from "../c
 import { roles } from "../constants/tournament";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock.js";
 import { api } from "../lib/api";
+import { LandingBannerAnnouncement } from "../components/LandingBannerAnnouncement.jsx";
+import { StandingsTable } from "../components/StandingsTable.jsx";
+import { PrimaryViewTabs, SchedulePhaseTabs } from "../components/navigation/TournamentTabs.jsx";
+import { groupScheduleSlotsByDate, isValidScheduleInstant } from "../utils/schedule.js";
 import { descriptionContentClassName, rulebookContentClassName, sanitizeDescriptionHtml, sanitizeRulebookHtml } from "../lib/sanitizeRulebookHtml.js";
 import { formatAnnouncementPostedAt, parseAnnouncementEntries } from "../lib/announcementEntries.js";
 
@@ -605,6 +614,7 @@ function LandingPage({ event, navigate, message }) {
 
   return (
     <>
+      <LandingBannerAnnouncement tournament={tournament} />
       {message ? <p className="mx-auto mt-4 max-w-6xl rounded-md border border-border bg-card p-2 text-sm text-secondary">{message}</p> : null}
       <section className="relative flex min-h-[100svh] items-center justify-center overflow-hidden px-4 py-24 md:py-16">
         <LandingPageHeroVideo />
@@ -956,6 +966,187 @@ function normalizeBreakdown(value) {
     .filter(Boolean);
 }
 
+function placementLabel(item, index) {
+  if (item.label && item.label !== `${index + 1}`) return item.label;
+  const n = item.placement ?? index + 1;
+  if (n === 1) return "1st Place";
+  if (n === 2) return "2nd Place";
+  if (n === 3) return "3rd Place";
+  return `${n}th Place`;
+}
+
+function PrizePoolBreakdown({ total, items }) {
+  const list = items.length ? items : [{ label: "Prize breakdown", amount: "Breakdown will be announced soon.", placement: 1 }];
+  const podium = list.slice(0, 3);
+  const remainder = list.slice(3);
+  const podiumOrder = podium.length >= 3 ? [podium[1], podium[0], podium[2]] : podium;
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-border bg-card/90 p-6 shadow-xl backdrop-blur-md sm:p-8">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border/70 pb-5">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-secondary">Rewards</p>
+          <h3 className="mt-1 font-serif text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Prize Pool Breakdown</h3>
+        </div>
+        {total ? (
+          <div className="rounded-xl border border-primary/25 bg-primary/10 px-4 py-3 text-right">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Total pool</p>
+            <p className="font-serif text-2xl font-semibold text-primary sm:text-3xl">{total}</p>
+          </div>
+        ) : null}
+      </div>
+
+      {podium.length ? (
+        <div
+          className={`prize-podium-grid mt-6 grid gap-4 ${
+            podium.length >= 3 ? "md:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1fr)] md:items-end" : podium.length === 2 ? "md:grid-cols-2" : ""
+          }`}
+        >
+          {podiumOrder.map((item, index) => {
+            const rank = item.placement ?? (podium.length >= 3 ? (index === 0 ? 2 : index === 1 ? 1 : 3) : index + 1);
+            const isFirst = rank === 1;
+            const isSecond = rank === 2;
+            const slotClass = isFirst ? "prize-podium-slot--first" : isSecond ? "prize-podium-slot--second" : "prize-podium-slot--third";
+            return (
+              <article
+                key={`podium-${item.label}-${index}`}
+                className={`prize-podium-slot ${slotClass} relative rounded-xl border bg-background/95 shadow-md backdrop-blur-sm ${
+                  isFirst ? "border-primary/50 ring-2 ring-primary/25" : "border-border"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <span
+                    className={`inline-flex items-center justify-center rounded-full px-2 font-bold ${
+                      isFirst
+                        ? "h-11 min-w-11 text-base bg-primary/20 text-primary"
+                        : isSecond
+                          ? "h-9 min-w-9 text-sm bg-secondary/20 text-secondary"
+                          : "h-8 min-w-8 text-xs bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    #{rank}
+                  </span>
+                  <HiOutlineTrophy
+                    className={`shrink-0 ${isFirst ? "h-8 w-8 text-primary" : isSecond ? "h-6 w-6 text-secondary/80" : "h-5 w-5 text-muted-foreground/70"}`}
+                    aria-hidden="true"
+                  />
+                </div>
+                <p
+                  className={`font-semibold uppercase tracking-[0.14em] text-secondary ${
+                    isFirst ? "mt-5 text-sm" : isSecond ? "mt-4 text-xs" : "mt-3 text-[11px]"
+                  }`}
+                >
+                  {placementLabel(item, rank - 1)}
+                </p>
+                <p
+                  className={`mt-2 font-serif font-semibold text-foreground ${
+                    isFirst ? "text-3xl sm:text-4xl" : isSecond ? "text-xl sm:text-2xl" : "text-lg sm:text-xl"
+                  }`}
+                >
+                  {item.amount || "TBA"}
+                </p>
+              </article>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {remainder.length ? (
+        <ol className="mt-6 divide-y divide-border/70 rounded-xl border border-border/80 bg-background/80">
+          {remainder.map((item, index) => (
+            <li key={`prize-rest-${item.label}-${index}`} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 sm:px-5">
+              <div className="flex items-center gap-3">
+                <span className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-card text-xs font-semibold text-muted-foreground">
+                  {item.placement ?? index + 4}
+                </span>
+                <span className="text-sm font-medium text-foreground">{placementLabel(item, (item.placement ?? index + 4) - 1)}</span>
+              </div>
+              <span className="font-serif text-lg font-semibold text-primary">{item.amount || "TBA"}</span>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+    </section>
+  );
+}
+
+function MeetTheTeams({ teams }) {
+  const sortedTeams = useMemo(
+    () => [...teams].sort((a, b) => (a.seed ?? Number.MAX_SAFE_INTEGER) - (b.seed ?? Number.MAX_SAFE_INTEGER)),
+    [teams],
+  );
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-border bg-card/90 p-6 shadow-xl backdrop-blur-md sm:p-8">
+        <div className="mb-8 max-w-3xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-secondary">Competing squads</p>
+          <h3 className="mt-1 font-serif text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Meet the Teams</h3>
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-base">
+            The rosters battling for the crown — captains marked with <span className="font-semibold text-foreground">(C)</span>.
+          </p>
+        </div>
+        <div className="grid gap-8 lg:grid-cols-2">
+          {sortedTeams.map((team) => {
+            const roster = team.players?.length ? team.players : [{ name: "Roster TBA", roles: [] }];
+            const logo = team.logoUrl || team.logo_url || "";
+            const initials = (team.abbr || team.name || "?")
+              .split(/\s+/)
+              .map((part) => part[0])
+              .join("")
+              .slice(0, 3)
+              .toUpperCase();
+            return (
+              <article key={team.id || team.name} className="meet-team-card overflow-hidden rounded-2xl border border-border bg-background/95 shadow-lg backdrop-blur-sm">
+                <div className="flex flex-col gap-5 p-6 sm:flex-row sm:items-start sm:p-7">
+                  <div className="mx-auto flex h-32 w-32 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border bg-card shadow-inner sm:mx-0 sm:h-36 sm:w-36">
+                    {logo ? (
+                      <img src={logo} alt="" className="h-full w-full object-contain p-3" />
+                    ) : (
+                      <span className="font-serif text-3xl font-bold tracking-wide text-primary/80">{initials}</span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1 text-center sm:text-left">
+                    <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                      {team.seed ? (
+                        <span className="rounded-full border border-border bg-card px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Seed {team.seed}
+                        </span>
+                      ) : null}
+                      {team.abbr ? (
+                        <span className="rounded-full border border-primary/25 bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-primary">
+                          {team.abbr}
+                        </span>
+                      ) : null}
+                    </div>
+                    <h4 className="mt-2 font-serif text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{team.name}</h4>
+                    <ul className="mt-5 space-y-2.5">
+                      {roster.map((player) => {
+                        const roleText = Array.isArray(player.roles) ? player.roles.join(" · ") : player.role || "Player";
+                        const isCaptain = Boolean(player.isCaptain);
+                        return (
+                          <li
+                            key={player.id || player.name}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-card/70 px-3.5 py-2.5 text-sm"
+                          >
+                            <span className="font-medium text-foreground">
+                              {player.name}
+                              {isCaptain ? <span className="ml-1.5 font-semibold text-primary">(C)</span> : null}
+                            </span>
+                            <span className="text-xs uppercase tracking-wide text-muted-foreground">{roleText}</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+  );
+}
+
 function TournamentInfo({ event, message }) {
   const tournament = event?.tournament;
   const [announcementPage, setAnnouncementPage] = useState(0);
@@ -1014,8 +1205,6 @@ function TournamentInfo({ event, message }) {
   );
   const prizeBreakdown = normalizeBreakdown(tournament?.prize_pool_breakdown);
   const tournamentMode = tournament?.visibility_mode !== "demo";
-  const groupedStandings = event?.groupedStandings || [];
-  const standings = event?.standings || [];
   const teams = event?.teams || [];
   return (
     <div className="space-y-6">
@@ -1065,9 +1254,9 @@ function TournamentInfo({ event, message }) {
             </div>
           </section>
 
-          <section className="relative overflow-hidden rounded-2xl border-2 border-primary/45 bg-card/90 p-5 shadow-2xl shadow-primary/10 ring-1 ring-primary/15 backdrop-blur-md sm:p-8">
+          <section className="announcement-panel relative overflow-hidden rounded-2xl border-2 border-primary/45 bg-card/90 p-5 shadow-2xl shadow-primary/10 ring-1 ring-primary/15 backdrop-blur-md sm:p-8">
             <div
-              className="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#c9782e] via-secondary to-[#1a6b5c]"
+              className="announcement-panel-accent pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#c9782e] via-secondary to-[#1a6b5c]"
               aria-hidden="true"
             />
             <div className="mb-5">
@@ -1077,11 +1266,11 @@ function TournamentInfo({ event, message }) {
                 Read these first — schedule changes, rules, and tournament news are posted here.
               </p>
             </div>
-            <div className="space-y-4">
+            <div key={`announcement-page-${safeAnnouncementPage}`} className="space-y-4">
               {pagedAnnouncements.map((entry, i) => (
                 <article
                   key={`announcement-${entry.origIdx}-${entry.creationNumber}-${i}`}
-                  className="rounded-xl border border-border bg-background/95 p-5 shadow-md backdrop-blur-sm sm:p-6"
+                  className="announcement-card rounded-xl border border-border bg-background/95 p-5 shadow-md backdrop-blur-sm sm:p-6"
                 >
                   <p className="text-[11px] font-bold uppercase leading-snug tracking-[0.12em] text-primary sm:text-xs sm:tracking-[0.16em]">
                     BPC LEAGUE ANNOUNCEMENT #{entry.creationNumber}{" "}
@@ -1119,54 +1308,9 @@ function TournamentInfo({ event, message }) {
             ) : null}
           </section>
 
-          <section className="rounded-xl border border-border bg-card/85 p-4 shadow-lg backdrop-blur-md">
-            <h3 className="font-serif text-xl font-semibold tracking-tight text-foreground">Prize Pool Breakdown</h3>
-            <div className="mt-3 grid gap-2 md:grid-cols-2">
-              {(prizeBreakdown.length ? prizeBreakdown : [{ label: "Prize breakdown", amount: "Breakdown will be announced soon." }]).map((item, index) => (
-                <div key={`${item.label || item}-${index}`} className="rounded-md border border-border bg-background/90 p-3 text-sm shadow-sm backdrop-blur-sm">
-                  <p className="text-xs uppercase tracking-wider text-secondary">{item.label || `${index + 1}`}</p>
-                  <p className="mt-1 font-serif text-lg text-primary">{item.amount || "TBA"}</p>
-                </div>
-              ))}
-            </div>
-          </section>
+          <PrizePoolBreakdown total={tournament?.prize_pool} items={prizeBreakdown} />
 
-          <section className="space-y-3 rounded-xl border border-border bg-card/85 p-4 shadow-lg backdrop-blur-md">
-            <h3 className="font-serif text-xl font-semibold tracking-tight text-foreground">Standings</h3>
-            {groupedStandings.length ? (
-              <div className="grid gap-3 lg:grid-cols-2">
-                {groupedStandings.map((group) => (
-                  <StandingsTable key={group.id} title={group.label} rows={group.rows} />
-                ))}
-              </div>
-            ) : (
-              <StandingsTable title="Overall standings" rows={standings} />
-            )}
-          </section>
-
-          {tournamentMode && teams.length ? (
-            <section className="space-y-3 rounded-xl border border-border bg-card/85 p-4 shadow-lg backdrop-blur-md">
-              <h3 className="font-serif text-xl font-semibold tracking-tight text-foreground">Teams</h3>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {teams.map((team) => (
-                  <article key={team.id || team.name} className="overflow-hidden rounded-xl border border-border bg-background/90 shadow-sm backdrop-blur-sm">
-                    <div className="border-b border-border bg-card/80 px-4 py-3 backdrop-blur-sm">
-                      <h4 className="font-serif text-xl font-semibold tracking-tight text-foreground">{team.name}</h4>
-                      <p className="text-xs text-secondary">{team.captain ? `Captain: ${team.captain}` : "Captain TBA"}</p>
-                    </div>
-                    <div className="divide-y divide-border">
-                      {(team.players?.length ? team.players : [{ name: "Roster TBA", roles: [] }]).map((player) => (
-                        <div key={player.id || player.name} className="grid grid-cols-[1fr_auto] gap-2 px-4 py-2 text-sm">
-                          <span className="font-medium">{player.name}</span>
-                          <span className="text-xs text-muted-foreground">{Array.isArray(player.roles) ? player.roles.join(", ") : player.role || "Player"}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </section>
-          ) : null}
+          {tournamentMode && teams.length ? <MeetTheTeams teams={teams} /> : null}
         </div>
       </div>
     </div>
@@ -1200,7 +1344,71 @@ function RevealSection({ children }) {
   );
 }
 
+function PublicScheduleMatchCard({ slot, match, stageLabel, roundStructureAll }) {
+  const isLive = slot.status === "live";
+  const streamUrl = typeof slot.streamUrl === "string" ? slot.streamUrl.trim() : "";
+  const start = new Date(slot.startAt);
+  const timeLabel = Number.isNaN(start.getTime())
+    ? ""
+    : start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+
+  return (
+    <div className="grid gap-3 rounded-md border border-border bg-background p-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
+      <div>
+        <div className="flex flex-wrap items-center gap-2">
+          {isLive ? <span className="schedule-live-dot" title="Live now" aria-hidden /> : null}
+          <span className={`font-medium ${isLive ? "text-foreground" : ""}`}>
+            {match ? `${match.team1} vs ${match.team2}` : slot.matchId}
+          </span>
+        </div>
+        <div className="text-muted-foreground">
+          {timeLabel ? `${timeLabel} — ` : ""}
+          {slot.stream}
+        </div>
+        {!isLive && slot.status !== "upcoming" ? <div className="capitalize text-secondary">{slot.status}</div> : null}
+        {streamUrl ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+            <FaYoutube className="h-5 w-5 shrink-0 text-[#ff0000]" aria-hidden />
+            <span className="text-muted-foreground">Watch live here:</span>
+            <a
+              href={streamUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-primary underline-offset-2 hover:underline"
+            >
+              {streamUrl}
+            </a>
+          </div>
+        ) : null}
+      </div>
+      <div className="rounded-md border border-border bg-card px-3 py-2 text-right">
+        <div className="text-xs uppercase tracking-wider text-muted-foreground">Bracket</div>
+        <div className="font-medium">{stageLabel}</div>
+        <div className="text-xs text-muted-foreground">
+          {match ? formatMatchRoundSummary(match, roundStructureAll) : "—"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PublicScheduleStatusSection({ title, subtitle, children, show = true }) {
+  if (!show) return null;
+  return (
+    <section className="rounded-lg border border-border bg-background/90 p-4 shadow-sm backdrop-blur-sm sm:p-5">
+      <div className="border-b border-border pb-3">
+        <h3 className="font-serif text-lg text-foreground">{title}</h3>
+        {subtitle ? <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p> : null}
+      </div>
+      <div className="mt-4 space-y-3">{children}</div>
+    </section>
+  );
+}
+
 function PublicSchedule({ event, message }) {
+  const [viewMode, setViewMode] = useState("bracket");
+  const [phaseTab, setPhaseTab] = useState(SCHEDULE_PHASE_GROUPS);
+
   const roundStructureAll = useMemo(() => stageRoundStructure(event?.matches || []), [event?.matches]);
   const { groupedMatches, stageTabs, stageLabels } = useMemo(() => {
     const groups = {};
@@ -1214,7 +1422,57 @@ function PublicSchedule({ event, message }) {
     const labels = buildStageTabLabels(event?.tournament?.format || "", tabs);
     return { groupedMatches: augmented, stageTabs: tabs, stageLabels: labels };
   }, [event]);
-  const sortedSchedule = [...(event?.schedule || [])].sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
+
+  const phaseNavTabs = useMemo(
+    () => [
+      { id: SCHEDULE_PHASE_GROUPS, label: "Groups" },
+      { id: SCHEDULE_PHASE_QUALIFIERS, label: "Last chance & play-ins" },
+      { id: SCHEDULE_PHASE_PLAYOFFS, label: "Playoffs" },
+    ],
+    [],
+  );
+
+  const phaseSlots = useMemo(() => {
+    return [...(event?.schedule || [])]
+      .filter((slot) => isValidScheduleInstant(slot.startAt))
+      .filter((slot) => {
+        const match = event?.matches?.find((m) => m.id === slot.matchId);
+        if (!match) return false;
+        return getSchedulePhase(match.stageKey) === phaseTab;
+      });
+  }, [event?.schedule, event?.matches, phaseTab]);
+
+  const scheduleByStatus = useMemo(() => {
+    const byTime = (a, b) => new Date(a.startAt) - new Date(b.startAt);
+    const live = phaseSlots.filter((s) => s.status === "live").sort(byTime);
+    const upcoming = phaseSlots.filter((s) => s.status === "upcoming").sort(byTime);
+    const finished = phaseSlots.filter((s) => s.status === "finished").sort(byTime);
+    return {
+      live,
+      upcomingByDate: groupScheduleSlotsByDate(upcoming),
+      finished,
+    };
+  }, [phaseSlots]);
+
+  const hasScheduleContent =
+    scheduleByStatus.live.length > 0 ||
+    scheduleByStatus.upcomingByDate.length > 0 ||
+    scheduleByStatus.finished.length > 0;
+
+  function renderScheduleSlot(slot) {
+    const match = event?.matches?.find((entry) => entry.id === slot.matchId);
+    const stageLabel = stageLabels[match?.stageKey] || match?.stageKey || "Bracket";
+    return (
+      <PublicScheduleMatchCard
+        key={slot.id}
+        slot={slot}
+        match={match}
+        stageLabel={stageLabel}
+        roundStructureAll={roundStructureAll}
+      />
+    );
+  }
+
   return (
     <div className="space-y-4">
       {message ? <p className="rounded-md border border-border bg-card/90 p-2 text-sm text-secondary shadow-sm backdrop-blur-sm">{message}</p> : null}
@@ -1226,86 +1484,95 @@ function PublicSchedule({ event, message }) {
             : "Live tournament mode is active. Match names, scores, and standings reflect the current tournament state."}
         </p>
       </section>
-      {(event?.groupedStandings || []).length ? (
-        <section className="space-y-3 rounded-lg border border-border bg-card/85 p-4 shadow-lg backdrop-blur-md">
-          <h3 className="font-serif text-lg">Group standings</h3>
-          <div className="grid gap-3 lg:grid-cols-2">
-            {event.groupedStandings.map((group) => (
-              <StandingsTable key={group.id} title={group.label} rows={group.rows} />
-            ))}
-          </div>
-        </section>
-      ) : null}
-      <div className="space-y-6">
-        {stageTabs.map((tab) => {
-          const matches = groupedMatches[tab.id] || [];
-          if (!matches.length) return null;
-          return (
-            <section key={tab.id} className="space-y-3 rounded-lg border border-border bg-card/85 p-4 shadow-lg backdrop-blur-md">
-              <div>
-                <h3 className="font-serif text-xl">{tab.label}</h3>
-                <p className="text-sm text-muted-foreground">Bracket progression for this stage.</p>
-              </div>
-              <BracketDiagram
-                matches={matches}
-                blastSeedMatches={event?.matches ?? []}
-                playoffFeedMatches={
-                  tab.id === "blast-qualifiers"
-                    ? (groupedMatches["blast-playoffs"] || []).filter((m) => (m.roundIndex ?? 0) === 0)
-                    : undefined
-                }
-              />
-            </section>
-          );
-        })}
-      </div>
-      <section className="space-y-2 rounded-lg border border-border bg-card/85 p-4 shadow-lg backdrop-blur-md">
-        <h3 className="font-serif text-lg">Scheduled matches</h3>
-        {sortedSchedule.map((slot) => {
-          const match = event?.matches?.find((entry) => entry.id === slot.matchId);
-          const stageLabel = stageLabels[match?.stageKey] || match?.stageKey || "Bracket";
-          return (
-            <div key={slot.id} className="grid gap-3 rounded-md border border-border bg-background p-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
-              <div>
-                <div className="font-medium">{match ? `${match.team1} vs ${match.team2}` : slot.matchId}</div>
-                <div className="text-muted-foreground">{new Date(slot.startAt).toLocaleString()} - {slot.stream}</div>
-                <div className="capitalize text-secondary">{slot.status}</div>
-              </div>
-              <div className="rounded-md border border-border bg-card px-3 py-2 text-right">
-                <div className="text-xs uppercase tracking-wider text-muted-foreground">Bracket</div>
-                <div className="font-medium">{stageLabel}</div>
-                <div className="text-xs text-muted-foreground">
-                  {match ? formatMatchRoundSummary(match, roundStructureAll) : "—"}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-        {!sortedSchedule.length ? <p className="rounded-md border border-border bg-background p-3 text-sm text-muted-foreground">No scheduled matches yet.</p> : null}
-      </section>
-    </div>
-  );
-}
+      <PrimaryViewTabs
+        ariaLabel="Bracket or schedule view"
+        value={viewMode}
+        onChange={setViewMode}
+        tabs={[
+          { id: "bracket", label: "Bracket" },
+          { id: "schedule", label: "Schedule" },
+        ]}
+      />
 
-function StandingsTable({ title, rows = [] }) {
-  return (
-    <div className="overflow-x-auto rounded-md border border-border bg-background">
-      <div className="border-b border-border px-3 py-2 font-medium">{title}</div>
-      <div className="grid grid-cols-[1fr_3rem_3rem_3rem] gap-2 px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground">
-        <span>Team</span>
-        <span>W</span>
-        <span>L</span>
-        <span>P</span>
-      </div>
-      {rows.map((row) => (
-        <div key={row.team} className="grid grid-cols-[1fr_3rem_3rem_3rem] gap-2 border-t border-border px-3 py-2 text-sm">
-          <span className="truncate">{row.team}</span>
-          <span>{row.wins}</span>
-          <span>{row.losses}</span>
-          <span>{row.played}</span>
-        </div>
-      ))}
-      {!rows.length ? <p className="border-t border-border px-3 py-2 text-sm text-muted-foreground">No results yet.</p> : null}
+      {viewMode === "bracket" ? (
+        <>
+          {(event?.groupedStandings || []).length ? (
+            <section className="space-y-3 rounded-lg border border-border bg-card/85 p-4 shadow-lg backdrop-blur-md">
+              <h3 className="font-serif text-lg">Group standings</h3>
+              <div className="grid gap-3 lg:grid-cols-2">
+                {event.groupedStandings.map((group) => (
+                  <StandingsTable key={group.id} title={group.label} rows={group.rows} />
+                ))}
+              </div>
+            </section>
+          ) : null}
+          <div className="space-y-6">
+          {stageTabs.map((tab) => {
+            const matches = groupedMatches[tab.id] || [];
+            if (!matches.length) return null;
+            return (
+              <section key={tab.id} className="space-y-3 rounded-lg border border-border bg-card/85 p-4 shadow-lg backdrop-blur-md">
+                <div>
+                  <h3 className="font-serif text-xl">{tab.label}</h3>
+                  <p className="text-sm text-muted-foreground">Bracket progression for this stage.</p>
+                </div>
+                <BracketDiagram
+                  matches={matches}
+                  blastSeedMatches={event?.matches ?? []}
+                  playoffFeedMatches={
+                    tab.id === "blast-qualifiers"
+                      ? (groupedMatches["blast-playoffs"] || []).filter((m) => (m.roundIndex ?? 0) === 0)
+                      : undefined
+                  }
+                />
+              </section>
+            );
+          })}
+          </div>
+        </>
+      ) : (
+        <>
+          <SchedulePhaseTabs value={phaseTab} onChange={setPhaseTab} tabs={phaseNavTabs} />
+          <div className="flex flex-col gap-8">
+            <PublicScheduleStatusSection
+              title="Live"
+              subtitle="Matches on air right now."
+              show={scheduleByStatus.live.length > 0}
+            >
+              {scheduleByStatus.live.map(renderScheduleSlot)}
+            </PublicScheduleStatusSection>
+
+            <PublicScheduleStatusSection
+              title="Upcoming"
+              subtitle="Grouped by match day."
+              show={scheduleByStatus.upcomingByDate.length > 0}
+            >
+              <div className="space-y-6">
+                {scheduleByStatus.upcomingByDate.map((day) => (
+                  <div key={day.dateKey} className="space-y-3">
+                    <h4 className="schedule-day-heading">{day.heading}</h4>
+                    <div className="space-y-3">{day.slots.map(renderScheduleSlot)}</div>
+                  </div>
+                ))}
+              </div>
+            </PublicScheduleStatusSection>
+
+            <PublicScheduleStatusSection
+              title="Finished"
+              subtitle="Completed matches in start-time order."
+              show={scheduleByStatus.finished.length > 0}
+            >
+              {scheduleByStatus.finished.map(renderScheduleSlot)}
+            </PublicScheduleStatusSection>
+
+            {!hasScheduleContent ? (
+              <p className="rounded-lg border border-border bg-background/90 p-4 text-sm text-muted-foreground shadow-sm sm:p-5">
+                No scheduled matches for this phase yet.
+              </p>
+            ) : null}
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -141,10 +141,11 @@ export function EliminationBracketCanvas({
   );
 
   const showOutboundColumn = useMemo(() => {
+    if (!qualifiersToPlayoffs.length) return false;
     const row = playoffFeedMatches || [];
-    if (!row.length || !qualifiersToPlayoffs.length) return false;
+    if (!row.length) return false;
     return row.some((m) => playoffUsesPlayInWinners(m));
-  }, [playoffFeedMatches, qualifiersToPlayoffs.length]);
+  }, [playoffFeedMatches, qualifiersToPlayoffs]);
 
   const internalEdges = useMemo(
     () => blastQualifierFeederEdges(sortedRoundsPairs, matches),
@@ -158,7 +159,21 @@ export function EliminationBracketCanvas({
 
   const allEdges = useMemo(() => [...internalEdges, ...outboundEdges], [internalEdges, outboundEdges]);
 
-  const paths = useBracketConnectors(rootRef, allEdges, anchorsRef, anchorTick);
+  const connectorContentKey = useMemo(
+    () =>
+      matches
+        .map((m) => `${m.id}:${m.winner ?? ""}:${m.team1 ?? ""}:${m.team2 ?? ""}`)
+        .join("|"),
+    [matches],
+  );
+
+  const paths = useBracketConnectors(
+    rootRef,
+    allEdges,
+    anchorsRef,
+    anchorTick,
+    connectorContentKey,
+  );
 
   const baseColumns = sortedRoundsPairs.length + (showOutboundColumn ? 1 : 0);
   const outboundSpacingClass = roundColumnSpacingClass(Math.max(0, baseColumns - 1));
@@ -296,13 +311,13 @@ export function EliminationBracketCanvas({
         </div>
 
         <svg
-          className="pointer-events-none absolute inset-0 z-[1] overflow-visible"
+          className="bracket-connectors-layer pointer-events-none absolute inset-0 z-[1] overflow-visible"
           width="100%"
           height="100%"
           aria-hidden
         >
           {paths.map(({ d }, idx) => (
-            <path key={idx} d={d} fill="none" className="stroke-foreground/45" strokeWidth={2} />
+            <path key={idx} d={d} />
           ))}
         </svg>
       </div>

@@ -4,6 +4,7 @@ import {
   describeBlastGroupSeedPlaceholder,
   describeBlastMatchFlow,
 } from "./bracketLayout.js";
+import { datetimeLocalToIso, toDatetimeLocalValue } from "../../utils/datetime.js";
 
 /** 1-based round index from bracket win-token prefixes → Quarterfinals / Semifinals / Finals when applicable */
 function bracketTokenRoundLabel(roundStr) {
@@ -265,7 +266,7 @@ export function MatchCard({
   const editing = Boolean(editable && isEditing);
   const team1Score = scoreLineValue(scoreDraft, "team1Score", base1, editing);
   const team2Score = scoreLineValue(scoreDraft, "team2Score", base2, editing);
-  const slotValue = match.slotAt ? new Date(match.slotAt).toISOString().slice(0, 16) : "";
+  const slotValue = match.slotAt ? toDatetimeLocalValue(match.slotAt) : "";
   const seriesLabel = String(match.meta?.seriesType || "").toUpperCase();
   const requiredWins = Math.max(1, Math.ceil((Number(seriesLabel.replace("BO", "")) || 1) / 2));
   const matchFlowTip = blastVariant === "ten" || blastVariant === "twelve" ? describeBlastMatchFlow(match, blastVariant) : "";
@@ -392,7 +393,7 @@ export function MatchCard({
               value={slotValue}
               disabled={saving}
               onChange={(event) =>
-                updateMatch?.(match.id, { slotAt: event.target.value ? new Date(event.target.value).toISOString() : null })
+                updateMatch?.(match.id, { slotAt: event.target.value ? datetimeLocalToIso(event.target.value) : null })
               }
             />
             <select

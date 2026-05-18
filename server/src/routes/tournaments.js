@@ -72,6 +72,15 @@ const tournamentSchema = z.object({
     )
     .optional()
     .default([]),
+  bannerAnnouncements: z
+    .array(
+      z.object({
+        body: z.string(),
+        postedAt: z.union([z.string(), z.null()]).optional(),
+      }),
+    )
+    .optional()
+    .default([]),
   visibilityMode: z.enum(["demo", "tournament"]).optional().default("demo"),
   bracketActive: z.boolean().optional().default(false),
   status: z.enum(["draft", "approved", "published", "archived"]).optional().default("draft"),
@@ -218,6 +227,7 @@ router.post("/:id/teams", async (req, res, next) => {
             captain: z.string().nullable().optional(),
             abbr: z.string().nullable().optional(),
             seed: z.number().nullable().optional(),
+            logoUrl: z.string().optional().default(""),
           }),
         ),
         players: z.array(
@@ -601,6 +611,10 @@ router.post("/:id/schedule", async (req, res, next) => {
             matchId: z.string().uuid(),
             startAt: z.string(),
             stream: z.string().min(1),
+            streamUrl: z
+              .string()
+              .nullish()
+              .transform((v) => (v && String(v).trim() ? String(v).trim() : undefined)),
             status: z.enum(["upcoming", "live", "finished"]),
             notes: z.string().optional().default(""),
           }),

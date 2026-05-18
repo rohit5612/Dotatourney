@@ -78,6 +78,13 @@ export function TeamsPage({
     setActionMenuTeamId("");
   }
 
+  function handleTeamLogoUpload(team, file) {
+    if (!file || !updateTeam) return;
+    const reader = new FileReader();
+    reader.onload = () => updateTeam(team.id, { logoUrl: reader.result || "" });
+    reader.readAsDataURL(file);
+  }
+
   function confirmDeleteTeam(team) {
     const confirmed = window.confirm(`Delete team "${team.name}"? Assigned players will be moved back to the available pool.`);
     if (confirmed) deleteTeam?.(team.id);
@@ -175,20 +182,54 @@ export function TeamsPage({
         </div>
 
         {isTeamPaneActive ? (
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid gap-6 xl:grid-cols-2">
           {teamDraft.map((team) => {
             const teamPlayers = poolDraft.filter((player) => player.teamId === team.id);
-            const captain = teamPlayers.find((player) => player.isCaptain);
             const missingRoles = roles.filter((role) => !teamPlayers.some((player) => player.role === role));
             const roleCoverageText = missingRoles.length ? `Missing: ${missingRoles.join(", ")}` : "All roles covered";
+            const logoUrl = team.logoUrl || team.logo_url || "";
+            const initials = (team.abbr || team.name || "?")
+              .split(/\s+/)
+              .map((part) => part[0])
+              .join("")
+              .slice(0, 3)
+              .toUpperCase();
 
             return (
-              <div key={team.id} className="rounded-lg border border-border bg-background p-4">
+              <div key={team.id} className="rounded-2xl border border-border bg-background p-5 shadow-sm">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                  <div className="flex shrink-0 flex-col items-center gap-2">
+                    <div className="flex h-28 w-28 items-center justify-center overflow-hidden rounded-xl border border-border bg-card shadow-inner">
+                      {logoUrl ? (
+                        <img src={logoUrl} alt="" className="h-full w-full object-contain p-2" />
+                      ) : (
+                        <span className="font-serif text-2xl font-bold text-primary/75">{initials}</span>
+                      )}
+                    </div>
+                    <label className="btn btn-outline btn-xs cursor-pointer">
+                      {logoUrl ? "Change logo" : "Upload logo"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="sr-only"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) handleTeamLogoUpload(team, file);
+                          event.target.value = "";
+                        }}
+                      />
+                    </label>
+                    {logoUrl ? (
+                      <button type="button" className="text-[11px] text-muted-foreground underline-offset-2 hover:underline" onClick={() => updateTeam?.(team.id, { logoUrl: "" })}>
+                        Remove logo
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h4 className="font-serif text-lg">{team.name}</h4>
+                    <h4 className="font-serif text-xl font-semibold tracking-tight">{team.name}</h4>
                     <div className="mt-1 text-sm text-muted-foreground">{teamPlayers.length}/5 players assigned</div>
-                    <div className="text-sm text-muted-foreground">Captain: {captain?.name || "Not assigned"}</div>
                     <div className="mt-2 inline-flex cursor-help rounded border border-border px-2 py-1 text-xs text-secondary" title={roleCoverageText}>
                       Role coverage
                     </div>
@@ -227,10 +268,13 @@ export function TeamsPage({
 
                 <div className="mt-4 space-y-2">
                   {teamPlayers.map((player) => (
-                    <div key={player.id} className="rounded-md border border-border bg-card p-2 text-sm">
+                    <div key={player.id} className="rounded-lg border border-border bg-card p-3 text-sm">
                       <div className="flex items-center justify-between gap-2">
                         <div>
-                          <div className="font-medium">{player.name}</div>
+                          <div className="font-medium">
+                            {player.name}
+                            {player.isCaptain ? <span className="ml-1.5 font-semibold text-primary">(C)</span> : null}
+                          </div>
                           <div className="text-xs text-muted-foreground">
                             {(player.roles?.length ? player.roles : [player.role]).join(", ")}
                             {player.mmr ? ` - ${player.mmr} MMR` : ""}
@@ -253,6 +297,8 @@ export function TeamsPage({
                     </div>
                   ))}
                   {!teamPlayers.length ? <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">No players assigned yet.</p> : null}
+                </div>
+                  </div>
                 </div>
               </div>
             );

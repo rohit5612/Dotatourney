@@ -7,16 +7,17 @@ import { ScrollToTopButton } from "./components/ScrollToTopButton";
 import { buildDefaultSeriesRules, mergeBlastSeriesRules, roles } from "./constants/tournament";
 import { api, getAuthToken, setAuthToken } from "./lib/api";
 import { toDateInputValue, toDatetimeLocalValue } from "./utils/datetime";
-import { announcementsToAdminFormState, announcementsToApiPayload } from "./lib/announcementEntries.js";
+import { announcementsToAdminFormState, announcementsToApiPayload, bannerAnnouncementsToAdminFormState, bannerAnnouncementsToApiPayload } from "./lib/announcementEntries.js";
 import { AnnouncementsPage } from "./pages/AnnouncementsPage";
 import { BracketPage } from "./pages/BracketPage";
 import { PublicApp } from "./pages/PublicPages";
 import { RegistrationCrmPage } from "./pages/RegistrationCrmPage";
 import { SchedulePage } from "./pages/SchedulePage";
+import { PrimaryViewTabs } from "./components/navigation/TournamentTabs.jsx";
 import { SetupPage } from "./pages/SetupPage";
 import { StandingsPage } from "./pages/StandingsPage";
 import { TeamsPage } from "./pages/TeamsPage";
-import { augmentGroupedBracketMatches, buildStageTabOrdering } from "./components/bracket/bracketLayout.js";
+import { augmentGroupedBracketMatches } from "./components/bracket/bracketLayout.js";
 import { createId, getInitialDarkMode } from "./utils/client";
 
 const adminPages = ["registrations", "teams", "setup", "announcements", "bracketSchedule", "standings", "users"];
@@ -45,6 +46,7 @@ function App() {
     discordUrl: "https://discord.gg/sV2PhYc6A3",
     rulebook: "",
     announcements: [],
+    bannerAnnouncement: { body: "", postedAt: "" },
     visibilityMode: "demo",
     bracketActive: false,
     registrationCodePrefix: "BPC",
@@ -66,6 +68,7 @@ function App() {
   const [newPlayer, setNewPlayer] = useState({ name: "", role: "Carry" });
   const [darkMode, setDarkMode] = useState(getInitialDarkMode);
   const [message, setMessage] = useState("");
+  const [bracketScheduleView, setBracketScheduleView] = useState("brackets");
 
   function navigate(nextPath) {
     window.history.pushState({}, "", nextPath);
@@ -139,8 +142,30 @@ function App() {
     }
   }
 
+  function resolveActiveTabAfterRefresh(currentTab, payload, { resetActiveTab = false, tournamentChanged = false } = {}) {
+    const tabs = payload?.tabs || [];
+    if (!tabs.length) return currentTab;
+
+    if (resetActiveTab || tournamentChanged) {
+      return tabs[0].id;
+    }
+
+    const tabIds = new Set(tabs.map((tab) => tab.id));
+    if (tabIds.has(currentTab)) return currentTab;
+
+    if ((currentTab === "blast-lastchance" || currentTab === "blast-playin") && tabIds.has("blast-qualifiers")) {
+      return "blast-qualifiers";
+    }
+
+    const hasMatchesForTab = (payload.matches || []).some((match) => match.stageKey === currentTab);
+    if (hasMatchesForTab) return currentTab;
+
+    return tabs[0].id;
+  }
+
   async function refreshTournament(id = tournamentId, options = {}) {
     if (!id) return;
+    const previousTournamentId = tournamentId;
     const payload = await api.getTournament(id);
     setState(payload);
     if (payload.tournament) {
@@ -175,6 +200,7 @@ function App() {
         discordUrl: payload.tournament.discord_url ?? prev.discordUrl,
         rulebook: payload.tournament.rulebook ?? prev.rulebook,
         announcements: announcementsToAdminFormState(payload.tournament.announcements),
+        bannerAnnouncement: bannerAnnouncementsToAdminFormState(payload.tournament.banner_announcements),
         visibilityMode: payload.tournament.visibility_mode ?? prev.visibilityMode,
         bracketActive: payload.tournament.bracket_active ?? prev.bracketActive,
         registrationCodePrefix: payload.tournament.registration_code_prefix ?? prev.registrationCodePrefix ?? "BPC",
@@ -200,8 +226,13 @@ function App() {
       setActiveRosterId("");
       setIsTeamPaneActive(false);
     }
-    if (payload.tabs?.[0]?.id) {
-      setActiveTab(payload.tabs[0].id);
+    if (payload.tabs?.length) {
+      setActiveTab((current) =>
+        resolveActiveTabAfterRefresh(current, payload, {
+          resetActiveTab: Boolean(options.resetActiveTab),
+          tournamentChanged: Boolean(previousTournamentId && id !== previousTournamentId),
+        }),
+      );
     }
     await refreshRegistrations(payload.tournament?.id || id);
     await refreshRosters(payload.tournament?.id || id);
@@ -231,6 +262,7 @@ function App() {
       teamCount: Number(setup.teamCount),
       darkMode: true,
       announcements: announcementsToApiPayload(overrides.announcements ?? setup.announcements),
+      bannerAnnouncements: bannerAnnouncementsToApiPayload(overrides.bannerAnnouncement ?? setup.bannerAnnouncement),
     };
   }
 
@@ -405,6 +437,7 @@ function App() {
         .slice(0, 3)
         .toUpperCase(),
       seed: teamDraft.length + 1,
+      logoUrl: "",
     };
     setTeamDraft((prev) => [...prev, team]);
     setNewCaptain({ captain: "", team: "" });
@@ -596,9 +629,20 @@ function App() {
 
   async function loadRosterForEditing(rosterId) {
     try {
-      const payload = await api.getRoster(tournamentId, rosterId);
+      const [payload, tournamentPayload] = await Promise.all([
+        api.getRoster(tournamentId, rosterId),
+        api.getTournament(tournamentId),
+      ]);
       const roster = payload.roster;
-      setTeamDraft(roster.teams || []);
+      const logoBySourceId = new Map(
+        (tournamentPayload.teams || []).map((team) => [team.id, team.logoUrl || team.logo_url || ""]),
+      );
+      setTeamDraft(
+        (roster.teams || []).map((team) => ({
+          ...team,
+          logoUrl: team.logoUrl || team.logo_url || logoBySourceId.get(team.sourceTeamId) || "",
+        })),
+      );
       setPoolDraft(
         (roster.players || []).map((player) => ({
           ...player,
@@ -624,39 +668,18 @@ function App() {
 
   async function submitResult(matchId, winner) {
     await api.recordResult(tournamentId, matchId, winner);
-    await refreshTournament();
+    await refreshTournament(tournamentId, { keepActiveTab: true });
   }
 
   async function updateMatch(matchId, payload) {
     await api.updateMatch(tournamentId, matchId, payload);
-    await refreshTournament();
-  }
-
-  async function saveSchedule() {
-    if (!state?.matches?.length) return;
-    const stageOrder = buildStageTabOrdering(state?.tournament?.format || setup?.format, state.tabs || []);
-    const orderedMatches = [...state.matches].sort((a, b) => {
-      const stageDiff = (stageOrder[a.stageKey] ?? 999) - (stageOrder[b.stageKey] ?? 999);
-      if (stageDiff !== 0) return stageDiff;
-      const roundDiff = (a.roundIndex ?? 0) - (b.roundIndex ?? 0);
-      if (roundDiff !== 0) return roundDiff;
-      return (a.matchIndex ?? 0) - (b.matchIndex ?? 0);
-    });
-    const schedule = orderedMatches.map((match, index) => ({
-      id: createId(),
-      matchId: match.id,
-      startAt: (match.slotAt ? new Date(match.slotAt) : new Date(Date.now() + index * 3600_000)).toISOString(),
-      stream: "Main",
-      status: match.status || "upcoming",
-      notes: "",
-    }));
-    await api.saveSchedule(tournamentId, schedule);
-    await refreshTournament();
-    setMessage("Schedule generated and saved.");
+    await refreshTournament(tournamentId, { keepActiveTab: true });
   }
 
   async function saveCustomSchedule(schedule) {
-    if (!tournamentId) return;
+    if (!tournamentId) {
+      throw new Error("No tournament selected.");
+    }
     await api.saveSchedule(tournamentId, schedule);
     await refreshTournament();
     setMessage("Schedule edits saved.");
@@ -815,26 +838,48 @@ function App() {
 
         {activePage === "bracketSchedule" && (
           <div className="space-y-4">
-            <BracketPage
-              state={state}
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              groupedMatches={groupedMatches}
-              submitResult={submitResult}
-              updateMatch={updateMatch}
-              generateBracket={generateBracket}
-              setup={setup}
-              rosters={rosters}
-              approvedRoster={approvedRoster}
-              updateBracketVisibilityMode={updateBracketVisibilityMode}
-              updateBracketActivation={updateBracketActivation}
-              approveRoster={approveRoster}
+            <PrimaryViewTabs
+              ariaLabel="Brackets or schedule"
+              value={bracketScheduleView}
+              onChange={setBracketScheduleView}
+              onTabClick={() => window.scrollTo({ top: 0, behavior: "auto" })}
+              tabs={[
+                { id: "brackets", label: "Brackets" },
+                { id: "schedule", label: "Schedule" },
+              ]}
             />
-            <SchedulePage state={state} saveSchedule={saveSchedule} saveCustomSchedule={saveCustomSchedule} />
+            {bracketScheduleView === "brackets" ? (
+              <BracketPage
+                state={state}
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                groupedMatches={groupedMatches}
+                submitResult={submitResult}
+                updateMatch={updateMatch}
+                generateBracket={generateBracket}
+                setup={setup}
+                rosters={rosters}
+                approvedRoster={approvedRoster}
+                updateBracketVisibilityMode={updateBracketVisibilityMode}
+                updateBracketActivation={updateBracketActivation}
+                approveRoster={approveRoster}
+              />
+            ) : (
+              <div className="relative left-1/2 w-[min(100vw-2rem,88rem)] max-w-none -translate-x-1/2">
+                <SchedulePage
+                  state={state}
+                  saveCustomSchedule={saveCustomSchedule}
+                  teamDraft={teamDraft}
+                  approvedRoster={approvedRoster}
+                />
+              </div>
+            )}
           </div>
         )}
 
-        {activePage === "standings" && <StandingsPage standings={state?.standings} />}
+        {activePage === "standings" && (
+          <StandingsPage standings={state?.standings} groupedStandings={state?.groupedStandings} />
+        )}
 
         {activePage === "registrations" && (
           <RegistrationCrmPage
