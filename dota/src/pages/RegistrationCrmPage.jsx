@@ -202,8 +202,8 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
           <div className="min-w-0">
             <h2 className="font-serif text-lg">Registration CRM</h2>
             <p className="text-sm text-muted-foreground">
-              Review payment and player details, then click <span className="font-medium text-foreground">Save</span> to apply changes. Decision emails (approved /
-              rejected / waitlisted) send only when you save and the registration status has changed.
+              Review payment and player details, then click <span className="font-medium text-foreground">Save</span> to apply changes. Status emails (paid /
+              unpaid / refunded and approved / rejected / waitlisted) send when you save and payment or registration status has changed.
             </p>
           </div>
           <div className="flex min-w-0 flex-col items-stretch gap-2 sm:items-end">

@@ -306,44 +306,129 @@ export async function sendPlayerRegistrationSubmittedEmail({ to, name, tournamen
   await sendMail({ to, subject, text, html });
 }
 
-export async function sendPlayerRegistrationDecisionEmail({ to, name, tournamentName, publicCode, decision }) {
-  const isApproved = decision === "approved";
-  const subject = isApproved
-    ? `Registration approved — ${tournamentName || DEFAULT_TOURNAMENT_NAME}`
-    : decision === "waitlisted"
-      ? `Registration waitlisted — ${tournamentName || DEFAULT_TOURNAMENT_NAME}`
-      : `Registration update — ${tournamentName || DEFAULT_TOURNAMENT_NAME}`;
-  const text = [
-    `Hi ${name},`,
-    ``,
-    isApproved
-      ? `Your registration (${publicCode}) for ${tournamentName || DEFAULT_TOURNAMENT_NAME} has been approved.`
-      : decision === "waitlisted"
-        ? `Your registration (${publicCode}) has been waitlisted. Watch your email and Discord for updates.`
-        : `Your registration (${publicCode}) was not approved for this event.`,
-    ``,
-    `— ${tournamentName || DEFAULT_TOURNAMENT_NAME}`,
-  ].join("\n");
-  const innerHtml = isApproved
-    ? `
+/** @returns {{ title: string; subject: string; textBody: string; htmlParagraphs: string; footerHtml: string }} */
+function buildPlayerRegistrationStatusEmailContent({
+  name,
+  tournamentName,
+  publicCode,
+  registrationStatus,
+  paymentStatus,
+}) {
+  const tour = tournamentName || DEFAULT_TOURNAMENT_NAME;
+  const code = publicCode || "";
+  const reg = registrationStatus || "pending";
+  const pay = paymentStatus || "unpaid";
+  const isRefunded = pay === "refunded";
+  const isRejected = reg === "rejected" || isRefunded;
+  const isApproved = reg === "approved" && !isRefunded;
+  const isWaitlisted = reg === "waitlisted" && !isRefunded;
+
+  const textLines = [];
+  const htmlParagraphs = [];
+
+  if (isApproved) {
+    textLines.push(`Great news — registration ${code} is approved.`);
+    htmlParagraphs.push(
+      `<p style="margin:16px 0 0;font-size:14px;color:#a1a1aa;">Great news — registration <strong style="color:#4ade80;">${escapeHtml(code)}</strong> is <strong style="color:#4ade80;">approved</strong>.</p>`,
+    );
+  } else if (isWaitlisted) {
+    textLines.push(`Registration ${code} is waitlisted. Watch your email and Discord for updates.`);
+    htmlParagraphs.push(
+      `<p style="margin:16px 0 0;font-size:14px;color:#a1a1aa;">Registration <strong style="color:#fbbf24;">${escapeHtml(code)}</strong> is <strong>waitlisted</strong>. Stay tuned for updates.</p>`,
+    );
+  } else if (isRejected) {
+    textLines.push(`Registration ${code} was not approved for this tournament.`);
+    htmlParagraphs.push(
+      `<p style="margin:16px 0 0;font-size:14px;color:#a1a1aa;">Registration <strong style="color:#f87171;">${escapeHtml(code)}</strong> was <strong>not approved</strong> for this tournament.</p>`,
+    );
+  }
+
+  if (pay === "paid" && !isRefunded) {
+    textLines.push("Your payment has been confirmed.");
+    htmlParagraphs.push(
+      `<p style="margin:16px 0 0;font-size:14px;color:#a1a1aa;">Your <strong style="color:#4ade80;">payment</strong> for this registration has been confirmed.</p>`,
+    );
+  } else if (pay === "unpaid" && isApproved) {
+    textLines.push("Payment is still pending — submit payment proof per tournament instructions.");
+    htmlParagraphs.push(
+      `<p style="margin:16px 0 0;font-size:14px;color:#a1a1aa;">Payment is still <strong>unpaid</strong>. Submit payment proof per tournament instructions.</p>`,
+    );
+  } else if (pay === "unpaid" && !isRejected && !isApproved && !isWaitlisted) {
+    textLines.push(`Payment for registration ${code} is marked unpaid.`);
+    htmlParagraphs.push(
+      `<p style="margin:16px 0 0;font-size:14px;color:#a1a1aa;">Payment for registration <strong style="color:#fff;">${escapeHtml(code)}</strong> is marked <strong>unpaid</strong>.</p>`,
+    );
+  } else if (isRefunded) {
+    textLines.push(`Payment for registration ${code} has been refunded.`);
+    htmlParagraphs.push(
+      `<p style="margin:16px 0 0;font-size:14px;color:#a1a1aa;">Payment for registration <strong style="color:#f87171;">${escapeHtml(code)}</strong> has been <strong>refunded</strong>.</p>`,
+    );
+  }
+
+  let title;
+  let subject;
+  if (isApproved) {
+    title = "Approved";
+    subject = `Registration approved — ${tour}`;
+  } else if (isWaitlisted) {
+    title = "Waitlisted";
+    subject = `Registration waitlisted — ${tour}`;
+  } else if (isRejected) {
+    title = "Not approved";
+    subject = `Registration update — ${tour}`;
+  } else if (pay === "paid") {
+    title = "Payment confirmed";
+    subject = `Payment confirmed — ${tour}`;
+  } else if (pay === "unpaid") {
+    title = "Payment update";
+    subject = `Payment update — ${tour}`;
+  } else {
+    title = "Registration update";
+    subject = `Registration update — ${tour}`;
+  }
+
+  let footerHtml = "";
+  if (isApproved) {
+    textLines.push("Follow Discord announcements for next steps.");
+    footerHtml =
+      '<p style="margin:16px 0 0;font-size:14px;color:#71717a;">Follow Discord announcements for next steps.</p>';
+  } else if (isRejected) {
+    textLines.push("Contact organizers on Discord if you have questions.");
+    footerHtml =
+      '<p style="margin:16px 0 0;font-size:14px;color:#71717a;">Contact organizers on Discord if you have questions.</p>';
+  }
+
+  const textBody = [`Hi ${name},`, "", ...textLines, "", `— ${tour}`].join("\n");
+  return { title, subject, textBody, htmlParagraphs, footerHtml };
+}
+
+export async function sendPlayerRegistrationDecisionEmail({
+  to,
+  name,
+  tournamentName,
+  publicCode,
+  decision,
+  registrationStatus,
+  paymentStatus,
+}) {
+  const reg = registrationStatus ?? decision ?? "pending";
+  const pay = paymentStatus ?? "unpaid";
+  const { title, subject, textBody, htmlParagraphs, footerHtml } = buildPlayerRegistrationStatusEmailContent({
+    name,
+    tournamentName,
+    publicCode,
+    registrationStatus: reg,
+    paymentStatus: pay,
+  });
+  const innerHtml = `
     <p style="margin:0;font-size:15px;color:#d4d4d8;">Hi <strong style="color:#fff;">${escapeHtml(name)}</strong>,</p>
-    <p style="margin:16px 0 0;font-size:14px;color:#a1a1aa;">Great news — registration <strong style="color:#4ade80;">${escapeHtml(publicCode)}</strong> is <strong style="color:#4ade80;">approved</strong>.</p>
-    <p style="margin:16px 0 0;font-size:14px;color:#71717a;">Follow Discord announcements for next steps.</p>
-  `
-    : decision === "waitlisted"
-      ? `
-    <p style="margin:0;font-size:15px;color:#d4d4d8;">Hi <strong style="color:#fff;">${escapeHtml(name)}</strong>,</p>
-    <p style="margin:16px 0 0;font-size:14px;color:#a1a1aa;">Registration <strong style="color:#fbbf24;">${escapeHtml(publicCode)}</strong> is <strong>waitlisted</strong>. Stay tuned for updates.</p>
-  `
-      : `
-    <p style="margin:0;font-size:15px;color:#d4d4d8;">Hi <strong style="color:#fff;">${escapeHtml(name)}</strong>,</p>
-    <p style="margin:16px 0 0;font-size:14px;color:#a1a1aa;">Registration <strong style="color:#f87171;">${escapeHtml(publicCode)}</strong> was <strong>not approved</strong> for this tournament.</p>
-    <p style="margin:16px 0 0;font-size:14px;color:#71717a;">Contact organizers on Discord if you have questions.</p>
+    ${htmlParagraphs.join("")}
+    ${footerHtml}
   `;
   const html = baseEmailWrapper({
-    title: isApproved ? "Approved" : decision === "waitlisted" ? "Waitlisted" : "Not approved",
+    title,
     preheader: subject,
     innerHtml,
   });
-  await sendMail({ to, subject, text, html });
+  await sendMail({ to, subject, text: textBody, html });
 }

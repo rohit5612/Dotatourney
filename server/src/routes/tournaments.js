@@ -558,27 +558,33 @@ router.patch("/:id/registrations/:registrationId", async (req, res, next) => {
     const prev = await getPlayerRegistrationById(req.params.id, req.params.registrationId);
     const registration = await updatePlayerRegistration(req.params.id, req.params.registrationId, payload);
     if (!registration) return res.status(404).json({ message: "Registration not found" });
+    const registrationStatusChanged =
+      payload.registrationStatus && payload.registrationStatus !== prev?.registrationStatus;
+    const paymentStatusChanged = payload.paymentStatus && payload.paymentStatus !== prev?.paymentStatus;
+    const shouldNotifyRegistration =
+      registrationStatusChanged &&
+      ["approved", "rejected", "waitlisted"].includes(payload.registrationStatus);
+    const shouldNotifyPayment =
+      paymentStatusChanged && ["paid", "unpaid", "refunded"].includes(payload.paymentStatus);
     if (
       prev &&
-      payload.registrationStatus &&
-      payload.registrationStatus !== prev.registrationStatus &&
       registration.email &&
-      !registration.email.includes("@migrated.")
+      !registration.email.includes("@migrated.") &&
+      (shouldNotifyRegistration || shouldNotifyPayment)
     ) {
-      if (["approved", "rejected", "waitlisted"].includes(payload.registrationStatus)) {
-        try {
-          const tour = await getTournament(req.params.id);
-          const tournamentName = tour?.tournament?.name || "BPC League — Bharat Pro Circuit League";
-          await sendPlayerRegistrationDecisionEmail({
-            to: registration.email,
-            name: registration.name,
-            tournamentName,
-            publicCode: registration.publicCode || registration.id?.slice(0, 8) || "",
-            decision: payload.registrationStatus,
-          });
-        } catch (err) {
-          console.error("[email] player registration decision failed:", err?.message || err);
-        }
+      try {
+        const tour = await getTournament(req.params.id);
+        const tournamentName = tour?.tournament?.name || "BPC League — Bharat Pro Circuit League";
+        await sendPlayerRegistrationDecisionEmail({
+          to: registration.email,
+          name: registration.name,
+          tournamentName,
+          publicCode: registration.publicCode || registration.id?.slice(0, 8) || "",
+          registrationStatus: registration.registrationStatus,
+          paymentStatus: registration.paymentStatus,
+        });
+      } catch (err) {
+        console.error("[email] player registration status update failed:", err?.message || err);
       }
     }
     return res.json({ registration });
