@@ -87,6 +87,19 @@ export const SPONSORS = [
       discord: "",
     },
   },
+  {
+    id: "sponsor-partner-1",
+    name: "Roronoa Zoro",
+    tagline: "Raj Dodia",
+    tier: "partner",
+    order: 3,
+    logoUrl: "https://avatars.fastly.steamstatic.com/d30daa776ee29ca2630f29bcd22084b1000a65e7_full.jpg",
+    socials: {
+      instagram: "",
+      steam: "https://steamcommunity.com/profiles/76561198338169972",
+      discord: "",
+    },
+  },
   
 ];
 
