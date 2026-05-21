@@ -50,8 +50,10 @@ import {
   getMatchDisplayScores,
   groupScheduleSlotsByDate,
   isValidScheduleInstant,
+  parseScheduleViewHash,
   parseStreamWatchLink,
   resolveScheduleStatus,
+  scheduleViewHref,
 } from "../utils/schedule.js";
 import { buildTeamNameLookup, findTeamByName, teamInitials } from "../utils/teamPage.js";
 import { collectTeamLogoUrls, preloadTeamLogos } from "../utils/teamLogoCache.js";
@@ -430,7 +432,7 @@ export function PublicApp({ path, navigate }) {
   if (path === "/tournament") {
     return (
       <EventShell path={path} navigate={navigate}>
-        <TournamentInfo event={event} message={message} />
+        <TournamentInfo event={event} message={message} navigate={navigate} />
       </EventShell>
     );
   }
@@ -574,6 +576,7 @@ function LandingPage({ event, navigate, message }) {
               startDate={tournament?.start_date}
               endDate={tournament?.end_date}
               fallbackStart={defaultTournamentStart}
+              navigate={navigate}
             />
             <div className="landing-stats__waterfall" aria-hidden="true" />
           </section>
@@ -874,7 +877,7 @@ function PrizePoolBreakdown({ total, items }) {
   );
 }
 
-function TournamentInfo({ event, message }) {
+function TournamentInfo({ event, message, navigate }) {
   const tournament = event?.tournament;
   const [announcementPage, setAnnouncementPage] = useState(0);
 
@@ -959,6 +962,7 @@ function TournamentInfo({ event, message }) {
               startDate={tournament?.start_date}
               endDate={tournament?.end_date}
               fallbackStart={defaultTournamentStart}
+              navigate={navigate}
             />
           </div>
         </div>
@@ -1425,8 +1429,22 @@ function PublicScheduleMatchListSection({
 }
 
 function PublicSchedule({ event, message }) {
-  const [viewMode, setViewMode] = useState("bracket");
+  const [viewMode, setViewMode] = useState(() => parseScheduleViewHash());
   const [phaseTab, setPhaseTab] = useState(SCHEDULE_PHASE_GROUPS);
+
+  useEffect(() => {
+    const onHash = () => setViewMode(parseScheduleViewHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  const setScheduleViewMode = useCallback((mode) => {
+    setViewMode(mode);
+    const href = scheduleViewHref(mode);
+    if (`${window.location.pathname}${window.location.hash}` !== href) {
+      window.history.replaceState(null, "", href);
+    }
+  }, []);
   const teamByName = useMemo(
     () => buildTeamNameLookup(event?.teams, event?.setupTeams),
     [event?.teams, event?.setupTeams],
@@ -1535,7 +1553,7 @@ function PublicSchedule({ event, message }) {
       <PrimaryViewTabs
         ariaLabel="Bracket or schedule view"
         value={viewMode}
-        onChange={setViewMode}
+        onChange={setScheduleViewMode}
         tabs={[
           { id: "bracket", label: "Bracket" },
           { id: "schedule", label: "Schedule" },

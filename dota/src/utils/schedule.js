@@ -99,6 +99,16 @@ export function parseStreamWatchLink(url) {
   }
 }
 
+/** Public Bracket & Schedule page — `#bracket` or `#schedule` */
+export function parseScheduleViewHash(hash = typeof window !== "undefined" ? window.location.hash : "") {
+  const id = String(hash).replace(/^#/, "").toLowerCase();
+  return id === "schedule" ? "schedule" : "bracket";
+}
+
+export function scheduleViewHref(view) {
+  return view === "schedule" ? "/schedule#schedule" : "/schedule#bracket";
+}
+
 export function groupScheduleSlotsByDate(slots) {
   const byDay = new Map();
   for (const slot of slots) {

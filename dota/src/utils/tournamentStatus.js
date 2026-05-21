@@ -65,7 +65,7 @@ export function getTournamentStatusCopy(phase) {
       return {
         eyebrow: "Tournament day",
         statusLabel: "Live now",
-        statusHint: "Matches and updates run through Discord — check in with your team.",
+        statusHint: null,
       };
     case "completed":
       return {
@@ -77,7 +77,7 @@ export function getTournamentStatusCopy(phase) {
       return {
         eyebrow: "Tournament starts",
         statusLabel: "Upcoming",
-        statusHint: "Countdown to the first day configured in admin setup.",
+        statusHint: "Warm your drafts and rally your stack — group stage open on this day.",
       };
   }
 }

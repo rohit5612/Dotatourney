@@ -7,6 +7,8 @@ import {
 } from "../utils/tournamentStatus.js";
 import "../styles/landing-countdown.css";
 
+const BRACKET_SCHEDULE_PATH = "/schedule";
+
 const DEFAULT_START = "2026-05-22T00:00:00+05:30";
 
 function CountdownUnits({ targetTime }) {
@@ -44,7 +46,25 @@ function CountdownUnits({ targetTime }) {
   );
 }
 
-export function LandingTournamentStatus({ startDate, endDate, fallbackStart = DEFAULT_START }) {
+function LiveStatusHint({ navigate }) {
+  function go(event) {
+    event.preventDefault();
+    if (navigate) navigate(BRACKET_SCHEDULE_PATH);
+    else window.location.assign(BRACKET_SCHEDULE_PATH);
+  }
+
+  return (
+    <p className="landing-countdown__hint">
+      Match results, brackets, and start times — see the{" "}
+      <a className="landing-countdown__hint-link" href={BRACKET_SCHEDULE_PATH} onClick={go}>
+        Bracket &amp; Schedule
+      </a>{" "}
+      page.
+    </p>
+  );
+}
+
+export function LandingTournamentStatus({ startDate, endDate, fallbackStart = DEFAULT_START, navigate }) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -79,14 +99,18 @@ export function LandingTournamentStatus({ startDate, endDate, fallbackStart = DE
         <h3 id="landing-countdown-date" className="landing-countdown__date">
           {displayDate}
         </h3>
-        <p className="landing-countdown__hint">{copy.statusHint}</p>
+        {phase === "live" ? (
+          <LiveStatusHint navigate={navigate} />
+        ) : copy.statusHint ? (
+          <p className="landing-countdown__hint">{copy.statusHint}</p>
+        ) : null}
 
         {phase === "upcoming" ? <CountdownUnits targetTime={targetTime} /> : null}
 
         {phase === "live" ? (
           <div className="landing-countdown__live-hero" role="status">
             <p className="landing-countdown__live-label">Live</p>
-            <p className="landing-countdown__live-sub">Tournament is on — today&apos;s bracket day</p>
+            <p className="landing-countdown__live-sub">The arena is open — follow the bracket and today&apos;s schedule</p>
           </div>
         ) : null}
 
