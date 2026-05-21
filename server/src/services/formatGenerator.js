@@ -350,16 +350,23 @@ export function blastSideBracketSizes(teamCount) {
  *   **#4–#5** in each group start Last chance.
  * - **n=12**: **#1** wait in semifinals; **#3/#4** meet in a middle knockout (A3↔B4, B3↔A4); **#2** faces a Last chance finalist in crossover; **#5/#6** start Last chance. Four playoff quarterfinalists emerge from middle + crossover survivors, then cross-seeded semis vs #1s.
  */
-function generateBlast(teams, seriesRules) {
+function generateBlast(teams, seriesRules, options = {}) {
   const n = teams.length;
   const sizes = getBlastPhaseSizes(n);
   if (!sizes) {
     throw new Error(validateTeamCount("blast", n) || "Invalid BLAST team count");
   }
 
-  const mid = Math.ceil(n / 2);
-  const idxA = Array.from({ length: mid }, (_, i) => i);
-  const idxB = Array.from({ length: n - mid }, (_, i) => mid + i);
+  let idxA;
+  let idxB;
+  if (options.groupIndices) {
+    idxA = options.groupIndices.idxA;
+    idxB = options.groupIndices.idxB;
+  } else {
+    const mid = Math.ceil(n / 2);
+    idxA = Array.from({ length: mid }, (_, i) => i);
+    idxB = Array.from({ length: n - mid }, (_, i) => mid + i);
+  }
   const result = [];
   result.push(...generateRoundRobin(teams, seriesRules, "blast-group-a", "blast-group-bo1", idxA, "A"));
   result.push(...generateRoundRobin(teams, seriesRules, "blast-group-b", "blast-group-bo1", idxB, "B"));
@@ -469,7 +476,7 @@ function generateBlast(teams, seriesRules) {
   return result;
 }
 
-export function generateMatches(format, teams, seriesRules = {}) {
+export function generateMatches(format, teams, seriesRules = {}, options = {}) {
   const validationMessage = validateTeamCount(format, teams.length);
   if (validationMessage) {
     throw new Error(validationMessage);
@@ -486,7 +493,7 @@ export function generateMatches(format, teams, seriesRules = {}) {
   if (format === "gsl") return generateGsl(teams, seriesRules);
   if (format === "swiss") return generateSwiss(teams, seriesRules);
   if (format === "hybrid") return generateHybrid(teams, seriesRules);
-  if (format === "blast") return generateBlast(teams, seriesRules);
+  if (format === "blast") return generateBlast(teams, seriesRules, options);
   return generateDse(teams, seriesRules);
 }
 

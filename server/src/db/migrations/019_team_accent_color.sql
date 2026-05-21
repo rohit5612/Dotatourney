@@ -1,0 +1,5 @@
+ALTER TABLE teams
+ADD COLUMN IF NOT EXISTS accent_color TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE roster_snapshot_teams
+ADD COLUMN IF NOT EXISTS accent_color TEXT NOT NULL DEFAULT '';

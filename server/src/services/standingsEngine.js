@@ -1,4 +1,14 @@
-import { neustadtlScore } from "./blastStandings.js";
+import { mergeBlastFullRanking, neustadtlScore } from "./blastStandings.js";
+
+const BLAST_GROUP_STAGES = new Set(["blast-group-a", "blast-group-b"]);
+
+export function isBlastGroupMatch(match) {
+  return BLAST_GROUP_STAGES.has(match.stageKey);
+}
+
+export function blastGroupMatches(matches) {
+  return (matches || []).filter(isBlastGroupMatch);
+}
 
 function ensureStats(statMap, name) {
   if (!statMap[name]) {
@@ -35,6 +45,22 @@ function headToHeadNet(teamA, teamB, finishedMatches) {
 
 export function buildStandings(teams, matches, format, options = {}) {
   const blastGroupStandings = format === "blast" && options.blastGroupStandings === true;
+
+  if (format === "blast" && !blastGroupStandings) {
+    const grouped = buildGroupedStandings(teams, matches, format);
+    const gA = grouped.find((group) => group.label === "Group A");
+    const gB = grouped.find((group) => group.label === "Group B");
+    if (gA?.rows?.length && gB?.rows?.length) {
+      const order = mergeBlastFullRanking(gA.rows, gB.rows);
+      const rowByTeam = new Map([...gA.rows, ...gB.rows].map((row) => [row.team, row]));
+      return order.map((teamName) => ({
+        ...rowByTeam.get(teamName),
+        status: "in_progress",
+      }));
+    }
+    matches = blastGroupMatches(matches);
+  }
+
   const stats = {};
   teams.forEach((team) => ensureStats(stats, team.name));
 

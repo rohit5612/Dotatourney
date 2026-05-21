@@ -313,4 +313,50 @@ describe("BLAST grouped standings", () => {
     const standings = buildStandings(teams, matches, "blast");
     assert.ok(standings.every((r) => r.status === "in_progress"));
   });
+
+  it("global blast standings for n=12 use merged group BO1 only (playoffs excluded)", () => {
+    const teams = teamList(12);
+    const matches = generateMatches("blast", teams.map((t) => t.name), {});
+    const withResults = matches.map((m) => {
+      if (m.stageKey === "blast-group-a" || m.stageKey === "blast-group-b") {
+        return { ...m, winner: m.team1, status: "finished" };
+      }
+      if (m.stageKey === "blast-playoffs" && m.roundIndex === 0 && m.matchIndex === 0) {
+        return { ...m, winner: m.team1, status: "finished" };
+      }
+      return m;
+    });
+
+    const grouped = buildGroupedStandings(teams, withResults, "blast");
+    const gA = grouped.find((g) => g.label === "Group A");
+    assert.ok(gA?.rows?.length);
+
+    const groupLeader = gA.rows[0];
+    assert.equal(groupLeader.played, 5);
+    assert.equal(groupLeader.wins, 5);
+
+    const standings = buildStandings(teams, withResults, "blast");
+    assert.equal(standings.length, 12);
+    const mergedLeader = standings.find((row) => row.team === groupLeader.team);
+    assert.equal(mergedLeader?.played, 5);
+    assert.equal(mergedLeader?.wins, 5);
+    assert.equal(standings[0].team, groupLeader.team);
+  });
+
+  it("generateMatches('blast') respects custom groupIndices", () => {
+    const names = teamList(10).map((t) => t.name);
+    const idxA = [0, 2, 4, 6, 8];
+    const idxB = [1, 3, 5, 7, 9];
+    const matches = generateMatches("blast", names, {}, { groupIndices: { idxA, idxB } });
+    const groupTeamsA = new Set(
+      matches.filter((m) => m.stageKey === "blast-group-a").flatMap((m) => [m.team1, m.team2]),
+    );
+    const groupTeamsB = new Set(
+      matches.filter((m) => m.stageKey === "blast-group-b").flatMap((m) => [m.team1, m.team2]),
+    );
+    assert.equal(groupTeamsA.size, 5);
+    assert.equal(groupTeamsB.size, 5);
+    for (const name of ["T1", "T3", "T5", "T7", "T9"]) assert.ok(groupTeamsA.has(name), `${name} in group A`);
+    for (const name of ["T2", "T4", "T6", "T8", "T10"]) assert.ok(groupTeamsB.has(name), `${name} in group B`);
+  });
 });

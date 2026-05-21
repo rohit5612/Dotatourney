@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
+import { PlayerRoleIcons } from "../components/PlayerRoleIcons.jsx";
 import { roles } from "../constants/tournament";
+import { playerDisplayName, sortRolesByDefault } from "../utils/teamPage.js";
 
 export function TeamsPage({
   teamDraft,
@@ -58,7 +60,7 @@ export function TeamsPage({
         return !existing?.teamId;
       })
       .filter((registration) => {
-        const text = [registration.name, registration.discordHandle, registration.steamName, registration.roles?.join(" "), registration.mmr]
+        const text = [registration.displayName, registration.name, registration.discordHandle, registration.steamName, registration.roles?.join(" "), registration.mmr]
           .join(" ")
           .toLowerCase();
         return !playerSearch || text.includes(playerSearch.toLowerCase());
@@ -92,7 +94,7 @@ export function TeamsPage({
   }
 
   function confirmRemovePlayer(player, team) {
-    const confirmed = window.confirm(`Remove ${player.name} from "${team.name}"? They will return to the available pool.`);
+    const confirmed = window.confirm(`Remove ${playerDisplayName(player)} from "${team.name}"? They will return to the available pool.`);
     if (confirmed) removePlayerFromTeam?.(player.id);
   }
 
@@ -188,6 +190,7 @@ export function TeamsPage({
             const missingRoles = roles.filter((role) => !teamPlayers.some((player) => player.role === role));
             const roleCoverageText = missingRoles.length ? `Missing: ${missingRoles.join(", ")}` : "All roles covered";
             const logoUrl = team.logoUrl || team.logo_url || "";
+            const accentColor = team.accentColor || team.accent_color || "#e9a84a";
             const initials = (team.abbr || team.name || "?")
               .split(/\s+/)
               .map((part) => part[0])
@@ -229,6 +232,17 @@ export function TeamsPage({
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h4 className="font-serif text-xl font-semibold tracking-tight">{team.name}</h4>
+                    <label
+                      className="team-accent-swatch mt-2"
+                      title="Card glow color (double-click to reset auto-detect)"
+                    >
+                      <input
+                        type="color"
+                        value={accentColor}
+                        onChange={(event) => updateTeam?.(team.id, { accentColor: event.target.value })}
+                        onDoubleClick={() => updateTeam?.(team.id, { accentColor: "" })}
+                      />
+                    </label>
                     <div className="mt-1 text-sm text-muted-foreground">{teamPlayers.length}/5 players assigned</div>
                     <div className="mt-2 inline-flex cursor-help rounded border border-border px-2 py-1 text-xs text-secondary" title={roleCoverageText}>
                       Role coverage
@@ -267,17 +281,19 @@ export function TeamsPage({
                 </div>
 
                 <div className="mt-4 space-y-2">
-                  {teamPlayers.map((player) => (
+                  {teamPlayers.map((player) => {
+                    const name = playerDisplayName(player);
+                    return (
                     <div key={player.id} className="rounded-lg border border-border bg-card p-3 text-sm">
                       <div className="flex items-center justify-between gap-2">
                         <div>
                           <div className="font-medium">
-                            {player.name}
+                            {name}
                             {player.isCaptain ? <span className="ml-1.5 font-semibold text-primary">(C)</span> : null}
                           </div>
-                          <div className="text-xs text-muted-foreground">
-                            {(player.roles?.length ? player.roles : [player.role]).join(", ")}
-                            {player.mmr ? ` - ${player.mmr} MMR` : ""}
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <PlayerRoleIcons player={player} size="sm" />
+                            {player.mmr ? <span>{player.mmr} MMR</span> : null}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -295,7 +311,8 @@ export function TeamsPage({
                         </div>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                   {!teamPlayers.length ? <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">No players assigned yet.</p> : null}
                 </div>
                   </div>
@@ -371,8 +388,8 @@ export function TeamsPage({
               {availableRegistrations.map((registration) => (
                 <div key={registration.id} className="flex items-center justify-between gap-3 rounded-md border border-border bg-background p-3 text-sm">
                   <div>
-                    <div className="font-medium">{registration.name}</div>
-                    <div className="text-muted-foreground">{registration.roles?.join(", ")} - {registration.mmr || "MMR TBA"}</div>
+                    <div className="font-medium">{registration.displayName || registration.steamName || registration.name}</div>
+                    <div className="text-muted-foreground">{sortRolesByDefault(registration.roles).join(", ")} - {registration.mmr || "MMR TBA"}</div>
                     <div className="text-muted-foreground">{registration.discordHandle || registration.steamName}</div>
                   </div>
                   <button
@@ -500,7 +517,7 @@ export function TeamsPage({
                 return (
                   <div key={team.id} className="rounded-md border border-border p-2 text-sm">
                     <div className="font-medium">{team.name}</div>
-                    <div className="text-xs text-muted-foreground">{players.map((player) => player.name).join(", ") || "No players assigned"}</div>
+                    <div className="text-xs text-muted-foreground">{players.map((player) => playerDisplayName(player)).join(", ") || "No players assigned"}</div>
                   </div>
                 );
               })}

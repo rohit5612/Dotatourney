@@ -3,6 +3,7 @@ import express from "express";
 import { z } from "zod";
 import { applyBlastGroupSeeding } from "../services/blastSeeding.js";
 import { generateMatches, getFormatTeamCountMessage, stageTabsForFormat } from "../services/formatGenerator.js";
+import { buildGroupIndices, formatUsesGroupAssignment, validateGroupAssignment } from "../services/groupAssignment.js";
 import { applyProgression } from "../services/progressionEngine.js";
 import { archivePlayerRegistration, getPlayerRegistrationById, listPlayerRegistrations, updatePlayerRegistration } from "../services/registrationRepository.js";
 import { sendPlayerRegistrationDecisionEmail } from "../services/emailService.js";
@@ -26,6 +27,8 @@ import {
   unpublishTournament,
   updateMatch,
   updateRosterSnapshot,
+  updateRosterGroupAssignments,
+  updateScheduleStatusByMatchId,
   updateTournament,
 } from "../services/tournamentRepository.js";
 
@@ -228,6 +231,7 @@ router.post("/:id/teams", async (req, res, next) => {
             abbr: z.string().nullable().optional(),
             seed: z.number().nullable().optional(),
             logoUrl: z.string().optional().default(""),
+            accentColor: z.string().optional().default(""),
           }),
         ),
         players: z.array(
@@ -235,6 +239,7 @@ router.post("/:id/teams", async (req, res, next) => {
             id: z.string().uuid().optional(),
             registrationId: z.string().uuid().nullable().optional(),
             name: z.string().min(1),
+            displayName: z.string().optional().default(""),
             role: z.string().min(1),
             roles: z.array(z.string()).optional().default([]),
             mmr: z.number().int().nullable().optional(),
@@ -386,6 +391,49 @@ router.delete("/:id/rosters/:rosterId", async (req, res, next) => {
   }
 });
 
+router.put("/:id/group-assignments", async (req, res, next) => {
+  try {
+    const data = await getTournament(req.params.id);
+    if (!data) return res.status(404).json({ message: "Tournament not found" });
+    if (!formatUsesGroupAssignment(data.tournament.format)) {
+      return res.status(400).json({ message: "This tournament format does not use group assignment" });
+    }
+    if (data.tournament.bracket_active) {
+      return res.status(400).json({ message: "Deactivate the live bracket before changing group assignments" });
+    }
+    if (!data.approvedRoster) {
+      return res.status(400).json({ message: "Approve a roster before assigning groups" });
+    }
+
+    const payload = z
+      .object({
+        assignments: z.array(
+          z.object({
+            teamId: z.string().uuid(),
+            groupKey: z.enum(["A", "B"]),
+          }),
+        ),
+      })
+      .parse(req.body);
+
+    const mergedTeams = data.approvedRoster.teams.map((team) => {
+      const entry = payload.assignments.find((item) => item.teamId === team.id);
+      return entry ? { ...team, groupKey: entry.groupKey } : team;
+    });
+    const validationMessage = validateGroupAssignment(mergedTeams);
+    if (validationMessage) {
+      return res.status(400).json({ message: validationMessage });
+    }
+
+    const result = await updateRosterGroupAssignments(req.params.id, payload.assignments);
+    if (result.error) return res.status(400).json({ message: result.error });
+
+    return res.json({ approvedRoster: result.approvedRoster });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.post("/:id/generate", async (req, res, next) => {
   try {
     const data = await getTournament(req.params.id);
@@ -410,7 +458,18 @@ router.post("/:id/generate", async (req, res, next) => {
       }
       names = data.approvedRoster.teams.map((team) => team.name);
     }
-    const matches = generateMatches(data.tournament.format, names, data.tournament.series_rules || {});
+
+    const generateOptions = {};
+    if (formatUsesGroupAssignment(data.tournament.format) && data.tournament.visibility_mode !== "demo") {
+      const teamsForGroups = data.approvedRoster?.teams || [];
+      const validationMessage = validateGroupAssignment(teamsForGroups);
+      if (validationMessage) {
+        return res.status(400).json({ message: validationMessage });
+      }
+      generateOptions.groupIndices = buildGroupIndices(teamsForGroups);
+    }
+
+    const matches = generateMatches(data.tournament.format, names, data.tournament.series_rules || {}, generateOptions);
     await replaceMatches(req.params.id, matches);
     res.json({ matches, tabs: stageTabsForFormat(data.tournament.format, { teamCount: data.tournament.team_count }) });
   } catch (error) {
@@ -468,6 +527,8 @@ router.post("/:id/matches/:matchId/result", async (req, res, next) => {
       }
     }
 
+    await updateScheduleStatusByMatchId(req.params.id, resMatchId, "finished");
+
     const standingsTeams = snapshot.approvedRoster?.teams || snapshot.teams;
     let afterSeeding = progressed;
     if (snapshot.tournament.format === "blast") {
@@ -524,13 +585,20 @@ router.patch("/:id/matches/:matchId", async (req, res, next) => {
     if ("team2Score" in payload) nextMeta.team2Score = payload.team2Score;
     if ("score" in payload) nextMeta.score = payload.score;
 
+    const nextStatus =
+      "status" in payload ? payload.status : payload.winner ? "finished" : match.status;
+
     const updated = await updateMatch(req.params.id, matchIdParam, {
       ...match,
       ...payload,
+      status: nextStatus,
       meta: nextMeta,
     });
     if (!updated) {
       return res.status(404).json({ message: "Match not found or could not be updated" });
+    }
+    if (nextStatus === "finished" || payload.winner) {
+      await updateScheduleStatusByMatchId(req.params.id, matchIdParam, "finished");
     }
     return res.json({ match: updated });
   } catch (error) {
@@ -553,6 +621,7 @@ router.patch("/:id/registrations/:registrationId", async (req, res, next) => {
         paymentStatus: z.enum(["unpaid", "paid", "refunded"]).optional(),
         registrationStatus: z.enum(["pending", "approved", "waitlisted", "rejected"]).optional(),
         adminNotes: z.string().optional(),
+        displayName: z.string().optional(),
       })
       .parse(req.body);
     const prev = await getPlayerRegistrationById(req.params.id, req.params.registrationId);

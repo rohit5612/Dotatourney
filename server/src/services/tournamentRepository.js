@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { pool } from "../db/pool.js";
+import { defaultGroupKeysForTeams } from "./groupAssignment.js";
 
 function parseMeta(raw) {
   if (raw == null) return {};
@@ -241,14 +242,14 @@ export async function getTournament(tournamentId) {
   }
 
   const teamsResult = await pool.query(
-    `SELECT id, name, captain, abbr, seed, logo_url AS "logoUrl"
+    `SELECT id, name, captain, abbr, seed, logo_url AS "logoUrl", accent_color AS "accentColor"
      FROM teams
      WHERE tournament_id = $1
      ORDER BY seed ASC NULLS LAST, created_at ASC`,
     [tournamentId],
   );
   const playersResult = await pool.query(
-    `SELECT id, registration_id AS "registrationId", name, role, roles, mmr, steam_name AS "steamName",
+    `SELECT id, registration_id AS "registrationId", name, display_name AS "displayName", role, roles, mmr, steam_name AS "steamName",
             steam_profile AS "steamProfile", discord_handle AS "discordHandle", location, is_captain AS "isCaptain"
      FROM players
      WHERE tournament_id = $1
@@ -286,23 +287,33 @@ export async function replaceTeamsAndPlayers(tournamentId, teams, players, teamP
 
   for (const team of teams) {
     await pool.query(
-      "INSERT INTO teams (id, tournament_id, name, captain, abbr, seed, logo_url) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-      [team.id, tournamentId, team.name, team.captain, team.abbr, team.seed, team.logoUrl || team.logo_url || ""],
+      "INSERT INTO teams (id, tournament_id, name, captain, abbr, seed, logo_url, accent_color) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+      [
+        team.id,
+        tournamentId,
+        team.name,
+        team.captain,
+        team.abbr,
+        team.seed,
+        team.logoUrl || team.logo_url || "",
+        team.accentColor || team.accent_color || "",
+      ],
     );
   }
 
   for (const player of players) {
     await pool.query(
       `INSERT INTO players (
-        id, tournament_id, registration_id, name, role, roles, mmr, steam_name,
+        id, tournament_id, registration_id, name, display_name, role, roles, mmr, steam_name,
         steam_profile, discord_handle, location, is_captain
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
       [
         player.id,
         tournamentId,
         player.registrationId || null,
         player.name,
+        player.displayName || player.display_name || player.name || "",
         player.role,
         JSON.stringify(player.roles || (player.role ? [player.role] : [])),
         player.mmr || null,
@@ -325,14 +336,14 @@ export async function replaceTeamsAndPlayers(tournamentId, teams, players, teamP
 
 async function loadWorkingRoster(client, tournamentId) {
   const teamsResult = await client.query(
-    `SELECT id, name, captain, abbr, seed, logo_url AS "logoUrl"
+    `SELECT id, name, captain, abbr, seed, logo_url AS "logoUrl", accent_color AS "accentColor"
      FROM teams
      WHERE tournament_id = $1
      ORDER BY seed ASC NULLS LAST, created_at ASC`,
     [tournamentId],
   );
   const playersResult = await client.query(
-    `SELECT id, registration_id AS "registrationId", name, role, roles, mmr, steam_name AS "steamName",
+    `SELECT id, registration_id AS "registrationId", name, display_name AS "displayName", role, roles, mmr, steam_name AS "steamName",
             steam_profile AS "steamProfile", discord_handle AS "discordHandle", location, is_captain AS "isCaptain"
      FROM players
      WHERE tournament_id = $1
@@ -364,9 +375,20 @@ async function replaceRosterSnapshotContents(client, tournamentId, rosterId) {
     const snapshotTeamId = randomUUID();
     teamIdMap.set(team.id, snapshotTeamId);
     await client.query(
-      `INSERT INTO roster_snapshot_teams (id, roster_snapshot_id, tournament_id, source_team_id, name, captain, abbr, seed, logo_url)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [snapshotTeamId, rosterId, tournamentId, team.id, team.name, team.captain, team.abbr, team.seed, team.logoUrl || team.logo_url || ""],
+      `INSERT INTO roster_snapshot_teams (id, roster_snapshot_id, tournament_id, source_team_id, name, captain, abbr, seed, logo_url, accent_color)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        snapshotTeamId,
+        rosterId,
+        tournamentId,
+        team.id,
+        team.name,
+        team.captain,
+        team.abbr,
+        team.seed,
+        team.logoUrl || team.logo_url || "",
+        team.accentColor || team.accent_color || "",
+      ],
     );
   }
 
@@ -375,10 +397,10 @@ async function replaceRosterSnapshotContents(client, tournamentId, rosterId) {
     playerIdMap.set(player.id, snapshotPlayerId);
     await client.query(
       `INSERT INTO roster_snapshot_players (
-        id, roster_snapshot_id, tournament_id, source_player_id, registration_id, name, role, roles, mmr,
+        id, roster_snapshot_id, tournament_id, source_player_id, registration_id, name, display_name, role, roles, mmr,
         steam_name, steam_profile, discord_handle, location, is_captain
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
       [
         snapshotPlayerId,
         rosterId,
@@ -386,6 +408,7 @@ async function replaceRosterSnapshotContents(client, tournamentId, rosterId) {
         player.id,
         player.registrationId || null,
         player.name,
+        player.displayName || player.display_name || player.name || "",
         player.role,
         JSON.stringify(player.roles || (player.role ? [player.role] : [])),
         player.mmr || null,
@@ -446,14 +469,15 @@ export async function getRosterSnapshot(tournamentId, rosterId) {
   if (!snapshot) return null;
 
   const teamsResult = await pool.query(
-    `SELECT id, source_team_id AS "sourceTeamId", name, captain, abbr, seed, logo_url AS "logoUrl"
+    `SELECT id, source_team_id AS "sourceTeamId", name, captain, abbr, seed, logo_url AS "logoUrl", accent_color AS "accentColor",
+            group_key AS "groupKey"
      FROM roster_snapshot_teams
      WHERE roster_snapshot_id = $1
      ORDER BY seed ASC NULLS LAST, created_at ASC`,
     [rosterId],
   );
   const playersResult = await pool.query(
-    `SELECT id, source_player_id AS "sourcePlayerId", registration_id AS "registrationId", name, role, roles, mmr,
+    `SELECT id, source_player_id AS "sourcePlayerId", registration_id AS "registrationId", name, display_name AS "displayName", role, roles, mmr,
             steam_name AS "steamName", steam_profile AS "steamProfile", discord_handle AS "discordHandle",
             location, is_captain AS "isCaptain"
      FROM roster_snapshot_players
@@ -570,6 +594,18 @@ export async function approveRosterSnapshot(tournamentId, rosterId, adminUserId)
        RETURNING id`,
       [tournamentId, rosterId, adminUserId],
     );
+
+    const teamsResult = await client.query(
+      `SELECT id FROM roster_snapshot_teams WHERE roster_snapshot_id = $1 ORDER BY seed ASC NULLS LAST, created_at ASC`,
+      [rosterId],
+    );
+    for (const assignment of defaultGroupKeysForTeams(teamsResult.rows)) {
+      await client.query(
+        "UPDATE roster_snapshot_teams SET group_key = $1 WHERE roster_snapshot_id = $2 AND id = $3",
+        [assignment.groupKey, rosterId, assignment.teamId],
+      );
+    }
+
     await client.query("COMMIT");
     return getRosterSnapshot(tournamentId, rows[0].id);
   } catch (error) {
@@ -578,6 +614,40 @@ export async function approveRosterSnapshot(tournamentId, rosterId, adminUserId)
   } finally {
     client.release();
   }
+}
+
+export async function updateRosterGroupAssignments(tournamentId, assignments) {
+  const approved = await getApprovedRosterSnapshot(tournamentId);
+  if (!approved) return { error: "Approve a roster before assigning groups" };
+
+  const teamIds = new Set(approved.teams.map((team) => team.id));
+  for (const entry of assignments) {
+    if (!teamIds.has(entry.teamId)) {
+      return { error: "Group assignment includes a team that is not on the approved roster" };
+    }
+    if (entry.groupKey !== "A" && entry.groupKey !== "B") {
+      return { error: "Each team must be assigned to Group A or Group B" };
+    }
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const entry of assignments) {
+      await client.query(
+        "UPDATE roster_snapshot_teams SET group_key = $1 WHERE roster_snapshot_id = $2 AND id = $3",
+        [entry.groupKey, approved.id, entry.teamId],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  return { approvedRoster: await getRosterSnapshot(tournamentId, approved.id) };
 }
 
 export async function deleteRosterSnapshot(tournamentId, rosterId) {
@@ -703,6 +773,13 @@ export async function updateMatch(tournamentId, matchId, update) {
     return null;
   }
   return hydrateMatchRow(rows[0]);
+}
+
+export async function updateScheduleStatusByMatchId(tournamentId, matchId, status) {
+  await pool.query(
+    "UPDATE schedule_slots SET status = $3 WHERE tournament_id = $1 AND match_id = $2::uuid",
+    [tournamentId, matchId, status],
+  );
 }
 
 export async function replaceSchedule(tournamentId, schedule) {

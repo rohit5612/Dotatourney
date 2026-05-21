@@ -11,12 +11,12 @@ import {
 import { SchedulePhaseTabs } from "../components/navigation/TournamentTabs.jsx";
 import { createId } from "../utils/client";
 import { datetimeLocalToIso, toDatetimeLocalValue } from "../utils/datetime.js";
-import { isValidScheduleInstant } from "../utils/schedule.js";
+import { isValidScheduleInstant, resolveScheduleStatus } from "../utils/schedule.js";
 
 const PHASE_TABS = [
-  { id: SCHEDULE_PHASE_GROUPS, label: "Groups" },
-  { id: SCHEDULE_PHASE_QUALIFIERS, label: "Last chance & play-ins" },
-  { id: SCHEDULE_PHASE_PLAYOFFS, label: "Playoffs" },
+  { id: SCHEDULE_PHASE_GROUPS, label: "Groups", shortLabel: "Groups" },
+  { id: SCHEDULE_PHASE_QUALIFIERS, label: "Last chance & play-ins", shortLabel: "Last chance" },
+  { id: SCHEDULE_PHASE_PLAYOFFS, label: "Playoffs", shortLabel: "Playoffs" },
 ];
 
 const DEFAULT_SECTION_PAGE_SIZE = 10;
@@ -124,7 +124,7 @@ function slotToRow(slot, match) {
     startAt: isValidScheduleInstant(slot.startAt) ? toDatetimeLocalValue(slot.startAt) : "",
     stream: slot.stream || "Main",
     streamUrl: slot.streamUrl ? String(slot.streamUrl) : "",
-    status: slot.status || match?.status || "upcoming",
+    status: resolveScheduleStatus(slot, match),
     notes: slot.notes || "",
   };
 }
@@ -136,7 +136,7 @@ function defaultUnscheduledRow(match) {
     startAt: "",
     stream: "Main",
     streamUrl: "",
-    status: match.status || "upcoming",
+    status: resolveScheduleStatus(null, match),
     notes: "",
   };
 }
@@ -407,11 +407,11 @@ export function SchedulePage({ state, saveCustomSchedule, teamDraft = [], approv
     [state?.schedule],
   );
 
-  const liveCount = savedSlots.filter((slot) => slot.status === "live").length;
-  const upcomingCount = savedSlots.filter((slot) => slot.status === "upcoming").length;
-  const finishedCount = savedSlots.filter((slot) => slot.status === "finished").length;
-
   const resolveMatch = useCallback((matchId) => state?.matches?.find((m) => m.id === matchId), [state?.matches]);
+
+  const liveCount = savedSlots.filter((slot) => resolveScheduleStatus(slot, resolveMatch(slot.matchId)) === "live").length;
+  const upcomingCount = savedSlots.filter((slot) => resolveScheduleStatus(slot, resolveMatch(slot.matchId)) === "upcoming").length;
+  const finishedCount = savedSlots.filter((slot) => resolveScheduleStatus(slot, resolveMatch(slot.matchId)) === "finished").length;
 
   const baseRowsByMatchId = useMemo(() => {
     const map = new Map();

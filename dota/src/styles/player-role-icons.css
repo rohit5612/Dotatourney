@@ -1,0 +1,59 @@
+.player-role-icons {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.player-role-icons--empty {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+.player-role-icons__item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 0.3rem;
+  transition: transform 180ms ease, filter 180ms ease;
+}
+
+.player-role-icons__item img {
+  display: block;
+  width: 1.15rem;
+  height: 1.15rem;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 3px rgb(0 0 0 / 0.35));
+}
+
+.player-role-icons--sm .player-role-icons__item img {
+  width: 1rem;
+  height: 1rem;
+}
+
+.player-role-icons--lg .player-role-icons__item img {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.player-role-icons__item:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+
+.player-role-icons__fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 0.25rem;
+  background: rgb(255 255 255 / 0.08);
+  font-family: var(--font-sans);
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: var(--muted-foreground);
+}

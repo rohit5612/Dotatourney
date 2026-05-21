@@ -41,6 +41,12 @@ function generateOtpDigits() {
   return String(randomInt(100000, 1000000));
 }
 
+function defaultDisplayName({ steamName, name }) {
+  const steam = String(steamName || "").trim();
+  if (steam) return steam;
+  return String(name || "").trim();
+}
+
 export function mapRegistrationRow(row, { includeAdminFields = true } = {}) {
   if (!row) return null;
   const base = {
@@ -48,6 +54,7 @@ export function mapRegistrationRow(row, { includeAdminFields = true } = {}) {
     tournamentId: row.tournament_id,
     email: row.email,
     name: row.name,
+    displayName: row.display_name || defaultDisplayName({ steamName: row.steam_name, name: row.name }),
     location: row.location,
     roles: Array.isArray(row.roles) ? row.roles : typeof row.roles === "string" ? JSON.parse(row.roles || "[]") : [],
     mmr: row.mmr,
@@ -76,7 +83,7 @@ export function mapRegistrationRow(row, { includeAdminFields = true } = {}) {
   return base;
 }
 
-const listSelect = `SELECT id, tournament_id, email, name, location, roles, mmr,
+const listSelect = `SELECT id, tournament_id, email, name, display_name, location, roles, mmr,
       steam_name, steam_profile, discord_handle, phone_number, payment_screenshot, notes,
       payment_status, registration_status, admin_notes, public_code, registration_flow_stage,
       email_verified_at, terms_accepted_at, draft_payload,
@@ -87,12 +94,12 @@ export async function createPlayerRegistration(tournamentId, payload) {
   const email = (payload.email || "").toLowerCase().trim();
   const { rows } = await pool.query(
     `INSERT INTO player_registrations (
-      id, tournament_id, email, name, location, roles, mmr, steam_name, steam_profile,
+      id, tournament_id, email, name, display_name, location, roles, mmr, steam_name, steam_profile,
       discord_handle, phone_number, payment_screenshot, notes, payment_status, registration_status,
       registration_flow_stage, email_verified_at, terms_accepted_at
     )
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'unpaid', 'pending', 'submitted', NOW(), NULL)
-    RETURNING id, tournament_id AS "tournamentId", email, name, location, roles, mmr,
+    RETURNING id, tournament_id AS "tournamentId", email, name, display_name AS "displayName", location, roles, mmr,
               steam_name AS "steamName", steam_profile AS "steamProfile",
               discord_handle AS "discordHandle", phone_number AS "phoneNumber",
               payment_screenshot AS "paymentScreenshot", notes, payment_status AS "paymentStatus",
@@ -105,6 +112,7 @@ export async function createPlayerRegistration(tournamentId, payload) {
       tournamentId,
       email || `legacy-${id}@bpcl.local`,
       payload.name,
+      defaultDisplayName({ steamName: payload.steamName, name: payload.name }),
       payload.location || "",
       JSON.stringify(payload.roles || []),
       payload.mmr || null,
@@ -236,14 +244,15 @@ export async function requestRegistrationOtp(tournamentId, form, termsAcceptedAt
       const expires = new Date(Date.now() + OTP_TTL_MS).toISOString();
       await client.query(
         `UPDATE player_registrations SET
-          name = $2, location = $3, roles = $4, mmr = $5, steam_name = $6, steam_profile = $7,
-          discord_handle = $8, phone_number = $9, terms_accepted_at = $10, draft_payload = $11::jsonb,
-          registration_flow_stage = 'awaiting_otp', otp_hash = $12, otp_expires_at = $13, otp_attempts = 0,
+          name = $2, display_name = $3, location = $4, roles = $5, mmr = $6, steam_name = $7, steam_profile = $8,
+          discord_handle = $9, phone_number = $10, terms_accepted_at = $11, draft_payload = $12::jsonb,
+          registration_flow_stage = 'awaiting_otp', otp_hash = $13, otp_expires_at = $14, otp_attempts = 0,
           updated_at = NOW()
         WHERE id = $1`,
         [
           registrationId,
           form.name,
+          defaultDisplayName({ steamName: form.steamName, name: form.name }),
           form.location || "",
           JSON.stringify(form.roles || []),
           form.mmr ?? null,
@@ -263,16 +272,17 @@ export async function requestRegistrationOtp(tournamentId, form, termsAcceptedAt
       const expires = new Date(Date.now() + OTP_TTL_MS).toISOString();
       await client.query(
         `INSERT INTO player_registrations (
-          id, tournament_id, email, name, location, roles, mmr, steam_name, steam_profile,
+          id, tournament_id, email, name, display_name, location, roles, mmr, steam_name, steam_profile,
           discord_handle, phone_number, payment_screenshot, notes, payment_status, registration_status,
           registration_flow_stage, terms_accepted_at, draft_payload, otp_hash, otp_expires_at, otp_attempts
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, '', '', 'unpaid', 'pending',
-          'awaiting_otp', $12, $13::jsonb, $14, $15, 0)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, '', '', 'unpaid', 'pending',
+          'awaiting_otp', $13, $14::jsonb, $15, $16, 0)`,
         [
           registrationId,
           tournamentId,
           email,
           form.name,
+          defaultDisplayName({ steamName: form.steamName, name: form.name }),
           form.location || "",
           JSON.stringify(form.roles || []),
           form.mmr ?? null,
@@ -449,11 +459,28 @@ export async function updatePlayerRegistration(tournamentId, registrationId, pay
      SET payment_status = COALESCE($3, payment_status),
          registration_status = COALESCE($4, registration_status),
          admin_notes = COALESCE($5, admin_notes),
+         display_name = COALESCE($6, display_name),
          updated_at = NOW()
      WHERE tournament_id = $1 AND id = $2
      RETURNING *`,
-    [tournamentId, registrationId, payload.paymentStatus, payload.registrationStatus, payload.adminNotes],
+    [
+      tournamentId,
+      registrationId,
+      payload.paymentStatus,
+      payload.registrationStatus,
+      payload.adminNotes,
+      payload.displayName !== undefined ? String(payload.displayName || "").trim() : null,
+    ],
   );
+  if (rows[0] && payload.displayName !== undefined) {
+    const displayName = String(payload.displayName || "").trim();
+    await pool.query(
+      `UPDATE players
+       SET display_name = $3, name = $3
+       WHERE tournament_id = $1 AND registration_id = $2`,
+      [tournamentId, registrationId, displayName],
+    );
+  }
   return rows[0] ? mapRegistrationRow(rows[0]) : null;
 }
 

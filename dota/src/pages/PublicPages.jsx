@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { HiOutlineBolt, HiOutlineChatBubbleLeftRight, HiOutlineTrophy } from "react-icons/hi2";
-import { FaYoutube } from "react-icons/fa";
+import { FaExternalLinkAlt, FaYoutube } from "react-icons/fa";
 import { AppFooter } from "../components/AppFooter";
 import { PageLoadingSpinner } from "../components/PageLoadingSpinner";
 import { BracketDiagram } from "../components/BracketDiagram";
@@ -22,20 +22,43 @@ import {
   PLAYER_RULES_REGISTRATION_NOTICE,
   PLAYER_RULES_SECTIONS,
 } from "../constants/playerRules.js";
-import { COOKIE_CONSENT_KEY, PUBLIC_CONTACT_EMAIL, VALVE_DISCLAIMER } from "../constants/legal.js";
+import { COOKIE_CONSENT_KEY, PUBLIC_CONTACT_EMAIL } from "../constants/legal.js";
+import { SITE_BRAND_FULL, SITE_BRAND_LINE, SITE_BRAND_SHORT } from "../constants/siteMeta.js";
 import { roles } from "../constants/tournament";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock.js";
 import { api } from "../lib/api";
 import { LandingBannerAnnouncement } from "../components/LandingBannerAnnouncement.jsx";
+import { LandingCoreTeam } from "../components/LandingCoreTeam.jsx";
+import { LandingSponsors } from "../components/LandingSponsors.jsx";
+import { CoSponsorSpotlight } from "../components/CoSponsorSpotlight.jsx";
+import { getCoSponsor } from "../constants/sponsors.js";
+import { LandingLeagueOverview } from "../components/LandingLeagueOverview.jsx";
+import { LandingTournamentStatus } from "../components/LandingTournamentStatus.jsx";
+import "../styles/landing-hero.css";
+import "../styles/tournament-page.css";
+import "../styles/general-rules-page.css";
+import "../styles/schedule-page.css";
+import "../styles/team-logo-img.css";
+import { TeamLogoImg } from "../components/TeamLogoImg.jsx";
 import { StandingsTable } from "../components/StandingsTable.jsx";
+import { SiteNavbar } from "../components/navigation/SiteNavbar.jsx";
+const PublicTeamsPage = lazy(() =>
+  import("../components/teams/PublicTeamsPage.jsx").then((module) => ({ default: module.PublicTeamsPage })),
+);
 import { PrimaryViewTabs, SchedulePhaseTabs } from "../components/navigation/TournamentTabs.jsx";
-import { groupScheduleSlotsByDate, isValidScheduleInstant } from "../utils/schedule.js";
+import {
+  getMatchDisplayScores,
+  groupScheduleSlotsByDate,
+  isValidScheduleInstant,
+  parseStreamWatchLink,
+  resolveScheduleStatus,
+} from "../utils/schedule.js";
+import { buildTeamNameLookup, findTeamByName, teamInitials } from "../utils/teamPage.js";
+import { collectTeamLogoUrls, preloadTeamLogos } from "../utils/teamLogoCache.js";
+import { hexToRgbTriplet } from "../hooks/useLogoAccent.js";
 import { descriptionContentClassName, rulebookContentClassName, sanitizeDescriptionHtml, sanitizeRulebookHtml } from "../lib/sanitizeRulebookHtml.js";
 import { formatAnnouncementPostedAt, parseAnnouncementEntries } from "../lib/announcementEntries.js";
 
-const SITE_BRAND_SHORT = "BPC League";
-const SITE_BRAND_FULL = "Bharat Pro Circuit League";
-const SITE_BRAND_LINE = `${SITE_BRAND_SHORT} — ${SITE_BRAND_FULL}`;
 const tournamentSlug = "bpcl";
 const defaultTournamentStart = "2026-05-22T00:00:00+05:30";
 const discordInviteUrl = "https://discord.gg/sV2PhYc6A3";
@@ -51,7 +74,7 @@ const LANDING_JOURNEY_ICONS = {
 /** Primary registration flow CTA — red, full-width on small screens, prominent. */
 const REGISTRATION_CONTINUE_BTN_CLASS =
   "btn btn-destructive inline-flex min-h-12 items-center justify-center gap-2 px-8 text-base font-semibold shadow-lg hover:shadow-xl";
-const publicPaths = ["/", "/tournament", "/schedule", "/register", "/rules", "/privacy", "/cookies"];
+const publicPaths = ["/", "/tournament", "/schedule", "/teams", "/register", "/rules", "/privacy", "/cookies"];
 
 /** @param {Record<string, unknown> | null | undefined} tournament */
 function getLandingJourneySteps(tournament) {
@@ -107,6 +130,8 @@ const images = {
   generalRulesBg: "/images/rules.jpeg",
   /** `/tournament` — content below the hero band */
   tournamentPageBg: "/images/tournamentpage.png",
+  /** `/teams` — full-page background */
+  teamsBg: "/images/teams.png",
   /** Landing page — “Registration to victory” journey cards band */
   journeySectionBg: "/images/cards.jpg",
 };
@@ -242,199 +267,41 @@ function CookieConsentBanner({ navigate }) {
   );
 }
 
-function PublicHeader({ path, navigate }) {
-  const [scrolled, setScrolled] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const links = [
-    ["/", "Home"],
-    ["/tournament", "Tournament"],
-    ["/schedule", "Bracket & schedule"],
-    ["/register", "Register"],
-    ["/rules", "Rules"],
-  ];
-
-  useBodyScrollLock(mobileMenuOpen);
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 12);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  useEffect(() => {
-    setMobileMenuOpen(false);
-  }, [path]);
-
-  useEffect(() => {
-    if (!mobileMenuOpen) return undefined;
-    function onKey(event) {
-      if (event.key === "Escape") setMobileMenuOpen(false);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [mobileMenuOpen]);
-
-  useEffect(() => {
-    if (!mobileMenuOpen) return undefined;
-    function onResize() {
-      if (window.matchMedia("(min-width: 768px)").matches) setMobileMenuOpen(false);
-    }
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [mobileMenuOpen]);
-
-  const mobileMenu =
-    mobileMenuOpen &&
-    createPortal(
-      <div
-        id="public-mobile-nav"
-        className="fixed inset-0 z-100 flex flex-col bg-background md:!hidden"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Site navigation"
-      >
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-card/90 px-4 py-4 backdrop-blur-xl pt-[max(1rem,env(safe-area-inset-top))]">
-          <span className="min-w-0 font-serif text-lg font-semibold tracking-tight text-foreground">{SITE_BRAND_SHORT}</span>
-          <button
-            type="button"
-            className="btn btn-outline btn-sm shrink-0"
-            onClick={() => setMobileMenuOpen(false)}
-            aria-label="Close navigation menu"
-          >
-            Close
-          </button>
-        </div>
-        <nav className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-          {links.map(([href, label]) => (
-            <button
-              key={href}
-              type="button"
-              onClick={() => {
-                navigate(href);
-                setMobileMenuOpen(false);
-              }}
-              className={`btn min-h-12 w-full justify-start text-left text-base ${path === href ? "btn-primary" : "btn-outline"}`}
-            >
-              {label}
-            </button>
-          ))}
-          <button
-            type="button"
-            className="btn btn-outline mt-auto min-h-12 w-full justify-start text-left"
-            onClick={() => {
-              navigate("/admin");
-              setMobileMenuOpen(false);
-            }}
-          >
-            Admin
-          </button>
-        </nav>
-      </div>,
-      document.body,
-    );
-
-  return (
-    <header
-      className={`fixed left-0 right-0 top-0 z-30 transition-all duration-300 ${
-        scrolled ? "border-b border-border bg-background/85 backdrop-blur-xl" : "border-b border-transparent bg-transparent"
-      }`}
-    >
-      <div className="mx-auto grid max-w-6xl grid-cols-[1fr_auto] items-center gap-3 px-4 py-3 md:grid-cols-[1fr_auto_1fr] md:py-4">
-        <button
-          type="button"
-          className="group flex min-w-0 max-w-full items-center gap-2 text-left transition-transform duration-300 hover:-translate-y-0.5 sm:gap-3"
-          onClick={() => navigate("/")}
-        >
-          <span className="grid size-14 shrink-0 place-items-center rounded-xl border border-primary/35 bg-gradient-to-br from-primary/15 to-transparent p-1.5 shadow-sm ring-1 ring-white/[0.04] transition-colors duration-300 group-hover:border-primary/50 sm:size-16">
-            <img className="h-full w-full object-contain" src="/bpcl.png" alt={`${SITE_BRAND_SHORT} logo`} />
-          </span>
-          <span className="min-w-0">
-            <h1 className="truncate font-serif text-lg font-semibold tracking-tight text-foreground transition-colors duration-300 group-hover:text-primary sm:text-xl md:whitespace-normal">
-              {SITE_BRAND_SHORT}
-            </h1>
-            <p className="truncate text-xs leading-snug text-muted-foreground transition-colors duration-300 group-hover:text-foreground/90 sm:whitespace-normal">
-              {SITE_BRAND_FULL}
-            </p>
-          </span>
-        </button>
-        <nav
-          className={`mx-auto flex w-full flex-wrap justify-center gap-1 rounded-2xl border px-2 py-1 transition-all duration-300 sm:w-fit sm:rounded-full ${
-            scrolled ? "border-border bg-card/85 shadow-lg backdrop-blur-xl" : "border-transparent bg-transparent"
-          } hidden md:flex`}
-        >
-          {links.map(([href, label]) => (
-            <button
-              key={href}
-              type="button"
-              onClick={() => navigate(href)}
-              className={`rounded-full border px-3 py-1 text-xs transition-all duration-300 hover:-translate-y-0.5 sm:text-sm ${
-                path === href
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-transparent bg-transparent text-muted-foreground hover:border-border hover:bg-card hover:text-foreground"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
-        <div className="hidden justify-center md:flex md:justify-end">
-          <button
-            type="button"
-            className={`w-full rounded-full border px-5 py-2 text-sm text-muted-foreground transition-all duration-300 hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-lg sm:w-auto ${
-              scrolled ? "border-border/80 bg-card/40" : "border-transparent bg-transparent"
-            }`}
-            onClick={() => navigate("/admin")}
-          >
-            Admin
-          </button>
-        </div>
-        <button
-          type="button"
-          className={`btn btn-sm btn-outline inline-flex h-9 w-9 shrink-0 items-center justify-center p-0 md:!hidden ${scrolled ? "border-border bg-card/85" : ""}`}
-          onClick={() => setMobileMenuOpen(true)}
-          aria-expanded={mobileMenuOpen}
-          aria-controls="public-mobile-nav"
-          aria-label="Open navigation menu"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            aria-hidden="true"
-          >
-            <path d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
-      </div>
-      {mobileMenu}
-    </header>
-  );
-}
-
 function EventShell({ path, navigate, children, registerClosedCentered = false }) {
-  const isFullBleedBg = path === "/schedule" || path === "/register" || path === "/rules";
-  const contentClass = path === "/schedule" ? "mx-auto max-w-7xl space-y-6 px-4 pb-10 pt-28" : "mx-auto max-w-6xl space-y-6 px-4 pb-10 pt-28";
+  const isFullBleedBg = path === "/schedule" || path === "/teams" || path === "/register" || path === "/rules";
+  const contentClass =
+    path === "/schedule" || path === "/teams"
+      ? "mx-auto max-w-7xl space-y-6 px-4 pb-10 pt-28"
+      : "mx-auto max-w-6xl space-y-6 px-4 pb-10 pt-28";
   const fullBleedImage =
-    path === "/schedule" ? images.bracketsBg : path === "/register" ? images.registerBg : path === "/rules" ? images.generalRulesBg : null;
+    path === "/schedule"
+      ? images.bracketsBg
+      : path === "/teams"
+        ? images.teamsBg
+        : path === "/register"
+          ? images.registerBg
+          : path === "/rules"
+            ? images.generalRulesBg
+            : null;
   const fullBleedGradientClass =
     path === "/schedule"
       ? "bg-gradient-to-br from-background/88 via-background/80 to-background/72"
-      : path === "/register"
-        ? "bg-gradient-to-b from-background/86 via-background/78 to-background/84"
-        : "bg-gradient-to-br from-background/87 via-background/78 to-background/80";
+      : path === "/teams"
+        ? "bg-gradient-to-b from-black/78 via-neutral-900/72 to-neutral-950/82"
+        : path === "/register"
+          ? "bg-gradient-to-b from-background/86 via-background/78 to-background/84"
+          : path === "/rules"
+            ? "bg-gradient-to-b from-black/82 via-neutral-950/78 to-black/88"
+            : "bg-gradient-to-br from-background/87 via-background/78 to-background/80";
 
   const footerFullBleedStyling = isFullBleedBg || registerClosedCentered;
   const sectionClassName = registerClosedCentered
     ? "relative z-10 flex min-h-0 flex-1 flex-col px-4 pt-24 sm:pt-28"
     : path === "/"
       ? "space-y-20"
-      : `${contentClass} relative z-10`;
+      : path === "/teams"
+        ? `${contentClass} relative z-10 !space-y-0`
+        : `${contentClass} relative z-10`;
 
   return (
     <main
@@ -446,7 +313,7 @@ function EventShell({ path, navigate, children, registerClosedCentered = false }
           <div className={`absolute inset-0 ${fullBleedGradientClass}`} />
         </div>
       ) : null}
-      <PublicHeader path={path} navigate={navigate} />
+      <SiteNavbar path={path} navigate={navigate} />
       <section className={sectionClassName}>
         {registerClosedCentered ? (
           <div className="flex min-h-[calc(100dvh-14rem)] flex-1 flex-col items-center justify-center py-10 sm:min-h-[calc(100dvh-12rem)] sm:py-16 md:py-20">
@@ -491,6 +358,11 @@ export function PublicApp({ path, navigate }) {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [path]);
+
+  useEffect(() => {
+    const urls = collectTeamLogoUrls(event?.teams, event?.setupTeams);
+    if (urls.length) void preloadTeamLogos(urls);
+  }, [event?.teams, event?.setupTeams]);
 
   useEffect(() => {
     if (!publicPaths.includes(path)) {
@@ -541,6 +413,16 @@ export function PublicApp({ path, navigate }) {
     return (
       <EventShell path={path} navigate={navigate}>
         <PublicSchedule event={event} message={message} />
+      </EventShell>
+    );
+  }
+
+  if (path === "/teams") {
+    return (
+      <EventShell path={path} navigate={navigate}>
+        <Suspense fallback={<PageLoadingSpinner label="Loading teams…" />}>
+          <PublicTeamsPage event={event} message={message} navigate={navigate} />
+        </Suspense>
       </EventShell>
     );
   }
@@ -606,8 +488,7 @@ function LandingPageHeroVideo() {
 function LandingPage({ event, navigate, message }) {
   const tournament = event?.tournament;
   const discordUrl = tournament?.discord_url || discordInviteUrl;
-  const formatLabel = `${getFormatName(tournament?.format)} ${tournament?.team_count || "TBA"} Teams`;
-
+  const coSponsor = getCoSponsor();
   function scrollToExplore() {
     document.getElementById("landing-explore")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -638,19 +519,26 @@ function LandingPage({ event, navigate, message }) {
                 <ApprovedRegistrationsHero count={event.approvedRegistrationCount} />
               </div>
             ) : null}
-            <p className="mx-auto max-w-lg border-t border-border/60 pt-3 text-pretty text-[9px] leading-snug text-muted-foreground/90 sm:text-[10px]">
-              {VALVE_DISCLAIMER}
-            </p>
           </div>
-          <div className="w-full max-w-sm rounded-2xl border border-primary/25 bg-[#08080f]/90 px-6 py-5 shadow-2xl backdrop-blur-md ring-1 ring-white/[0.06] sm:px-8">
-            <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">Prize pool</p>
-            <AnimatedPrizePool value={tournament?.prize_pool || "TBA"} />
+          <div className="landing-panel landing-hero-prize">
+            <p className="landing-panel__label">Prize pool</p>
+            <AnimatedPrizePool landing value={tournament?.prize_pool || "TBA"} />
           </div>
-          <div className="flex w-full max-w-md flex-col items-stretch gap-3 sm:flex-row sm:justify-center">
-            <button type="button" className="btn btn-primary w-full px-6 py-3 text-base shadow-lg sm:w-auto" onClick={() => navigate("/register")}>
+          {coSponsor ? <CoSponsorSpotlight sponsor={coSponsor} variant="hero" /> : null}
+          <div className="landing-hero-ctas">
+            <button
+              type="button"
+              className="landing-hero-cta landing-hero-cta--primary w-full sm:w-auto"
+              onClick={() => navigate("/register")}
+            >
               Register now
             </button>
-            <a className="btn btn-outline w-full px-6 py-3 text-base sm:w-auto" href={discordUrl} target="_blank" rel="noreferrer">
+            <a
+              className="landing-hero-cta landing-hero-cta--ghost w-full sm:w-auto"
+              href={discordUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
               Join Discord
             </a>
           </div>
@@ -679,45 +567,24 @@ function LandingPage({ event, navigate, message }) {
         </div>
       </section>
 
-      <RevealSection>
-        <section id="landing-explore" className="mx-auto max-w-6xl scroll-mt-20 space-y-4 px-4">
-          <div className="mx-auto max-w-xl rounded-2xl border border-primary/20 bg-card/95 p-5 text-center shadow-xl backdrop-blur-sm">
-            <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">Tournament starts</p>
-            <p className="mt-2 font-serif text-3xl font-semibold tracking-tight text-foreground">{formatDate(tournament?.start_date || defaultTournamentStart)}</p>
-          </div>
-          <div className="flex justify-center">
-            <CountdownTimer targetDate={tournament?.start_date || defaultTournamentStart} />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <Metric label="Dates" value={`${formatDate(tournament?.start_date)} - ${formatDate(tournament?.end_date)}`} />
-            <Metric label="Format" value={formatLabel} />
-            <Metric label="Entry fee" value={tournament?.entry_fee || "TBA"} />
-          </div>
-        </section>
-      </RevealSection>
+      <div className="landing-stats-to-overview">
+        <RevealSection>
+          <section id="landing-explore" className="landing-stats relative mx-auto max-w-6xl scroll-mt-20 px-4">
+            <LandingTournamentStatus
+              startDate={tournament?.start_date}
+              endDate={tournament?.end_date}
+              fallbackStart={defaultTournamentStart}
+            />
+            <div className="landing-stats__waterfall" aria-hidden="true" />
+          </section>
+        </RevealSection>
 
-      <RevealSection>
-        <section className="mx-auto grid max-w-6xl gap-6 px-4 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-xl border border-border bg-card p-5 sm:p-6">
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1 text-xs uppercase tracking-wider text-secondary">
-              <span>Overview</span>
-              <span>⚔️</span>
-            </div>
-            <h3 className="font-serif text-3xl font-semibold tracking-tight text-foreground md:text-4xl">{tournament?.name || SITE_BRAND_LINE}</h3>
-            <TournamentDescriptionProse
-              description={tournament?.description}
-              className="mt-3 leading-relaxed text-muted-foreground"
-            />
-          </div>
-          <div className="overflow-hidden rounded-xl border border-border bg-card">
-            <img
-              src={images.overviewCard}
-              alt="Tournament overview"
-              className="h-64 w-full object-cover opacity-80 lg:h-full lg:min-h-64"
-            />
-          </div>
-        </section>
-      </RevealSection>
+        <div className="landing-overview-to-core-team">
+          <LandingLeagueOverview />
+          <LandingCoreTeam />
+          <LandingSponsors />
+        </div>
+      </div>
 
       <RevealSection>
         <div className="relative">
@@ -791,43 +658,6 @@ function LandingPage({ event, navigate, message }) {
       </RevealSection>
 
       <RevealSection>
-        <section
-          id="landing-tournament-rulebook"
-          className="relative flex min-h-screen scroll-mt-28 items-center overflow-hidden py-16 md:py-20"
-        >
-          <div className="absolute inset-0">
-            <img
-              src={images.rulebookBg}
-              alt=""
-              className="h-full w-full object-cover"
-              aria-hidden="true"
-            />
-            <div className="absolute inset-0 bg-black/70" />
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(233,168,74,0.14),transparent_62%)]" />
-          </div>
-          <div className="relative mx-auto flex min-h-[calc(100vh-8rem)] w-full items-stretch px-4 md:px-8">
-            <div className="mx-auto flex w-full flex-col rounded-2xl border border-border bg-card/70 p-5 shadow-2xl backdrop-blur sm:p-8 md:w-[80vw] md:p-10">
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-border bg-background/80 px-3 py-1 text-xs uppercase tracking-wider text-secondary">
-                <span>{SITE_BRAND_SHORT} rule book</span>
-                <span>📜</span>
-              </div>
-              <h3 className="font-serif text-3xl font-semibold tracking-tight text-foreground sm:text-4xl md:text-5xl">Rules — {SITE_BRAND_FULL}</h3>
-              {tournament?.rulebook?.trim() ? (
-                <div
-                  className={`${rulebookContentClassName} mt-5 flex-1 overflow-y-auto pr-1 text-sm leading-7 text-muted-foreground sm:text-base md:text-lg md:leading-8`}
-                  dangerouslySetInnerHTML={{ __html: sanitizeRulebookHtml(tournament.rulebook) }}
-                />
-              ) : (
-                <p className="mt-5 flex-1 overflow-y-auto pr-1 text-sm leading-7 text-muted-foreground sm:text-base md:text-lg md:leading-8">
-                  Rules will be published here before the tournament starts.
-                </p>
-              )}
-            </div>
-          </div>
-        </section>
-      </RevealSection>
-
-      <RevealSection>
         <section className="mx-auto max-w-6xl px-4 pb-14">
           <div className="rounded-2xl border border-border bg-card p-8 text-center">
             <div className="mb-3 text-3xl">💬</div>
@@ -854,6 +684,15 @@ function Metric({ label, value }) {
   );
 }
 
+function TournamentStatCard({ label, value, accent = false }) {
+  return (
+    <article className="tournament-stat-card">
+      <p className="tournament-stat-card__label">{label}</p>
+      <p className={`tournament-stat-card__value${accent ? " tournament-stat-card__value--accent" : ""}`}>{value}</p>
+    </article>
+  );
+}
+
 /** Live-ish approved player count from the public tournament payload (`approvedRegistrationCount`). */
 function ApprovedRegistrationsHero({ count }) {
   const n = typeof count === "number" && Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
@@ -873,9 +712,12 @@ function ApprovedRegistrationsHero({ count }) {
   );
 }
 
-function AnimatedPrizePool({ value }) {
+function AnimatedPrizePool({ value, landing = false }) {
   const parsed = useMemo(() => parsePrizePool(value), [value]);
   const [displayValue, setDisplayValue] = useState(0);
+  const valueClass = landing
+    ? `landing-hero-prize__value${parsed ? " landing-hero-prize__value--accent" : ""}`
+    : "mt-2 font-serif text-3xl font-semibold tabular-nums tracking-tight text-primary sm:text-4xl";
 
   useEffect(() => {
     if (!parsed) return undefined;
@@ -897,53 +739,15 @@ function AnimatedPrizePool({ value }) {
   }, [parsed]);
 
   if (!parsed) {
-    return <p className="mt-2 font-serif text-3xl font-semibold tabular-nums tracking-tight text-primary sm:text-4xl">{value || "TBA"}</p>;
+    return <p className={valueClass}>{value || "TBA"}</p>;
   }
 
   return (
-    <p className="mt-2 font-serif text-3xl font-semibold tabular-nums tracking-tight text-primary sm:text-4xl">
+    <p className={valueClass}>
       {parsed.prefix}
       {formatNumber(displayValue)}
       {parsed.suffix}
     </p>
-  );
-}
-
-function CountdownTimer({ targetDate }) {
-  const targetTime = useMemo(() => new Date(targetDate || defaultTournamentStart).getTime(), [targetDate]);
-  const [remaining, setRemaining] = useState(() => Math.max(0, targetTime - Date.now()));
-
-  useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      setRemaining(Math.max(0, targetTime - Date.now()));
-    }, 1000);
-    return () => window.clearInterval(intervalId);
-  }, [targetTime]);
-
-  const totalSeconds = Math.floor(remaining / 1000);
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  return (
-    <div className="w-full max-w-2xl rounded-2xl border border-border/80 bg-card/45 p-4 shadow-2xl backdrop-blur">
-      <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
-        <CountdownUnit label="Days" value={days} />
-        <CountdownUnit label="Hours" value={hours} />
-        <CountdownUnit label="Minutes" value={minutes} />
-        <CountdownUnit label="Seconds" value={seconds} />
-      </div>
-    </div>
-  );
-}
-
-function CountdownUnit({ label, value }) {
-  return (
-    <div className="rounded-lg border border-border bg-background/70 p-3">
-      <div className="font-serif text-2xl font-semibold tabular-nums tracking-tight text-primary sm:text-3xl">{String(value).padStart(2, "0")}</div>
-      <div className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground sm:text-xs">{label}</div>
-    </div>
   );
 }
 
@@ -982,7 +786,7 @@ function PrizePoolBreakdown({ total, items }) {
   const podiumOrder = podium.length >= 3 ? [podium[1], podium[0], podium[2]] : podium;
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-border bg-card/90 p-6 shadow-xl backdrop-blur-md sm:p-8">
+    <section className="tournament-rewards-section landing-panel overflow-hidden p-6 sm:p-8">
       <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border/70 pb-5">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-secondary">Rewards</p>
@@ -1070,83 +874,6 @@ function PrizePoolBreakdown({ total, items }) {
   );
 }
 
-function MeetTheTeams({ teams }) {
-  const sortedTeams = useMemo(
-    () => [...teams].sort((a, b) => (a.seed ?? Number.MAX_SAFE_INTEGER) - (b.seed ?? Number.MAX_SAFE_INTEGER)),
-    [teams],
-  );
-
-  return (
-    <section className="overflow-hidden rounded-2xl border border-border bg-card/90 p-6 shadow-xl backdrop-blur-md sm:p-8">
-        <div className="mb-8 max-w-3xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-secondary">Competing squads</p>
-          <h3 className="mt-1 font-serif text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Meet the Teams</h3>
-          <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-base">
-            The rosters battling for the crown — captains marked with <span className="font-semibold text-foreground">(C)</span>.
-          </p>
-        </div>
-        <div className="grid gap-8 lg:grid-cols-2">
-          {sortedTeams.map((team) => {
-            const roster = team.players?.length ? team.players : [{ name: "Roster TBA", roles: [] }];
-            const logo = team.logoUrl || team.logo_url || "";
-            const initials = (team.abbr || team.name || "?")
-              .split(/\s+/)
-              .map((part) => part[0])
-              .join("")
-              .slice(0, 3)
-              .toUpperCase();
-            return (
-              <article key={team.id || team.name} className="meet-team-card overflow-hidden rounded-2xl border border-border bg-background/95 shadow-lg backdrop-blur-sm">
-                <div className="flex flex-col gap-5 p-6 sm:flex-row sm:items-start sm:p-7">
-                  <div className="mx-auto flex h-32 w-32 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border bg-card shadow-inner sm:mx-0 sm:h-36 sm:w-36">
-                    {logo ? (
-                      <img src={logo} alt="" className="h-full w-full object-contain p-3" />
-                    ) : (
-                      <span className="font-serif text-3xl font-bold tracking-wide text-primary/80">{initials}</span>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1 text-center sm:text-left">
-                    <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-                      {team.seed ? (
-                        <span className="rounded-full border border-border bg-card px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                          Seed {team.seed}
-                        </span>
-                      ) : null}
-                      {team.abbr ? (
-                        <span className="rounded-full border border-primary/25 bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-primary">
-                          {team.abbr}
-                        </span>
-                      ) : null}
-                    </div>
-                    <h4 className="mt-2 font-serif text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{team.name}</h4>
-                    <ul className="mt-5 space-y-2.5">
-                      {roster.map((player) => {
-                        const roleText = Array.isArray(player.roles) ? player.roles.join(" · ") : player.role || "Player";
-                        const isCaptain = Boolean(player.isCaptain);
-                        return (
-                          <li
-                            key={player.id || player.name}
-                            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-card/70 px-3.5 py-2.5 text-sm"
-                          >
-                            <span className="font-medium text-foreground">
-                              {player.name}
-                              {isCaptain ? <span className="ml-1.5 font-semibold text-primary">(C)</span> : null}
-                            </span>
-                            <span className="text-xs uppercase tracking-wide text-muted-foreground">{roleText}</span>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </section>
-  );
-}
-
 function TournamentInfo({ event, message }) {
   const tournament = event?.tournament;
   const [announcementPage, setAnnouncementPage] = useState(0);
@@ -1204,8 +931,6 @@ function TournamentInfo({ event, message }) {
     safeAnnouncementPage * ANNOUNCEMENTS_PAGE_SIZE + ANNOUNCEMENTS_PAGE_SIZE,
   );
   const prizeBreakdown = normalizeBreakdown(tournament?.prize_pool_breakdown);
-  const tournamentMode = tournament?.visibility_mode !== "demo";
-  const teams = event?.teams || [];
   return (
     <div className="space-y-6">
       {message ? (
@@ -1229,12 +954,12 @@ function TournamentInfo({ event, message }) {
               className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base md:leading-relaxed"
             />
           </div>
-          <div className="rounded-xl border border-primary/20 bg-card/80 p-4 shadow-lg backdrop-blur ring-1 ring-white/[0.04]">
-            <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">Tournament starts</p>
-            <p className="mt-2 font-serif text-2xl font-semibold tracking-tight text-foreground">{formatDate(tournament?.start_date || defaultTournamentStart)}</p>
-            <div className="mt-4">
-              <CountdownTimer targetDate={tournament?.start_date || defaultTournamentStart} />
-            </div>
+          <div className="tournament-hero-countdown">
+            <LandingTournamentStatus
+              startDate={tournament?.start_date}
+              endDate={tournament?.end_date}
+              fallbackStart={defaultTournamentStart}
+            />
           </div>
         </div>
       </section>
@@ -1244,13 +969,16 @@ function TournamentInfo({ event, message }) {
           <img alt="" className="h-full w-full min-h-full object-cover" src={images.tournamentPageBg} />
           <div className="absolute inset-0 bg-gradient-to-b from-background/88 via-background/76 to-background/86" />
         </div>
-        <div className="relative z-10 mx-auto max-w-6xl space-y-6 px-4 py-8 pb-2">
-          <section className="rounded-xl border border-border bg-card/85 p-4 shadow-lg backdrop-blur-md">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <Metric label="Format" value={`${getFormatName(tournament?.format)} ${tournament?.team_count || "TBA"} Teams`} />
-              <Metric label="Registration fee" value={tournament?.entry_fee || "TBA"} />
-              <Metric label="Prize pool" value={tournament?.prize_pool || "TBA"} />
-              <Metric label="Registration cutoff (display)" value={formatDate(tournament?.registration_deadline)} />
+        <div className="relative z-10 mx-auto max-w-6xl space-y-6 px-4 py-8 pb-4">
+          <section className="tournament-stats" aria-label="Tournament details">
+            <div className="tournament-stats__grid">
+              <TournamentStatCard
+                label="Format"
+                value={`${getFormatName(tournament?.format)} · ${tournament?.team_count || "TBA"} teams`}
+              />
+              <TournamentStatCard label="Registration fee" value={tournament?.entry_fee || "TBA"} />
+              <TournamentStatCard label="Prize pool" value={tournament?.prize_pool || "TBA"} accent />
+              <TournamentStatCard label="Registration cutoff" value={formatDate(tournament?.registration_deadline)} />
             </div>
           </section>
 
@@ -1309,11 +1037,52 @@ function TournamentInfo({ event, message }) {
           </section>
 
           <PrizePoolBreakdown total={tournament?.prize_pool} items={prizeBreakdown} />
-
-          {tournamentMode && teams.length ? <MeetTheTeams teams={teams} /> : null}
         </div>
       </div>
+
+      <TournamentRulebookSection tournament={tournament} />
     </div>
+  );
+}
+
+function TournamentRulebookSection({ tournament }) {
+  const formatName = getFormatName(tournament?.format);
+  return (
+    <section
+      id="tournament-rulebook"
+      className="tournament-format-section"
+      aria-labelledby="tournament-format-heading"
+    >
+      <div className="tournament-format-section__bg" aria-hidden="true">
+        <img src={images.rulebookBg} alt="" />
+        <div className="tournament-format-section__bg-shade" />
+      </div>
+      <div className="tournament-format-section__inner">
+        <div className="landing-panel tournament-format-panel">
+          <p className="tournament-format-panel__badge">
+            <span>{SITE_BRAND_SHORT} format guide</span>
+          </p>
+          <h2 id="tournament-format-heading" className="tournament-format-panel__title">
+            Understand the BLAST-style format
+          </h2>
+          <p className="tournament-format-panel__subtitle">
+            How {formatName} runs in {SITE_BRAND_SHORT} — structure, rules, and what to expect before match day.
+          </p>
+          <div className="tournament-format-panel__body">
+            {tournament?.rulebook?.trim() ? (
+              <div
+                className={`${rulebookContentClassName} tournament-format-panel__body--prose text-sm leading-7 text-muted-foreground sm:text-base md:text-lg md:leading-8`}
+                dangerouslySetInnerHTML={{ __html: sanitizeRulebookHtml(tournament.rulebook) }}
+              />
+            ) : (
+              <p className="text-sm leading-7 text-muted-foreground sm:text-base md:text-lg md:leading-8">
+                Format details and rules will be published here before the tournament starts.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -1344,63 +1113,313 @@ function RevealSection({ children }) {
   );
 }
 
-function PublicScheduleMatchCard({ slot, match, stageLabel, roundStructureAll }) {
-  const isLive = slot.status === "live";
+function scheduleTeamLogoStyle(team) {
+  const hex = team?.accentColor || team?.accent_color;
+  const triplet = hexToRgbTriplet(hex);
+  if (!triplet) return undefined;
+  return {
+    "--schedule-team-accent": triplet,
+    borderColor: `color-mix(in srgb, rgb(${triplet}) 42%, rgb(255 255 255 / 0.12))`,
+    boxShadow: `0 4px 14px rgb(0 0 0 / 0.35), 0 0 20px color-mix(in srgb, rgb(${triplet}) 22%, transparent)`,
+  };
+}
+
+const ScheduleMatchTeam = memo(function ScheduleMatchTeam({
+  name,
+  team,
+  isWinner = false,
+  isLoser = false,
+  logoPriority = "low",
+}) {
+  const logo = team?.logoUrl || team?.logo_url || "";
+  const displayName = name || "TBD";
+  const initials = team ? teamInitials(team) : displayName.slice(0, 2).toUpperCase();
+  const [logoBroken, setLogoBroken] = useState(false);
+  const teamClass = [
+    "schedule-match__team",
+    isWinner ? "schedule-match__team--winner" : "",
+    isLoser ? "schedule-match__team--loser" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  useEffect(() => {
+    setLogoBroken(false);
+  }, [logo]);
+
+  const eager = logoPriority === "high";
+
+  return (
+    <div className={teamClass}>
+      <div className="schedule-match__logo" style={scheduleTeamLogoStyle(team)}>
+        {logo && !logoBroken ? (
+          <TeamLogoImg
+            src={logo}
+            alt=""
+            className="schedule-match__logo-img"
+            width={58}
+            height={58}
+            loading={eager ? "eager" : "lazy"}
+            fetchPriority={logoPriority}
+            onError={() => setLogoBroken(true)}
+          />
+        ) : (
+          <span className="schedule-match__logo-fallback" aria-hidden>
+            {initials}
+          </span>
+        )}
+      </div>
+      <span className="schedule-match__team-name">{displayName}</span>
+    </div>
+  );
+});
+
+function ScheduleStreamCta({ streamUrl, streamLabel, live = false }) {
+  const link = parseStreamWatchLink(streamUrl);
+  if (!link) return null;
+  const channel =
+    streamLabel && String(streamLabel).trim() && String(streamLabel).trim().toLowerCase() !== "main"
+      ? String(streamLabel).trim()
+      : null;
+
+  return (
+    <a
+      className={`schedule-match__yt-cta${live ? " schedule-match__yt-cta--live" : ""}${link.isYoutube ? "" : " schedule-match__yt-cta--generic"}`}
+      href={link.href}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      <span className="schedule-match__yt-icon" aria-hidden>
+        <FaYoutube />
+      </span>
+      <span className="schedule-match__yt-copy">
+        <span className="schedule-match__yt-title">{link.title}</span>
+        {channel ? <span className="schedule-match__yt-channel">{channel}</span> : null}
+      </span>
+      <FaExternalLinkAlt className="schedule-match__yt-arrow" aria-hidden />
+    </a>
+  );
+}
+
+const PublicScheduleMatchCard = memo(function PublicScheduleMatchCard({
+  slot,
+  match,
+  stageLabel,
+  roundStructureAll,
+  teamByName,
+}) {
+  const effectiveStatus = resolveScheduleStatus(slot, match);
+  const isLive = effectiveStatus === "live";
+  const isFinished = effectiveStatus === "finished";
+  const logoPriority = isLive ? "high" : effectiveStatus === "upcoming" ? "auto" : "low";
   const streamUrl = typeof slot.streamUrl === "string" ? slot.streamUrl.trim() : "";
   const start = new Date(slot.startAt);
   const timeLabel = Number.isNaN(start.getTime())
     ? ""
     : start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const team1 = match?.team1;
+  const team2 = match?.team2;
+  const team1Record = findTeamByName(teamByName, team1);
+  const team2Record = findTeamByName(teamByName, team2);
+  const scores = getMatchDisplayScores(match);
+  const hasResult = isFinished && (scores.ready || Boolean(scores.winner));
+  const showStatus = !isLive && !isFinished && effectiveStatus !== "upcoming";
+  const centerLabel =
+    hasResult && scores.ready ? (
+      <span className="schedule-match__score-pill" aria-label={`Final score ${scores.team1} to ${scores.team2}`}>
+        <span className={scores.winner === team1 ? "schedule-match__score-pill--lead" : ""}>{scores.team1}</span>
+        <span className="schedule-match__score-sep" aria-hidden>
+          –
+        </span>
+        <span className={scores.winner === team2 ? "schedule-match__score-pill--lead" : ""}>{scores.team2}</span>
+      </span>
+    ) : (
+      <span className="schedule-match__vs" aria-hidden>
+        vs
+      </span>
+    );
 
   return (
-    <div className="grid gap-3 rounded-md border border-border bg-background p-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
-      <div>
-        <div className="flex flex-wrap items-center gap-2">
-          {isLive ? <span className="schedule-live-dot" title="Live now" aria-hidden /> : null}
-          <span className={`font-medium ${isLive ? "text-foreground" : ""}`}>
-            {match ? `${match.team1} vs ${match.team2}` : slot.matchId}
+    <article
+      className={`schedule-match${isLive ? " schedule-match--live" : ""}${isFinished ? " schedule-match--finished" : ""}`}
+      data-status={effectiveStatus}
+    >
+      <div className="schedule-match__main">
+        {isLive ? (
+          <span className="schedule-match__live-badge">
+            <span className="schedule-match__live-dot" aria-hidden />
+            Live now
           </span>
-        </div>
-        <div className="text-muted-foreground">
-          {timeLabel ? `${timeLabel} — ` : ""}
-          {slot.stream}
-        </div>
-        {!isLive && slot.status !== "upcoming" ? <div className="capitalize text-secondary">{slot.status}</div> : null}
-        {streamUrl ? (
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-            <FaYoutube className="h-5 w-5 shrink-0 text-[#ff0000]" aria-hidden />
-            <span className="text-muted-foreground">Watch live here:</span>
-            <a
-              href={streamUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium text-primary underline-offset-2 hover:underline"
-            >
-              {streamUrl}
-            </a>
-          </div>
         ) : null}
+        {hasResult && !scores.ready && scores.winner ? (
+          <p className="schedule-match__result-banner">
+            <span className="schedule-match__result-label">Result</span>
+            <span className="schedule-match__result-winner">{scores.winner} wins</span>
+          </p>
+        ) : null}
+        {match ? (
+          <div className="schedule-match__teams">
+            <ScheduleMatchTeam
+              name={team1}
+              team={team1Record}
+              logoPriority={logoPriority}
+              isWinner={hasResult && scores.winner === team1}
+              isLoser={hasResult && Boolean(scores.winner) && scores.winner !== team1}
+            />
+            {centerLabel}
+            <ScheduleMatchTeam
+              name={team2}
+              team={team2Record}
+              logoPriority={logoPriority}
+              isWinner={hasResult && scores.winner === team2}
+              isLoser={hasResult && Boolean(scores.winner) && scores.winner !== team2}
+            />
+          </div>
+        ) : (
+          <p className="schedule-match__team-name">{slot.matchId}</p>
+        )}
+        <p className="schedule-match__meta">
+          {timeLabel ? (
+            <>
+              <span className="schedule-match__time">{timeLabel}</span>
+              {!isFinished && slot.stream ? " · " : null}
+            </>
+          ) : null}
+          {!isFinished && slot.stream ? <span>{slot.stream}</span> : null}
+          {!timeLabel && !isFinished && !slot.stream ? "Time TBA" : null}
+          {isFinished && scores.ready ? (
+            <>
+              {timeLabel ? " · " : null}
+              <span className="schedule-match__final">Final</span>
+            </>
+          ) : null}
+        </p>
+        {showStatus ? <p className="schedule-match__status">{effectiveStatus}</p> : null}
+        {streamUrl && !isFinished ? <ScheduleStreamCta streamUrl={streamUrl} streamLabel={slot.stream} live={isLive} /> : null}
       </div>
-      <div className="rounded-md border border-border bg-card px-3 py-2 text-right">
-        <div className="text-xs uppercase tracking-wider text-muted-foreground">Bracket</div>
-        <div className="font-medium">{stageLabel}</div>
-        <div className="text-xs text-muted-foreground">
+      <aside className="schedule-match__bracket">
+        <p className="schedule-match__bracket-label">Bracket</p>
+        <p className="schedule-match__bracket-stage">{stageLabel}</p>
+        <p className="schedule-match__bracket-round">
           {match ? formatMatchRoundSummary(match, roundStructureAll) : "—"}
+        </p>
+      </aside>
+    </article>
+  );
+});
+
+function PublicScheduleStatusSection({ title, subtitle, children, show = true, variant = "" }) {
+  if (!show) return null;
+  const variantClass = variant ? ` schedule-section--${variant}` : "";
+  return (
+    <section className={`schedule-section landing-panel${variantClass}`}>
+      <header className="schedule-section__head">
+        <div>
+          <h3 className="schedule-section__title">{title}</h3>
+          {subtitle ? <p className="schedule-section__subtitle">{subtitle}</p> : null}
         </div>
-      </div>
-    </div>
+      </header>
+      <div className="schedule-section__body">{children}</div>
+    </section>
   );
 }
 
-function PublicScheduleStatusSection({ title, subtitle, children, show = true }) {
+const SCHEDULE_LIST_INITIAL = 5;
+
+function filterScheduleSlotsByTeam(slots, matches, teamName) {
+  const selected = String(teamName || "").trim();
+  if (!selected) return slots;
+  const needle = selected.toLowerCase();
+  return (slots || []).filter((slot) => {
+    const match = matches?.find((entry) => entry.id === slot.matchId);
+    const team1 = String(match?.team1 || "").toLowerCase();
+    const team2 = String(match?.team2 || "").toLowerCase();
+    return team1 === needle || team2 === needle;
+  });
+}
+
+function PublicScheduleMatchListSection({
+  title,
+  subtitle,
+  show = true,
+  slots = [],
+  matches,
+  teamOptions = [],
+  grouped = false,
+  renderScheduleSlot,
+  initialVisible = SCHEDULE_LIST_INITIAL,
+}) {
+  const [teamFilter, setTeamFilter] = useState("");
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    setExpanded(false);
+  }, [teamFilter]);
+
+  const filtered = useMemo(
+    () => filterScheduleSlotsByTeam(slots, matches, teamFilter),
+    [slots, matches, teamFilter],
+  );
+
+  const visibleSlots = expanded ? filtered : filtered.slice(0, initialVisible);
+  const hiddenCount = Math.max(0, filtered.length - initialVisible);
+
   if (!show) return null;
+
   return (
-    <section className="rounded-lg border border-border bg-background/90 p-4 shadow-sm backdrop-blur-sm sm:p-5">
-      <div className="border-b border-border pb-3">
-        <h3 className="font-serif text-lg text-foreground">{title}</h3>
-        {subtitle ? <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p> : null}
+    <section className="schedule-section landing-panel">
+      <header className="schedule-section__head">
+        <div>
+          <h3 className="schedule-section__title">{title}</h3>
+          {subtitle ? <p className="schedule-section__subtitle">{subtitle}</p> : null}
+        </div>
+        {teamOptions.length > 0 ? (
+          <label className="schedule-section__filter">
+            <span className="schedule-section__filter-label">Filter by team</span>
+            <select
+              className="schedule-section__filter-select"
+              value={teamFilter}
+              onChange={(event) => setTeamFilter(event.target.value)}
+            >
+              <option value="">All teams</option>
+              {teamOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+      </header>
+      <div className="schedule-section__body">
+        {filtered.length === 0 ? (
+          <p className="schedule-section__empty">
+            {teamFilter.trim() ? "No matches found for that team." : "No matches in this section yet."}
+          </p>
+        ) : grouped ? (
+          <div className="schedule-page__sections">
+            {groupScheduleSlotsByDate(visibleSlots).map((day) => (
+              <div key={day.dateKey} className="schedule-day-group">
+                <h4 className="schedule-day-heading">{day.heading}</h4>
+                {day.slots.map(renderScheduleSlot)}
+              </div>
+            ))}
+          </div>
+        ) : (
+          visibleSlots.map(renderScheduleSlot)
+        )}
+
+        {hiddenCount > 0 && !expanded ? (
+          <button type="button" className="schedule-section__view-more" onClick={() => setExpanded(true)}>
+            View more ({hiddenCount})
+          </button>
+        ) : null}
+        {expanded && filtered.length > initialVisible ? (
+          <button type="button" className="schedule-section__view-more" onClick={() => setExpanded(false)}>
+            Show less
+          </button>
+        ) : null}
       </div>
-      <div className="mt-4 space-y-3">{children}</div>
     </section>
   );
 }
@@ -1408,6 +1427,10 @@ function PublicScheduleStatusSection({ title, subtitle, children, show = true })
 function PublicSchedule({ event, message }) {
   const [viewMode, setViewMode] = useState("bracket");
   const [phaseTab, setPhaseTab] = useState(SCHEDULE_PHASE_GROUPS);
+  const teamByName = useMemo(
+    () => buildTeamNameLookup(event?.teams, event?.setupTeams),
+    [event?.teams, event?.setupTeams],
+  );
 
   const roundStructureAll = useMemo(() => stageRoundStructure(event?.matches || []), [event?.matches]);
   const { groupedMatches, stageTabs, stageLabels } = useMemo(() => {
@@ -1425,9 +1448,9 @@ function PublicSchedule({ event, message }) {
 
   const phaseNavTabs = useMemo(
     () => [
-      { id: SCHEDULE_PHASE_GROUPS, label: "Groups" },
-      { id: SCHEDULE_PHASE_QUALIFIERS, label: "Last chance & play-ins" },
-      { id: SCHEDULE_PHASE_PLAYOFFS, label: "Playoffs" },
+      { id: SCHEDULE_PHASE_GROUPS, label: "Groups", shortLabel: "Groups" },
+      { id: SCHEDULE_PHASE_QUALIFIERS, label: "Last chance & play-ins", shortLabel: "Last chance" },
+      { id: SCHEDULE_PHASE_PLAYOFFS, label: "Playoffs", shortLabel: "Playoffs" },
     ],
     [],
   );
@@ -1444,41 +1467,66 @@ function PublicSchedule({ event, message }) {
 
   const scheduleByStatus = useMemo(() => {
     const byTime = (a, b) => new Date(a.startAt) - new Date(b.startAt);
-    const live = phaseSlots.filter((s) => s.status === "live").sort(byTime);
-    const upcoming = phaseSlots.filter((s) => s.status === "upcoming").sort(byTime);
-    const finished = phaseSlots.filter((s) => s.status === "finished").sort(byTime);
+    const statusOf = (slot) => resolveScheduleStatus(slot, event?.matches?.find((m) => m.id === slot.matchId));
+    const live = phaseSlots.filter((s) => statusOf(s) === "live").sort(byTime);
+    const upcoming = phaseSlots.filter((s) => statusOf(s) === "upcoming").sort(byTime);
+    const finished = phaseSlots.filter((s) => statusOf(s) === "finished").sort(byTime);
     return {
       live,
       upcomingByDate: groupScheduleSlotsByDate(upcoming),
       finished,
     };
-  }, [phaseSlots]);
+  }, [phaseSlots, event?.matches]);
+
+  const upcomingSlotsFlat = useMemo(
+    () => scheduleByStatus.upcomingByDate.flatMap((day) => day.slots),
+    [scheduleByStatus.upcomingByDate],
+  );
+
+  const scheduleTeamOptions = useMemo(
+    () =>
+      (event?.teams || [])
+        .map((team) => String(team.name || "").trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b)),
+    [event?.teams],
+  );
 
   const hasScheduleContent =
     scheduleByStatus.live.length > 0 ||
     scheduleByStatus.upcomingByDate.length > 0 ||
     scheduleByStatus.finished.length > 0;
 
-  function renderScheduleSlot(slot) {
-    const match = event?.matches?.find((entry) => entry.id === slot.matchId);
-    const stageLabel = stageLabels[match?.stageKey] || match?.stageKey || "Bracket";
-    return (
-      <PublicScheduleMatchCard
-        key={slot.id}
-        slot={slot}
-        match={match}
-        stageLabel={stageLabel}
-        roundStructureAll={roundStructureAll}
-      />
-    );
-  }
+  useEffect(() => {
+    const urls = collectTeamLogoUrls(event?.teams, event?.setupTeams);
+    if (urls.length) void preloadTeamLogos(urls);
+  }, [event?.teams, event?.setupTeams]);
+
+  const renderScheduleSlot = useCallback(
+    (slot) => {
+      const match = event?.matches?.find((entry) => entry.id === slot.matchId);
+      const stageLabel = stageLabels[match?.stageKey] || match?.stageKey || "Bracket";
+      return (
+        <PublicScheduleMatchCard
+          key={slot.id}
+          slot={slot}
+          match={match}
+          stageLabel={stageLabel}
+          roundStructureAll={roundStructureAll}
+          teamByName={teamByName}
+        />
+      );
+    },
+    [event?.matches, stageLabels, roundStructureAll, teamByName],
+  );
 
   return (
-    <div className="space-y-4">
-      {message ? <p className="rounded-md border border-border bg-card/90 p-2 text-sm text-secondary shadow-sm backdrop-blur-sm">{message}</p> : null}
-      <section className="rounded-lg border border-border bg-card/85 p-4 shadow-xl backdrop-blur-md sm:p-6">
-        <h2 className="font-serif text-2xl text-foreground">Bracket & Schedule</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
+    <div className="schedule-page">
+      {message ? <p className="schedule-page__message landing-panel">{message}</p> : null}
+      <section className="schedule-page__intro landing-panel">
+        <p className="landing-panel__label">Tournament hub</p>
+        <h2 className="schedule-page__intro-title">Bracket &amp; Schedule</h2>
+        <p className="schedule-page__intro-copy">
           {event?.tournament?.visibility_mode === "demo"
             ? "Demo mode is active. Brackets are previews and real team names unlock when tournament mode begins."
             : "Live tournament mode is active. Match names, scores, and standings reflect the current tournament state."}
@@ -1497,8 +1545,8 @@ function PublicSchedule({ event, message }) {
       {viewMode === "bracket" ? (
         <>
           {(event?.groupedStandings || []).length ? (
-            <section className="space-y-3 rounded-lg border border-border bg-card/85 p-4 shadow-lg backdrop-blur-md">
-              <h3 className="font-serif text-lg">Group standings</h3>
+            <section className="schedule-page__block landing-panel space-y-3">
+              <h3 className="schedule-page__block-title">Group standings</h3>
               <div className="grid gap-3 lg:grid-cols-2">
                 {event.groupedStandings.map((group) => (
                   <StandingsTable key={group.id} title={group.label} rows={group.rows} />
@@ -1506,15 +1554,15 @@ function PublicSchedule({ event, message }) {
               </div>
             </section>
           ) : null}
-          <div className="space-y-6">
+          <div className="schedule-page__sections">
           {stageTabs.map((tab) => {
             const matches = groupedMatches[tab.id] || [];
             if (!matches.length) return null;
             return (
-              <section key={tab.id} className="space-y-3 rounded-lg border border-border bg-card/85 p-4 shadow-lg backdrop-blur-md">
+              <section key={tab.id} className="schedule-page__block landing-panel space-y-3">
                 <div>
-                  <h3 className="font-serif text-xl">{tab.label}</h3>
-                  <p className="text-sm text-muted-foreground">Bracket progression for this stage.</p>
+                  <h3 className="schedule-page__block-title">{tab.label}</h3>
+                  <p className="schedule-page__block-copy">Bracket progression for this stage.</p>
                 </div>
                 <BracketDiagram
                   matches={matches}
@@ -1533,42 +1581,41 @@ function PublicSchedule({ event, message }) {
       ) : (
         <>
           <SchedulePhaseTabs value={phaseTab} onChange={setPhaseTab} tabs={phaseNavTabs} />
-          <div className="flex flex-col gap-8">
+          <div className="schedule-page__sections">
             <PublicScheduleStatusSection
               title="Live"
               subtitle="Matches on air right now."
               show={scheduleByStatus.live.length > 0}
+              variant="live"
             >
               {scheduleByStatus.live.map(renderScheduleSlot)}
             </PublicScheduleStatusSection>
 
-            <PublicScheduleStatusSection
+            <PublicScheduleMatchListSection
+              key={`upcoming-${phaseTab}`}
               title="Upcoming"
               subtitle="Grouped by match day."
               show={scheduleByStatus.upcomingByDate.length > 0}
-            >
-              <div className="space-y-6">
-                {scheduleByStatus.upcomingByDate.map((day) => (
-                  <div key={day.dateKey} className="space-y-3">
-                    <h4 className="schedule-day-heading">{day.heading}</h4>
-                    <div className="space-y-3">{day.slots.map(renderScheduleSlot)}</div>
-                  </div>
-                ))}
-              </div>
-            </PublicScheduleStatusSection>
+              slots={upcomingSlotsFlat}
+              matches={event?.matches}
+              teamOptions={scheduleTeamOptions}
+              grouped
+              renderScheduleSlot={renderScheduleSlot}
+            />
 
-            <PublicScheduleStatusSection
+            <PublicScheduleMatchListSection
+              key={`finished-${phaseTab}`}
               title="Finished"
               subtitle="Completed matches in start-time order."
               show={scheduleByStatus.finished.length > 0}
-            >
-              {scheduleByStatus.finished.map(renderScheduleSlot)}
-            </PublicScheduleStatusSection>
+              slots={scheduleByStatus.finished}
+              matches={event?.matches}
+              teamOptions={scheduleTeamOptions}
+              renderScheduleSlot={renderScheduleSlot}
+            />
 
             {!hasScheduleContent ? (
-              <p className="rounded-lg border border-border bg-background/90 p-4 text-sm text-muted-foreground shadow-sm sm:p-5">
-                No scheduled matches for this phase yet.
-              </p>
+              <p className="schedule-page__empty landing-panel">No scheduled matches for this phase yet.</p>
             ) : null}
           </div>
         </>
@@ -1672,40 +1719,35 @@ function CookiePolicyPage() {
 function GeneralRulesPage({ discordUrl }) {
   const invite = (discordUrl || discordInviteUrl).trim();
   return (
-    <section className="space-y-4 rounded-2xl border border-border bg-card/85 p-4 shadow-xl backdrop-blur-md sm:p-6">
-      <div>
-        <p className="text-xs uppercase tracking-widest text-secondary">{SITE_BRAND_SHORT}</p>
-        <h2 className="font-serif text-3xl font-semibold tracking-tight text-foreground">General Rules & Player Conduct</h2>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+    <div className="general-rules-page">
+      <header className="landing-panel general-rules-intro">
+        <p className="landing-panel__label">{SITE_BRAND_SHORT}</p>
+        <h2 className="general-rules-intro__title">General Rules & Player Conduct</h2>
+        <p className="general-rules-intro__lead">
           These rules cover player behavior, eligibility, communication, and fair-play expectations for every {SITE_BRAND_FULL} event.
         </p>
-        <p className="mt-3 rounded-lg border border-primary/25 bg-primary/10 px-3 py-2 text-sm leading-relaxed text-foreground/95">
-          {PLAYER_RULES_REGISTRATION_NOTICE}
-        </p>
+        <p className="general-rules-intro__notice">{PLAYER_RULES_REGISTRATION_NOTICE}</p>
+      </header>
+      <div className="general-rules-page__list">
+        {PLAYER_RULES_SECTIONS.map(([title, body]) => (
+          <article key={title} className="landing-panel general-rules-section">
+            <h3 className="general-rules-section__title">{title}</h3>
+            <p className="general-rules-section__body">{body}</p>
+            {title === PLAYER_RULES_DISCORD_SECTION_TITLE && invite ? (
+              <p className="general-rules-section__discord">
+                <a className="general-rules-section__link" href={invite} target="_blank" rel="noreferrer">
+                  Join the Discord server
+                </a>
+                <span className="general-rules-section__link-muted">
+                  {" "}
+                  now so you are in the right place for pairings, announcements, and admin messages.
+                </span>
+              </p>
+            ) : null}
+          </article>
+        ))}
       </div>
-      {PLAYER_RULES_SECTIONS.map(([title, body]) => (
-        <div key={title} className="rounded-lg border border-border bg-background/90 p-4 shadow-sm backdrop-blur-sm">
-          <h3 className="font-serif text-lg font-medium text-foreground">{title}</h3>
-          <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{body}</p>
-          {title === PLAYER_RULES_DISCORD_SECTION_TITLE && invite ? (
-            <p className="mt-3 text-sm leading-relaxed text-foreground">
-              <a
-                className="font-medium text-secondary underline underline-offset-2 hover:text-foreground"
-                href={invite}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Join the Discord server
-              </a>
-              <span className="text-muted-foreground">
-                {" "}
-                now so you are in the right place for pairings, announcements, and admin messages.
-              </span>
-            </p>
-          ) : null}
-        </div>
-      ))}
-    </section>
+    </div>
   );
 }
 
@@ -1904,6 +1946,7 @@ function PaymentQrModal({ open, onClose, src }) {
 function RegistrationPage({ event, message, setMessage }) {
   const tournament = event?.tournament;
   const discordUrl = tournament?.discord_url || discordInviteUrl;
+  const coSponsor = getCoSponsor();
   const registrationDeadline = tournament?.registration_deadline;
   const registrationAccepting = tournament?.registrations_open === true;
   /** When false: admin has closed signup (deadline remains display-only while open). */
@@ -2245,6 +2288,11 @@ function RegistrationPage({ event, message, setMessage }) {
                 {message}
               </p>
             ) : null}
+            {coSponsor ? (
+              <div className="mx-auto mt-8 max-w-md">
+                <CoSponsorSpotlight sponsor={coSponsor} variant="inline" />
+              </div>
+            ) : null}
             <div className="mt-12 flex flex-col items-stretch gap-5 sm:items-center">
               <a
                 className={`${REGISTRATION_DISCORD_BTN_CLASS} w-full justify-center rounded-xl px-8 py-4 text-lg font-semibold shadow-lg sm:w-auto sm:min-w-[min(92vw,22rem)] md:py-5 md:text-xl`}
@@ -2328,6 +2376,7 @@ function RegistrationPage({ event, message, setMessage }) {
         <p className="text-sm text-muted-foreground">
           Multi-step registration: verify your email, receive your tournament ID, then upload payment proof for admin review. Already verified and only need to pay? Use the Complete payment tab.
         </p>
+        {coSponsor ? <CoSponsorSpotlight sponsor={coSponsor} variant="inline" /> : null}
         <p className="mt-2 text-xs uppercase tracking-wider text-secondary">{stepLabel}</p>
         {registrationDeadline ? (
           <p className="mt-2 rounded-md border border-border bg-background p-2 text-sm text-secondary">

@@ -1,0 +1,398 @@
+const ROLE_ORDER = ["Carry", "Mid", "Offlane", "Soft support", "Hard support"];
+
+export { ROLE_ORDER };
+
+const REGIONS = ["South Asia", "SEA", "Middle East", "Europe", "Oceania"];
+
+const BLAST_GROUP_STAGES = new Set(["blast-group-a", "blast-group-b"]);
+
+function hashString(value) {
+  const str = String(value || "");
+  let hash = 0;
+  for (let i = 0; i < str.length; i += 1) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function normalizeRole(role) {
+  const raw = String(role || "").trim();
+  if (!raw) return "Player";
+  const lower = raw.toLowerCase();
+  if (lower.includes("carry") && !lower.includes("hard")) return "Carry";
+  if (lower === "mid" || lower.includes("mid")) return "Mid";
+  if (lower.includes("off")) return "Offlane";
+  if (lower.includes("hard") || lower.includes("5")) return "Hard support";
+  if (lower.includes("soft") || lower.includes("4")) return "Soft support";
+  return raw;
+}
+
+export { normalizeRole };
+
+export function displayRole(role) {
+  const normalized = normalizeRole(role);
+  if (normalized === "Soft support") return "Soft Support";
+  if (normalized === "Hard support") return "Hard Support";
+  return normalized;
+}
+
+export function sortPlayersByRole(players) {
+  const list = [...(players || [])];
+  const roleRank = (player) => {
+    const roles = getPlayerRoles(player);
+    if (!roles.length) return 99;
+    return Math.min(...roles.map((role) => {
+      const index = ROLE_ORDER.indexOf(role);
+      return index === -1 ? 99 : index;
+    }));
+  };
+  return list.sort((a, b) => {
+    const captainA = Boolean(a.isCaptain) ? 0 : 1;
+    const captainB = Boolean(b.isCaptain) ? 0 : 1;
+    if (captainA !== captainB) return captainA - captainB;
+    return roleRank(a) - roleRank(b);
+  });
+}
+
+export function sortRolesByDefault(roles) {
+  const list = [...new Set((roles || []).map((role) => normalizeRole(role)).filter((role) => role && role !== "Player"))];
+  return list.sort((a, b) => {
+    const ai = ROLE_ORDER.indexOf(a);
+    const bi = ROLE_ORDER.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+}
+
+export function getPlayerRoles(player) {
+  const raw = player?.roles?.length ? player.roles : player?.role ? [player.role] : [];
+  return sortRolesByDefault(raw);
+}
+
+export function primaryPlayerRole(player) {
+  const roles = getPlayerRoles(player);
+  return roles[0] || normalizeRole(player?.role) || "Player";
+}
+
+export function playerDisplayName(player) {
+  return (
+    String(player?.displayName || player?.display_name || "").trim() ||
+    String(player?.steamName || player?.steam_name || "").trim() ||
+    String(player?.name || "").trim() ||
+    "Player"
+  );
+}
+
+export function registrationDisplayName(registration) {
+  return (
+    String(registration?.displayName || registration?.display_name || "").trim() ||
+    String(registration?.steamName || registration?.steam_name || "").trim() ||
+    String(registration?.name || "").trim() ||
+    "Player"
+  );
+}
+
+export function isBlastGroupMatch(match) {
+  return BLAST_GROUP_STAGES.has(match?.stageKey);
+}
+
+export function blastGroupMatches(matches) {
+  return (matches || []).filter(isBlastGroupMatch);
+}
+
+export function getTeamGroupLabel(teamName, groupedStandings) {
+  for (const group of groupedStandings || []) {
+    if (!group.rows?.some((row) => row.team === teamName)) continue;
+    if (/group\s*a/i.test(group.label)) return "Group A";
+    if (/group\s*b/i.test(group.label)) return "Group B";
+    return group.label;
+  }
+  return null;
+}
+
+export function getTeamGroupStatsRow(teamName, groupedStandings) {
+  for (const group of groupedStandings || []) {
+    const row = group.rows?.find((entry) => entry.team === teamName);
+    if (row) {
+      return { row, groupLabel: group.label };
+    }
+  }
+  return null;
+}
+
+export function getTeamStandingsRow(teamName, standings) {
+  return (standings || []).find((row) => row.team === teamName) || null;
+}
+
+export function getTeamStandingLabel(teamName, standings, groupedStandings, format) {
+  if (format === "blast") {
+    for (const group of groupedStandings || []) {
+      const groupIdx = group.rows?.findIndex((row) => row.team === teamName);
+      if (groupIdx >= 0) {
+        const letter = /group\s*([ab])/i.exec(group.label)?.[1]?.toUpperCase();
+        if (letter) return `Group ${letter} · #${groupIdx + 1}`;
+        return `#${groupIdx + 1}`;
+      }
+    }
+
+    const globalIdx = (standings || []).findIndex((row) => row.team === teamName);
+    if (globalIdx >= 0) return `#${globalIdx + 1} global`;
+    return "TBD";
+  }
+
+  const overall = standings || [];
+  const overallIdx = overall.findIndex((row) => row.team === teamName);
+  if (overallIdx >= 0 && overall.length > 1) {
+    return `#${overallIdx + 1} overall`;
+  }
+  if (overallIdx >= 0) {
+    return "#1";
+  }
+
+  for (const group of groupedStandings || []) {
+    const groupIdx = group.rows?.findIndex((row) => row.team === teamName);
+    if (groupIdx >= 0) {
+      const letter = /group\s*([ab])/i.exec(group.label)?.[1]?.toUpperCase();
+      if (letter) return `Group ${letter} · #${groupIdx + 1}`;
+      return `#${groupIdx + 1}`;
+    }
+  }
+
+  return "TBD";
+}
+
+export function deriveRegion(team, players) {
+  const fromPlayer = (players || []).map((p) => p.location).find((loc) => String(loc || "").trim());
+  if (fromPlayer) {
+    const part = String(fromPlayer).split(",")[0]?.trim();
+    if (part) return part;
+  }
+  return REGIONS[hashString(team.id || team.name) % REGIONS.length];
+}
+
+export function getRecentForm(teamName, matches, limit = 5) {
+  const results = (matches || [])
+    .filter((match) => match.winner && (match.team1 === teamName || match.team2 === teamName))
+    .map((match) => (match.winner === teamName ? "W" : "L"));
+  return results.slice(-limit);
+}
+
+export function isTeamLive(teamName, schedule, matches) {
+  for (const slot of schedule || []) {
+    if (slot.status !== "live") continue;
+    const match = (matches || []).find((entry) => entry.id === slot.matchId);
+    if (match && (match.team1 === teamName || match.team2 === teamName)) return true;
+  }
+  return false;
+}
+
+/** Lookup logos/accent from admin team setup (by source team id or name). */
+export function buildTeamSetupLookup(setupTeams) {
+  const logosById = new Map();
+  const logosByName = new Map();
+  const accentsById = new Map();
+  const accentsByName = new Map();
+
+  for (const team of setupTeams || []) {
+    const logo = String(team.logoUrl || team.logo_url || "").trim();
+    const accent = String(team.accentColor || team.accent_color || "").trim();
+    if (team.id) {
+      if (logo) logosById.set(team.id, logo);
+      if (accent) accentsById.set(team.id, accent);
+    }
+    const nameKey = String(team.name || "").trim().toLowerCase();
+    if (nameKey) {
+      if (logo) logosByName.set(nameKey, logo);
+      if (accent) accentsByName.set(nameKey, accent);
+    }
+  }
+
+  return { logosById, logosByName, accentsById, accentsByName };
+}
+
+export function resolveTeamLogoFromSetup(team, setupTeamsOrLookup) {
+  const direct = String(team?.logoUrl || team?.logo_url || "").trim();
+  if (direct) return direct;
+
+  const lookup = setupTeamsOrLookup?.logosById
+    ? setupTeamsOrLookup
+    : buildTeamSetupLookup(setupTeamsOrLookup);
+
+  return (
+    lookup.logosById.get(team?.sourceTeamId) ||
+    lookup.logosByName.get(String(team?.name || "").trim().toLowerCase()) ||
+    ""
+  );
+}
+
+export function resolveTeamAccentFromSetup(team, setupTeamsOrLookup) {
+  const direct = String(team?.accentColor || team?.accent_color || "").trim();
+  if (direct) return direct;
+
+  const lookup = setupTeamsOrLookup?.accentsById
+    ? setupTeamsOrLookup
+    : buildTeamSetupLookup(setupTeamsOrLookup);
+
+  return (
+    lookup.accentsById.get(team?.sourceTeamId) ||
+    lookup.accentsByName.get(String(team?.name || "").trim().toLowerCase()) ||
+    ""
+  );
+}
+
+export function applyTeamSetupAssets(team, setupTeamsOrLookup) {
+  const logoUrl = resolveTeamLogoFromSetup(team, setupTeamsOrLookup);
+  const accentColor = resolveTeamAccentFromSetup(team, setupTeamsOrLookup);
+  return {
+    ...team,
+    ...(logoUrl ? { logoUrl, logo_url: logoUrl } : {}),
+    ...(accentColor ? { accentColor, accent_color: accentColor } : {}),
+  };
+}
+
+export function enrichTeam(team, context) {
+  const { standings, groupedStandings, matches, schedule, format, setupTeams } = context;
+  const base = setupTeams ? applyTeamSetupAssets(team, setupTeams) : team;
+  const isBlast = format === "blast";
+  const players = sortPlayersByRole(base.players || []);
+  const groupEntry = isBlast ? getTeamGroupStatsRow(base.name, groupedStandings) : null;
+  const statsRow =
+    isBlast && groupEntry ? groupEntry.row : getTeamStandingsRow(base.name, standings);
+  const formMatches = isBlast ? blastGroupMatches(matches) : matches;
+  const played = statsRow?.played ?? 0;
+  const wins = statsRow?.wins ?? 0;
+  const winRate = played > 0 ? Math.round((wins / played) * 100) : null;
+  const group = getTeamGroupLabel(base.name, groupedStandings);
+  const seed = base.seed ?? null;
+
+  return {
+    ...base,
+    players,
+    group: group || (seed != null && seed % 2 === 1 ? "Group A" : seed != null ? "Group B" : null),
+    region: deriveRegion(base, players),
+    stats: {
+      winRate,
+      played,
+      wins,
+      losses: statsRow?.losses ?? 0,
+      standing: getTeamStandingLabel(base.name, standings, groupedStandings, format),
+    },
+    form: getRecentForm(base.name, formMatches),
+    isLive: isTeamLive(base.name, schedule, matches),
+  };
+}
+
+export function playerInitials(name) {
+  const label = typeof name === "string" ? name : playerDisplayName(name);
+  return String(label || "?")
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+export function teamInitials(team) {
+  return (team.abbr || team.name || "?")
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 3)
+    .toUpperCase();
+}
+
+/** Case-insensitive team lookup by display name (matches use team names, not ids). */
+export function buildTeamNameLookup(teams, setupTeams) {
+  const map = new Map();
+  const setupLookup = setupTeams?.length ? buildTeamSetupLookup(setupTeams) : null;
+  for (const team of teams || []) {
+    const name = String(team.name || "").trim();
+    if (!name) continue;
+    const resolved = setupLookup ? applyTeamSetupAssets(team, setupLookup) : team;
+    map.set(name.toLowerCase(), resolved);
+  }
+  return map;
+}
+
+export function findTeamByName(lookup, name) {
+  const key = String(name || "").trim().toLowerCase();
+  if (!key) return null;
+  return lookup?.get(key) ?? null;
+}
+
+function groupLabelSortRank(label) {
+  if (/group\s*a/i.test(label)) return 0;
+  if (/group\s*b/i.test(label)) return 1;
+  return 2;
+}
+
+function compareByOverallRank(a, b, overallRank) {
+  const ra = overallRank.get(a) ?? Number.MAX_SAFE_INTEGER;
+  const rb = overallRank.get(b) ?? Number.MAX_SAFE_INTEGER;
+  if (ra !== rb) return ra - rb;
+  return a.localeCompare(b);
+}
+
+/**
+ * Teams page: A1 & B1 (by overall), then A2 & B2 (by overall), …, then rest of overall table, then seed.
+ */
+export function orderTeamsForTeamsPage(teams, { standings = [], groupedStandings = [] } = {}) {
+  const list = teams || [];
+  const byName = new Map(list.map((team) => [team.name, team]));
+  const orderedNames = [];
+  const seen = new Set();
+
+  const pushName = (name) => {
+    const key = String(name || "").trim();
+    if (!key || seen.has(key) || !byName.has(key)) return;
+    seen.add(key);
+    orderedNames.push(key);
+  };
+
+  const overallRank = new Map();
+  for (const [idx, row] of (standings || []).entries()) {
+    const key = String(row.team || "").trim();
+    if (key) overallRank.set(key, idx);
+  }
+
+  const groups = [...(groupedStandings || [])].sort((a, b) => {
+    const ra = groupLabelSortRank(a.label || "");
+    const rb = groupLabelSortRank(b.label || "");
+    if (ra !== rb) return ra - rb;
+    return String(a.label || "").localeCompare(String(b.label || ""));
+  });
+
+  const maxTier = groups.reduce((max, group) => Math.max(max, group.rows?.length || 0), 0);
+
+  for (let tier = 0; tier < maxTier; tier += 1) {
+    const tierTeams = [];
+    for (const group of groups) {
+      const name = group.rows?.[tier]?.team;
+      if (name) tierTeams.push(String(name).trim());
+    }
+    tierTeams.sort((a, b) => compareByOverallRank(a, b, overallRank));
+    for (const name of tierTeams) {
+      pushName(name);
+    }
+  }
+
+  for (const row of standings || []) {
+    pushName(row.team);
+  }
+
+  const fallback = [...list].sort(
+    (a, b) => (a.seed ?? Number.MAX_SAFE_INTEGER) - (b.seed ?? Number.MAX_SAFE_INTEGER),
+  );
+  for (const team of fallback) {
+    pushName(team.name);
+  }
+
+  return orderedNames.map((name) => byName.get(name)).filter(Boolean);
+}
+
+export function squadCountLabel(count) {
+  const n = Number(count) || 0;
+  if (n <= 0) return "Squads will enter the battlefield.";
+  if (n === 1) return "One squad enters the battlefield.";
+  return `${n} squads enter the battlefield.`;
+}

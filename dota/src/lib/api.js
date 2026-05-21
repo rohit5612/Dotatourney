@@ -147,6 +147,11 @@ export const api = {
     request(`/tournaments/${id}/rosters/${rosterId}/approve`, {
       method: "POST",
     }),
+  saveGroupAssignments: (id, assignments) =>
+    request(`/tournaments/${id}/group-assignments`, {
+      method: "PUT",
+      body: JSON.stringify({ assignments }),
+    }),
   deleteRoster: (id, rosterId) =>
     request(`/tournaments/${id}/rosters/${rosterId}`, {
       method: "DELETE",

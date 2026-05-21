@@ -13,8 +13,8 @@ export function AppFooter({ navigate, mode = "public" }) {
       : [
           ["/", "Home"],
           ["/tournament", "Tournament"],
-          ["/schedule", "Bracket & schedule"],
-          ["/register", "Register"],
+          ["/schedule", "Bracket & Schedule"],
+          ["/teams", "Teams"],
           ["/rules", "Rules"],
         ];
 

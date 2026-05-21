@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
+import { sortRolesByDefault } from "../utils/teamPage.js";
 
 function draftFromRegistration(registration) {
   return {
     paymentStatus: registration.paymentStatus,
     registrationStatus: registration.registrationStatus,
     adminNotes: registration.adminNotes || "",
+    displayName: registration.displayName || registration.steamName || registration.name || "",
   };
 }
 
@@ -13,7 +15,8 @@ function isDraftDirty(registration, draft) {
   return (
     draft.paymentStatus !== registration.paymentStatus ||
     draft.registrationStatus !== registration.registrationStatus ||
-    (draft.adminNotes || "") !== (registration.adminNotes || "")
+    (draft.adminNotes || "") !== (registration.adminNotes || "") ||
+    (draft.displayName || "").trim() !== (registration.displayName || registration.steamName || registration.name || "").trim()
   );
 }
 
@@ -50,6 +53,7 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
           registration.email,
           registration.publicCode,
           registration.name,
+          registration.displayName,
           registration.phoneNumber,
           registration.discordHandle,
           registration.steamName,
@@ -307,9 +311,9 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
             <div key={registration.id} className="rounded-lg border border-border bg-card p-4">
               <div className="flex flex-wrap justify-between gap-3">
                 <div>
-                  <h3 className="font-serif text-lg">{registration.name}</h3>
+                  <h3 className="font-serif text-lg">{registration.displayName || registration.steamName || registration.name}</h3>
                   <p className="text-sm text-muted-foreground">
-                    {registration.roles?.join(", ") || "No roles"} - {registration.mmr || "MMR TBA"} MMR - {registration.location || "No location"}
+                    Legal name: {registration.name} · {sortRolesByDefault(registration.roles).join(", ") || "No roles"} - {registration.mmr || "MMR TBA"} MMR - {registration.location || "No location"}
                   </p>
                   <p className="text-sm text-muted-foreground">Phone: {registration.phoneNumber || "N/A"}</p>
                   <p className="text-sm text-muted-foreground">
@@ -351,7 +355,14 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
                 </div>
               </div>
               <div className="mt-3 flex flex-col gap-2 lg:flex-row lg:items-end">
-                <div className="grid flex-1 gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_2fr]">
+                <div className="grid flex-1 gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_2fr]">
+                  <input
+                    className="rounded-md border border-input bg-background p-2 disabled:opacity-60 sm:col-span-2 lg:col-span-1"
+                    placeholder="Display name (shown on teams)"
+                    value={draft.displayName}
+                    disabled={archived}
+                    onChange={(event) => updateDraft(registration, { displayName: event.target.value })}
+                  />
                   <select
                     className="rounded-md border border-input bg-background p-2 disabled:opacity-60"
                     value={draft.paymentStatus}

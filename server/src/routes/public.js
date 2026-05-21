@@ -134,6 +134,7 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
     return {
       tournament: fallbackTournament(fallbackIdentifier),
       teams: [],
+      setupTeams: [],
       matches: [],
       schedule: [],
       tabs: stageTabsForFormat("dse"),
@@ -158,21 +159,41 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
       ];
     }),
   );
+  const workingTeamAccents = new Map(
+    (data.teams || []).flatMap((team) => {
+      const accent = team.accentColor || team.accent_color || "";
+      if (!accent) return [];
+      return [
+        [team.id, accent],
+        [String(team.name || "").trim().toLowerCase(), accent],
+      ];
+    }),
+  );
   const resolveTeamLogo = (team) =>
     team.logoUrl ||
     team.logo_url ||
     workingTeamLogos.get(team.sourceTeamId) ||
     workingTeamLogos.get(String(team.name || "").trim().toLowerCase()) ||
     "";
+  const resolveTeamAccent = (team) =>
+    team.accentColor ||
+    team.accent_color ||
+    workingTeamAccents.get(team.sourceTeamId) ||
+    workingTeamAccents.get(String(team.name || "").trim().toLowerCase()) ||
+    "";
+  const mapPublicTeam = (team) => ({
+    ...team,
+    logoUrl: resolveTeamLogo(team),
+    accentColor: resolveTeamAccent(team),
+  });
   const publicTeams = data.approvedRoster
     ? data.approvedRoster.teams.map((team) => ({
-        ...team,
-        logoUrl: resolveTeamLogo(team),
+        ...mapPublicTeam(team),
         players: data.approvedRoster.players.filter((player) =>
           data.approvedRoster.teamPlayers.some((record) => record.team_id === team.id && record.player_id === player.id),
         ),
       }))
-    : (data.teams || []).map((team) => ({ ...team, logoUrl: resolveTeamLogo(team) }));
+    : (data.teams || []).map((team) => mapPublicTeam(team));
   const standingsTeams =
     visibilityMode === "demo"
       ? Array.from({ length: data.tournament.team_count }, (_, index) => ({ name: `Team ${index + 1}` }))
@@ -185,6 +206,16 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
   return {
     tournament: data.tournament,
     teams: visibilityMode === "demo" ? [] : publicTeams,
+    /** Admin team-setup logos/accent — used to resolve approved-roster teams on the public site. */
+    setupTeams:
+      visibilityMode === "demo"
+        ? []
+        : (data.teams || []).map((team) => ({
+            id: team.id,
+            name: team.name,
+            logoUrl: team.logoUrl || team.logo_url || "",
+            accentColor: team.accentColor || team.accent_color || "",
+          })),
     matches,
     schedule: data.schedule,
     tabs: stageTabsForFormat(format, { teamCount: data.tournament.team_count }),

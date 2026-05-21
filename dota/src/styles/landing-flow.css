@@ -1,0 +1,470 @@
+/* Landing — continuous waterfall flow (page shell + section edges) */
+
+.landing-flow {
+  --lf-base: #06060a;
+  --lf-mid: #0a0c12;
+  --lf-deep: #080a10;
+  position: relative;
+  isolation: isolate;
+  overflow-x: clip;
+  background: var(--lf-base);
+}
+
+.landing-flow__canvas {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.landing-flow__canvas::before {
+  content: "";
+  position: absolute;
+  inset: -20% -10%;
+  background:
+    radial-gradient(ellipse 90% 55% at 12% 8%, rgb(94 234 212 / 0.07), transparent 58%),
+    radial-gradient(ellipse 75% 50% at 88% 18%, rgb(233 168 74 / 0.09), transparent 55%),
+    radial-gradient(ellipse 85% 60% at 50% 42%, rgb(59 130 246 / 0.05), transparent 62%),
+    radial-gradient(ellipse 70% 45% at 28% 72%, rgb(139 92 246 / 0.06), transparent 58%),
+    radial-gradient(ellipse 80% 50% at 78% 88%, rgb(220 38 38 / 0.04), transparent 55%),
+    linear-gradient(180deg, var(--lf-base) 0%, var(--lf-mid) 38%, var(--lf-deep) 72%, var(--lf-base) 100%);
+}
+
+.landing-flow__canvas::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.22;
+  background-image: radial-gradient(circle, rgb(255 255 255 / 0.35) 0 0.75px, transparent 0.75px);
+  background-size: 72px 72px;
+  mask-image: linear-gradient(to bottom, rgb(0 0 0 / 0.35), transparent 88%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .landing-flow__canvas::before {
+    animation: landing-flow-ambient-shift 42s ease-in-out infinite alternate;
+  }
+
+  .landing-flow__canvas::after {
+    animation: landing-flow-particle-drift 36s linear infinite;
+  }
+}
+
+@keyframes landing-flow-ambient-shift {
+  0% {
+    filter: hue-rotate(0deg) brightness(1);
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    filter: hue-rotate(8deg) brightness(1.04);
+    transform: translateY(-1.5%) scale(1.02);
+  }
+  100% {
+    filter: hue-rotate(-6deg) brightness(0.98);
+    transform: translateY(1%) scale(1.01);
+  }
+}
+
+@keyframes landing-flow-particle-drift {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-18px, -24px, 0);
+  }
+}
+
+/* Section shell — overlap + z-stack */
+.landing-flow > .landing-section,
+.landing-flow > .landing-stats-to-overview,
+.landing-flow > .landing-flow-block {
+  position: relative;
+  z-index: 1;
+}
+
+.landing-section {
+  position: relative;
+}
+
+/* Shared edge layer */
+.landing-flow-edge {
+  pointer-events: none;
+  position: absolute;
+  left: 50%;
+  z-index: 8;
+  width: 100vw;
+  transform: translateX(-50%);
+}
+
+.landing-flow-edge--top {
+  top: 0;
+}
+
+.landing-flow-edge--bottom {
+  bottom: 0;
+}
+
+/* —— Edge variants (alternate across page) —— */
+
+/* Hero → stats: cascading wave + warm glow */
+.landing-flow-edge--hero-cascade {
+  height: clamp(6rem, 16vh, 11rem);
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgb(6 6 10 / 0.35) 28%,
+    rgb(6 6 10 / 0.78) 58%,
+    rgb(6 6 10) 100%
+  );
+  clip-path: polygon(0 0, 100% 0, 100% 72%, 0 100%);
+}
+
+.landing-flow-edge--hero-cascade::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 110%, rgb(233 168 74 / 0.2), transparent 62%),
+    radial-gradient(ellipse 55% 45% at 18% 95%, rgb(94 234 212 / 0.12), transparent 58%);
+  mix-blend-mode: screen;
+  filter: blur(8px);
+}
+
+.landing-flow-edge--hero-cascade::after {
+  content: "";
+  position: absolute;
+  left: -5%;
+  right: -5%;
+  bottom: -1px;
+  height: 38%;
+  background: linear-gradient(105deg, transparent 42%, rgb(6 6 10 / 0.5) 50%, transparent 58%);
+  opacity: 0.65;
+}
+
+/* Stats top: soft mesh blur veil */
+.landing-flow-edge--mesh-veil {
+  height: clamp(4.5rem, 12vh, 8rem);
+  margin-top: calc(-1 * clamp(3.5rem, 9vh, 6.5rem));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  background: linear-gradient(
+    to bottom,
+    rgb(6 6 10) 0%,
+    rgb(6 6 10 / 0.88) 35%,
+    rgb(6 6 10 / 0.35) 72%,
+    transparent 100%
+  );
+}
+
+.landing-flow-edge--mesh-veil::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 80% 90% at 50% 0%, rgb(59 130 246 / 0.08), transparent 70%);
+}
+
+/* Overview bottom: angled divider + purple bleed */
+.landing-flow-edge--angled-purple {
+  height: clamp(5rem, 13vh, 9rem);
+  background: linear-gradient(
+    168deg,
+    transparent 0%,
+    rgb(6 6 10 / 0.55) 38%,
+    rgb(8 10 16 / 0.92) 72%,
+    rgb(10 12 18) 100%
+  );
+  clip-path: polygon(0 28%, 100% 0, 100% 100%, 0 100%);
+}
+
+.landing-flow-edge--angled-purple::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 70% 55% at 72% 100%, rgb(139 92 246 / 0.14), transparent 62%);
+  filter: blur(10px);
+}
+
+/* Core team top: smoky blue-purple bridge */
+.landing-flow-edge--smoke-bridge {
+  height: clamp(4rem, 10vh, 7rem);
+  margin-top: calc(-1 * clamp(3rem, 8vh, 5.5rem));
+  background: linear-gradient(
+    to bottom,
+    rgb(6 6 10) 0%,
+    rgb(6 6 10 / 0.7) 45%,
+    transparent 100%
+  );
+}
+
+.landing-flow-edge--smoke-bridge::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 65% 80% at 20% 0%, rgb(59 130 246 / 0.1), transparent 65%),
+    radial-gradient(ellipse 60% 70% at 85% 15%, rgb(139 92 246 / 0.09), transparent 60%);
+  filter: blur(14px);
+  opacity: 0.9;
+}
+
+/* Core team bottom: curved crimson hint */
+.landing-flow-edge--curve-crimson {
+  height: clamp(5.5rem, 14vh, 9.5rem);
+  background: linear-gradient(to top, rgb(6 6 10), rgb(6 6 10 / 0.55) 55%, transparent);
+  clip-path: ellipse(120% 100% at 50% 100%);
+}
+
+.landing-flow-edge--curve-crimson::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 55%;
+  background: radial-gradient(ellipse 75% 60% at 50% 100%, rgb(220 38 38 / 0.08), transparent 68%);
+}
+
+/* Journey top: amber atmospheric blur */
+.landing-flow-edge--amber-haze {
+  height: clamp(5rem, 12vh, 8.5rem);
+  margin-top: calc(-1 * clamp(3.5rem, 9vh, 6rem));
+  background: linear-gradient(
+    to bottom,
+    rgb(6 6 10) 0%,
+    rgb(6 6 10 / 0.82) 40%,
+    rgb(6 6 10 / 0.25) 78%,
+    transparent 100%
+  );
+}
+
+.landing-flow-edge--amber-haze::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 85% 70% at 50% 0%, rgb(180 83 9 / 0.12), transparent 62%);
+  filter: blur(12px);
+}
+
+/* Journey bottom: depth gradient spill */
+.landing-flow-edge--depth-spill {
+  height: clamp(6rem, 15vh, 10rem);
+  background: linear-gradient(
+    to top,
+    rgb(6 6 10) 0%,
+    rgb(6 6 10 / 0.9) 32%,
+    rgb(6 6 10 / 0.45) 68%,
+    transparent 100%
+  );
+}
+
+.landing-flow-edge--depth-spill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 90% 65% at 50% 100%, rgb(15 118 110 / 0.1), transparent 58%);
+}
+
+/* Discord top: glass teal veil */
+.landing-flow-edge--glass-teal {
+  height: clamp(4rem, 10vh, 7rem);
+  margin-top: calc(-1 * clamp(2.5rem, 7vh, 5rem));
+  backdrop-filter: blur(16px) saturate(1.15);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  background: linear-gradient(
+    to bottom,
+    rgb(6 6 10 / 0.95) 0%,
+    rgb(6 6 10 / 0.55) 50%,
+    transparent 100%
+  );
+  border-bottom: 1px solid rgb(255 255 255 / 0.03);
+}
+
+.landing-flow-edge--glass-teal::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 70% 80% at 50% 0%, rgb(94 234 212 / 0.08), transparent 65%);
+}
+
+/* Footer top: mist fade (no harsh border) */
+.landing-flow-edge--footer-mist {
+  position: relative;
+  left: auto;
+  width: 100%;
+  transform: none;
+  height: clamp(4rem, 10vh, 7rem);
+  margin-bottom: -1px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgb(6 6 10 / 0.65) 45%,
+    rgb(6 6 10) 100%
+  );
+}
+
+/* —— Hero —— */
+.landing-hero {
+  z-index: 2;
+  margin-bottom: calc(-1 * clamp(3rem, 8vh, 5.5rem));
+}
+
+/* —— Stats band —— */
+.landing-stats-to-overview {
+  position: relative;
+  z-index: 3;
+}
+
+.landing-stats {
+  padding-top: clamp(2rem, 5vh, 3.5rem);
+  padding-bottom: clamp(5.5rem, 14vh, 10rem);
+  background: transparent;
+}
+
+.landing-stats .rounded-2xl,
+.landing-stats .rounded-lg {
+  background: color-mix(in srgb, var(--card) 82%, rgb(8 10 16 / 0.9));
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-color: color-mix(in srgb, var(--primary) 22%, rgb(255 255 255 / 0.06));
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.04) inset,
+    0 16px 40px rgb(0 0 0 / 0.35);
+}
+
+/* —— Journey —— */
+.landing-journey {
+  position: relative;
+  z-index: 4;
+  margin-top: calc(-1 * clamp(2rem, 5vh, 3.5rem));
+  padding-top: clamp(3rem, 8vh, 5rem);
+  padding-bottom: clamp(4rem, 10vh, 6.5rem);
+}
+
+.landing-journey__bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.landing-journey__bg img {
+  width: 100%;
+  height: 100%;
+  min-height: 28rem;
+  object-fit: cover;
+}
+
+.landing-journey__bg-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      180deg,
+      rgb(6 6 10 / 0.92) 0%,
+      rgb(6 6 10 / 0.72) 22%,
+      rgb(6 6 10 / 0.55) 48%,
+      rgb(6 6 10 / 0.78) 78%,
+      rgb(6 6 10) 100%
+    ),
+    radial-gradient(ellipse 90% 55% at 50% 28%, rgb(180 83 9 / 0.1), transparent 58%);
+}
+
+.landing-journey__content {
+  position: relative;
+  z-index: 2;
+}
+
+.landing-journey-card {
+  background: color-mix(in srgb, var(--card) 86%, rgb(12 14 22 / 0.92)) !important;
+  backdrop-filter: blur(18px) saturate(1.1);
+  -webkit-backdrop-filter: blur(18px) saturate(1.1);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.05) inset,
+    0 20px 48px rgb(0 0 0 / 0.42),
+    0 0 60px color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+/* —— Discord CTA —— */
+.landing-discord {
+  position: relative;
+  z-index: 5;
+  padding-top: clamp(1.5rem, 4vh, 2.5rem);
+  padding-bottom: clamp(3rem, 8vh, 5rem);
+  background: transparent;
+}
+
+.landing-discord__panel {
+  position: relative;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--secondary) 28%, rgb(255 255 255 / 0.08)) !important;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--card) 78%, rgb(10 14 22 / 0.95)) 0%,
+    color-mix(in srgb, var(--card) 68%, rgb(6 8 14 / 0.98)) 100%
+  ) !important;
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.06) inset,
+    0 24px 56px rgb(0 0 0 / 0.4),
+    0 0 80px rgb(94 234 212 / 0.06);
+}
+
+.landing-discord__panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 80% 70% at 50% -20%, rgb(94 234 212 / 0.1), transparent 55%);
+}
+
+.landing-discord__panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* —— Footer on landing —— */
+.landing-footer-wrap {
+  position: relative;
+  z-index: 6;
+  background: var(--lf-base);
+}
+
+.landing-footer-wrap .landing-footer {
+  border-top: none;
+  background: linear-gradient(180deg, rgb(8 10 16 / 0.92) 0%, rgb(6 6 10) 100%);
+}
+
+.landing-footer-wrap .landing-footer > div {
+  position: relative;
+}
+
+/* Reveal on landing: gentler (no vertical jump) */
+.landing-flow .landing-reveal {
+  transition:
+    opacity 900ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.landing-flow .landing-reveal:not(.landing-reveal--visible) {
+  opacity: 0;
+  filter: blur(6px);
+}
+
+.landing-flow .landing-reveal--visible {
+  opacity: 1;
+  filter: blur(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-flow__canvas::before,
+  .landing-flow__canvas::after {
+    animation: none;
+  }
+
+  .landing-flow .landing-reveal:not(.landing-reveal--visible) {
+    opacity: 1;
+    filter: none;
+  }
+}

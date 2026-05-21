@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { BracketDiagram } from "../components/BracketDiagram";
 import { BracketStageTabs } from "../components/navigation/TournamentTabs.jsx";
+import { GroupAssignmentPanel } from "../components/GroupAssignmentPanel.jsx";
 import { normalizedBlastBracketTabs } from "../components/bracket/bracketLayout.js";
+import { formatUsesGroupAssignment, isGroupAssignmentValid } from "../utils/groupAssignment.js";
 
 export function BracketPage({
   state,
@@ -17,6 +19,7 @@ export function BracketPage({
   updateBracketVisibilityMode,
   updateBracketActivation,
   approveRoster,
+  saveGroupAssignments,
 }) {
   const [scores, setScores] = useState({});
   const [selectedRosterId, setSelectedRosterId] = useState("");
@@ -30,7 +33,16 @@ export function BracketPage({
   const selectedRoster = rosters.find((roster) => roster.id === (selectedRosterId || approvedRoster?.id));
   const approvedRosterSummary = rosters.find((roster) => roster.id === approvedRoster?.id);
   const selectedRosterReady = selectedRoster && (!requiredTeamCount || selectedRoster.teamCount === requiredTeamCount);
-  const canGenerateTournament = mode === "demo" || (!bracketActive && approvedRoster && (!requiredTeamCount || approvedRoster.teams?.length === requiredTeamCount));
+  const groupsReady =
+    !formatUsesGroupAssignment(setup?.format) ||
+    mode === "demo" ||
+    isGroupAssignmentValid(approvedRoster?.teams || []);
+  const canGenerateTournament =
+    mode === "demo" ||
+    (!bracketActive &&
+      approvedRoster &&
+      groupsReady &&
+      (!requiredTeamCount || approvedRoster.teams?.length === requiredTeamCount));
   const generationCopy =
     mode === "demo"
       ? `Demo mode will generate placeholder teams from the ${requiredTeamCount}-team ${setup?.format?.toUpperCase() || "configured"} format for the public bracket map.`
@@ -147,8 +159,20 @@ export function BracketPage({
           {selectedRoster && !selectedRosterReady ? (
             <p className="text-xs text-destructive">Selected roster needs exactly {requiredTeamCount} teams before approval.</p>
           ) : null}
+          {mode === "tournament" && formatUsesGroupAssignment(setup?.format) && approvedRoster && !groupsReady ? (
+            <p className="text-xs text-destructive">Assign and save Group A / Group B before generating the bracket.</p>
+          ) : null}
         </div>
       </section>
+      {mode === "tournament" ? (
+        <GroupAssignmentPanel
+          format={setup?.format}
+          approvedRoster={approvedRoster}
+          bracketActive={bracketActive}
+          onSave={saveGroupAssignments}
+          disabled={!approvedRoster}
+        />
+      ) : null}
       <div className="h-2 w-full overflow-hidden rounded bg-muted">
         <div className="h-full bg-primary transition-all" style={{ width: `${completionPct}%` }} />
       </div>

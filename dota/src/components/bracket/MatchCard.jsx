@@ -279,6 +279,7 @@ export function MatchCard({
     (leftScore >= requiredWins || rightScore >= requiredWins);
   const scoreWinner = scoreComplete ? (leftScore > rightScore ? match.team1 : match.team2) : "";
 
+  const displayStatus = match.winner || match.status === "finished" ? "finished" : match.status || "upcoming";
   const teamLinesReadOnly = !editable || !isEditing;
   const lockedBodyClass = editable && !isEditing ? "opacity-60" : "";
 
@@ -352,7 +353,7 @@ export function MatchCard({
               {match.meta.winToken}
             </span>
           ) : null}
-          <span className="capitalize">{match.status || "upcoming"}</span>
+          <span className="capitalize">{displayStatus}</span>
           {editable && !isEditing ? (
             <button type="button" className="btn btn-outline btn-xs" onClick={() => setIsEditing(true)}>
               Edit
@@ -422,7 +423,7 @@ export function MatchCard({
       {editable && !isEditing ? (
         <div className="mt-2 text-xs text-muted-foreground">
           {match.slotAt ? <span>Slot: {new Date(match.slotAt).toLocaleString()}</span> : <span className="italic">No slot time set</span>}{" "}
-          <span className="capitalize">· {match.status || "upcoming"}</span>
+          <span className="capitalize">· {displayStatus}</span>
         </div>
       ) : null}
     </div>

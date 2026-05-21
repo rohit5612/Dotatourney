@@ -19,6 +19,8 @@ import { StandingsPage } from "./pages/StandingsPage";
 import { TeamsPage } from "./pages/TeamsPage";
 import { augmentGroupedBracketMatches } from "./components/bracket/bracketLayout.js";
 import { createId, getInitialDarkMode } from "./utils/client";
+import { isGroupAssignmentValid } from "./utils/groupAssignment.js";
+import { playerDisplayName } from "./utils/teamPage.js";
 
 const adminPages = ["registrations", "teams", "setup", "announcements", "bracketSchedule", "standings", "users"];
 
@@ -404,6 +406,10 @@ function App() {
       setMessage(`Finalize exactly ${setup.teamCount} teams before generating the bracket.`);
       return;
     }
+    if (setup.format === "blast" && !isGroupAssignmentValid(bracketTeams)) {
+      setMessage("Assign and save Group A / Group B before generating the bracket.");
+      return;
+    }
     const invalidTeam = bracketTeams.find((team) => {
       const assignedPlayerIds = new Set(
         bracketTeamPlayers.filter((record) => record.team_id === team.id).map((record) => record.player_id),
@@ -438,6 +444,7 @@ function App() {
         .toUpperCase(),
       seed: teamDraft.length + 1,
       logoUrl: "",
+      accentColor: "",
     };
     setTeamDraft((prev) => [...prev, team]);
     setNewCaptain({ captain: "", team: "" });
@@ -453,12 +460,14 @@ function App() {
   }
 
   function addRegistrationPlayer(registration, teamId = null) {
+    const displayName = registration.displayName || registration.steamName || registration.name;
     setPoolDraft((prev) => [
       ...prev,
       {
         id: createId(),
         registrationId: registration.id,
-        name: registration.name,
+        name: displayName,
+        displayName,
         role: registration.roles?.[0] || roles[0],
         roles: registration.roles || [],
         mmr: registration.mmr,
@@ -528,14 +537,22 @@ function App() {
       setMessage("Create tournament first.");
       return;
     }
-    const teamsWithCaptains = teamDraft.map((team) => {
-      const captain = poolDraft.find((player) => player.teamId === team.id && player.isCaptain);
+    const normalizedPlayers = poolDraft.map((player) => {
+      const label = playerDisplayName(player);
       return {
-        ...team,
-        captain: captain?.name || "",
+        ...player,
+        name: label,
+        displayName: player.displayName || player.display_name || label,
       };
     });
-    await api.saveTeams(tournamentId, { teams: teamsWithCaptains, players: poolDraft });
+    const teamsWithCaptains = teamDraft.map((team) => {
+      const captain = normalizedPlayers.find((player) => player.teamId === team.id && player.isCaptain);
+      return {
+        ...team,
+        captain: captain ? playerDisplayName(captain) : "",
+      };
+    });
+    await api.saveTeams(tournamentId, { teams: teamsWithCaptains, players: normalizedPlayers });
     await refreshTournament(tournamentId, { keepTeamPane: true });
     await refreshRosters();
     setMessage("Teams saved.");
@@ -601,9 +618,24 @@ function App() {
       await api.approveRoster(tournamentId, rosterId);
       await refreshRosters();
       await refreshTournament(tournamentId, { keepTeamPane: true });
-      setMessage("Tournament roster approved for bracket and schedule generation.");
+      setMessage("Tournament roster approved. Assign groups A and B, then generate the bracket.");
     } catch (error) {
       setMessage(error.message);
+    }
+  }
+
+  async function saveGroupAssignments(assignments) {
+    if (!tournamentId) {
+      setMessage("Create tournament first.");
+      return;
+    }
+    try {
+      const payload = await api.saveGroupAssignments(tournamentId, assignments);
+      setApprovedRoster(payload.approvedRoster || null);
+      setMessage("Group assignment saved.");
+    } catch (error) {
+      setMessage(error.message);
+      throw error;
     }
   }
 
@@ -637,10 +669,14 @@ function App() {
       const logoBySourceId = new Map(
         (tournamentPayload.teams || []).map((team) => [team.id, team.logoUrl || team.logo_url || ""]),
       );
+      const accentBySourceId = new Map(
+        (tournamentPayload.teams || []).map((team) => [team.id, team.accentColor || team.accent_color || ""]),
+      );
       setTeamDraft(
         (roster.teams || []).map((team) => ({
           ...team,
           logoUrl: team.logoUrl || team.logo_url || logoBySourceId.get(team.sourceTeamId) || "",
+          accentColor: team.accentColor || team.accent_color || accentBySourceId.get(team.sourceTeamId) || "",
         })),
       );
       setPoolDraft(
@@ -863,6 +899,7 @@ function App() {
                 updateBracketVisibilityMode={updateBracketVisibilityMode}
                 updateBracketActivation={updateBracketActivation}
                 approveRoster={approveRoster}
+                saveGroupAssignments={saveGroupAssignments}
               />
             ) : (
               <div className="relative left-1/2 w-[min(100vw-2rem,88rem)] max-w-none -translate-x-1/2">
@@ -878,7 +915,11 @@ function App() {
         )}
 
         {activePage === "standings" && (
-          <StandingsPage standings={state?.standings} groupedStandings={state?.groupedStandings} />
+          <StandingsPage
+            standings={state?.standings}
+            groupedStandings={state?.groupedStandings}
+            format={state?.tournament?.format}
+          />
         )}
 
         {activePage === "registrations" && (

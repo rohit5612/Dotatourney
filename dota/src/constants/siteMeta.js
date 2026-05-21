@@ -1,6 +1,10 @@
 /** Public logo path served from site root (`public/bpcl.png` in repo). Crawlers read absolute URL from built `index.html` when `VITE_SITE_URL` is set at build time. */
 export const SITE_SHARING_IMAGE_PATH = "/bpcl.png";
 
+export const SITE_BRAND_SHORT = "BPC League";
+export const SITE_BRAND_FULL = "Bharat Pro Circuit League";
+export const SITE_BRAND_LINE = `${SITE_BRAND_SHORT} — ${SITE_BRAND_FULL}`;
+
 /** Default document meta (also mirrored in index.html for no-JS crawlers). */
 export const SITE_META = {
   title: "BPC League | Bharat Pro Circuit League — Dota 2",
