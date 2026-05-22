@@ -23,6 +23,19 @@ export default defineConfig(({ mode }) => {
   };
 
   return {
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes("node_modules")) return undefined;
+            if (id.includes("react-dom") || /[/\\]react[/\\]/.test(id)) return "vendor-react";
+            if (id.includes("react-icons")) return "vendor-icons";
+            if (id.includes("dompurify")) return "vendor-sanitize";
+            return "vendor";
+          },
+        },
+      },
+    },
     plugins: [
       {
         name: "inject-sharing-meta",

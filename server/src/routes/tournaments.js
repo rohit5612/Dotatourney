@@ -10,6 +10,7 @@ import { sendPlayerRegistrationDecisionEmail } from "../services/emailService.js
 import { buildGroupedStandings, buildStandings } from "../services/standingsEngine.js";
 import { requireAdmin } from "../services/authService.js";
 import { syncCrmRegistrationsToGoogleSheet } from "../services/googleSheetsSync.js";
+import { invalidatePublicCache } from "../services/publicCache.js";
 import {
   approveRosterSnapshot,
   createRosterSnapshot,
@@ -63,6 +64,7 @@ const tournamentSchema = z.object({
   registrationDeadline: z.string().nullable().optional(),
   discordUrl: z.string().optional().default(""),
   rulebook: z.string().optional().default(""),
+  liveYoutubeUrl: z.string().optional().default(""),
   announcements: z
     .array(
       z.union([
@@ -118,6 +120,19 @@ async function validateRosterRegistrations(tournamentId, players) {
 }
 
 router.use(requireAdmin);
+
+router.use((req, res, next) => {
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
+    next();
+    return;
+  }
+  res.on("finish", () => {
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      invalidatePublicCache();
+    }
+  });
+  next();
+});
 
 router.post("/:id/google-sheets/sync-registrations", async (req, res, next) => {
   try {

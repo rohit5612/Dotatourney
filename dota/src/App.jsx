@@ -1,28 +1,32 @@
-import { useEffect, useMemo, useState } from "react";
-import { AdminAuthPage } from "./pages/AdminAuthPage";
-import { AdminUsersPage } from "./pages/AdminUsersPage";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { AppFooter } from "./components/AppFooter";
 import { AppHeader } from "./components/AppHeader";
+import { PageLoadingSpinner } from "./components/PageLoadingSpinner";
 import { ScrollToTopButton } from "./components/ScrollToTopButton";
 import { buildDefaultSeriesRules, mergeBlastSeriesRules, roles } from "./constants/tournament";
 import { api, getAuthToken, setAuthToken } from "./lib/api";
 import { toDateInputValue, toDatetimeLocalValue } from "./utils/datetime";
 import { announcementsToAdminFormState, announcementsToApiPayload, bannerAnnouncementsToAdminFormState, bannerAnnouncementsToApiPayload } from "./lib/announcementEntries.js";
-import { AnnouncementsPage } from "./pages/AnnouncementsPage";
-import { BracketPage } from "./pages/BracketPage";
-import { PublicApp } from "./pages/PublicPages";
-import { RegistrationCrmPage } from "./pages/RegistrationCrmPage";
-import { SchedulePage } from "./pages/SchedulePage";
 import { PrimaryViewTabs } from "./components/navigation/TournamentTabs.jsx";
-import { SetupPage } from "./pages/SetupPage";
-import { StandingsPage } from "./pages/StandingsPage";
-import { TeamsPage } from "./pages/TeamsPage";
 import { augmentGroupedBracketMatches } from "./components/bracket/bracketLayout.js";
 import { createId, getInitialDarkMode } from "./utils/client";
 import { isGroupAssignmentValid } from "./utils/groupAssignment.js";
 import { playerDisplayName } from "./utils/teamPage.js";
 
 const adminPages = ["registrations", "teams", "setup", "announcements", "bracketSchedule", "standings", "users"];
+
+const PublicApp = lazy(() => import("./pages/PublicPages.jsx").then((m) => ({ default: m.PublicApp })));
+const AdminAuthPage = lazy(() => import("./pages/AdminAuthPage.jsx").then((m) => ({ default: m.AdminAuthPage })));
+const AdminUsersPage = lazy(() => import("./pages/AdminUsersPage.jsx").then((m) => ({ default: m.AdminUsersPage })));
+const AnnouncementsPage = lazy(() => import("./pages/AnnouncementsPage.jsx").then((m) => ({ default: m.AnnouncementsPage })));
+const BracketPage = lazy(() => import("./pages/BracketPage.jsx").then((m) => ({ default: m.BracketPage })));
+const RegistrationCrmPage = lazy(() =>
+  import("./pages/RegistrationCrmPage.jsx").then((m) => ({ default: m.RegistrationCrmPage })),
+);
+const SchedulePage = lazy(() => import("./pages/SchedulePage.jsx").then((m) => ({ default: m.SchedulePage })));
+const SetupPage = lazy(() => import("./pages/SetupPage.jsx").then((m) => ({ default: m.SetupPage })));
+const StandingsPage = lazy(() => import("./pages/StandingsPage.jsx").then((m) => ({ default: m.StandingsPage })));
+const TeamsPage = lazy(() => import("./pages/TeamsPage.jsx").then((m) => ({ default: m.TeamsPage })));
 
 function App() {
   const [path, setPath] = useState(() => window.location.pathname);
@@ -47,6 +51,7 @@ function App() {
     registrationDeadline: "",
     discordUrl: "https://discord.gg/sV2PhYc6A3",
     rulebook: "",
+    liveYoutubeUrl: "",
     announcements: [],
     bannerAnnouncement: { body: "", postedAt: "" },
     visibilityMode: "demo",
@@ -201,6 +206,7 @@ function App() {
           : prev.registrationDeadline,
         discordUrl: payload.tournament.discord_url ?? prev.discordUrl,
         rulebook: payload.tournament.rulebook ?? prev.rulebook,
+        liveYoutubeUrl: payload.tournament.live_youtube_url ?? prev.liveYoutubeUrl ?? "",
         announcements: announcementsToAdminFormState(payload.tournament.announcements),
         bannerAnnouncement: bannerAnnouncementsToAdminFormState(payload.tournament.banner_announcements),
         visibilityMode: payload.tournament.visibility_mode ?? prev.visibilityMode,
@@ -266,6 +272,19 @@ function App() {
       announcements: announcementsToApiPayload(overrides.announcements ?? setup.announcements),
       bannerAnnouncements: bannerAnnouncementsToApiPayload(overrides.bannerAnnouncement ?? setup.bannerAnnouncement),
     };
+  }
+
+  async function saveLiveYoutubeUrl(url) {
+    const trimmed = String(url ?? "").trim();
+    if (!tournamentId) {
+      setSetup((prev) => ({ ...prev, liveYoutubeUrl: trimmed }));
+      setMessage("Create tournament first.");
+      return;
+    }
+    setSetup((prev) => ({ ...prev, liveYoutubeUrl: trimmed }));
+    await api.updateTournament(tournamentId, buildTournamentPayload({ liveYoutubeUrl: trimmed }));
+    await refreshTournament(tournamentId);
+    setMessage("Live stream link saved.");
   }
 
   async function bootstrapTournament() {
@@ -760,13 +779,21 @@ function App() {
   }
 
   if (!path.startsWith("/admin")) {
-    return <PublicApp path={path} navigate={navigate} />;
+    return (
+      <Suspense fallback={<PageLoadingSpinner label="Loading…" />}>
+        <PublicApp path={path} navigate={navigate} />
+      </Suspense>
+    );
   }
 
   const inviteToken = path.startsWith("/admin/invite/") ? path.split("/").pop() : "";
 
   if (!adminUser) {
-    return <AdminAuthPage inviteToken={inviteToken} onAuthed={setAdminUser} />;
+    return (
+      <Suspense fallback={<PageLoadingSpinner label="Loading admin…" />}>
+        <AdminAuthPage inviteToken={inviteToken} onAuthed={setAdminUser} />
+      </Suspense>
+    );
   }
 
   return (
@@ -796,6 +823,7 @@ function App() {
         {message ? <p className="rounded-md border border-border bg-card p-2 text-sm text-secondary">{message}</p> : null}
 
         {activePage === "setup" && (
+          <Suspense fallback={<PageLoadingSpinner label="Loading setup…" />}>
           <SetupPage
             setup={setup}
             setSetup={setSetup}
@@ -832,9 +860,11 @@ function App() {
             deleteTournament={deleteDraftTournament}
             setRegistrationsAccepting={setRegistrationsAccepting}
           />
+          </Suspense>
         )}
 
         {activePage === "teams" && (
+          <Suspense fallback={<PageLoadingSpinner label="Loading teams…" />}>
           <TeamsPage
             teamDraft={teamDraft}
             poolDraft={poolDraft}
@@ -866,10 +896,13 @@ function App() {
             approveRoster={approveRoster}
             deleteRoster={deleteRoster}
           />
+          </Suspense>
         )}
 
         {activePage === "announcements" && (
-          <AnnouncementsPage setup={setup} setSetup={setSetup} saveTournament={bootstrapTournament} />
+          <Suspense fallback={<PageLoadingSpinner label="Loading announcements…" />}>
+            <AnnouncementsPage setup={setup} setSetup={setSetup} saveTournament={bootstrapTournament} />
+          </Suspense>
         )}
 
         {activePage === "bracketSchedule" && (
@@ -885,6 +918,7 @@ function App() {
               ]}
             />
             {bracketScheduleView === "brackets" ? (
+              <Suspense fallback={<PageLoadingSpinner label="Loading bracket…" />}>
               <BracketPage
                 state={state}
                 activeTab={activeTab}
@@ -901,36 +935,49 @@ function App() {
                 approveRoster={approveRoster}
                 saveGroupAssignments={saveGroupAssignments}
               />
+              </Suspense>
             ) : (
               <div className="relative left-1/2 w-[min(100vw-2rem,88rem)] max-w-none -translate-x-1/2">
+                <Suspense fallback={<PageLoadingSpinner label="Loading schedule…" />}>
                 <SchedulePage
                   state={state}
                   saveCustomSchedule={saveCustomSchedule}
                   teamDraft={teamDraft}
                   approvedRoster={approvedRoster}
+                  liveYoutubeUrl={setup.liveYoutubeUrl}
+                  onSaveLiveYoutubeUrl={saveLiveYoutubeUrl}
                 />
+                </Suspense>
               </div>
             )}
           </div>
         )}
 
         {activePage === "standings" && (
+          <Suspense fallback={<PageLoadingSpinner label="Loading standings…" />}>
           <StandingsPage
             standings={state?.standings}
             groupedStandings={state?.groupedStandings}
             format={state?.tournament?.format}
           />
+          </Suspense>
         )}
 
         {activePage === "registrations" && (
+          <Suspense fallback={<PageLoadingSpinner label="Loading registrations…" />}>
           <RegistrationCrmPage
             tournamentId={tournamentId}
             registrations={registrations}
             refreshRegistrations={() => refreshRegistrations(tournamentId)}
           />
+          </Suspense>
         )}
 
-        {activePage === "users" && <AdminUsersPage currentUser={adminUser} />}
+        {activePage === "users" && (
+          <Suspense fallback={<PageLoadingSpinner label="Loading users…" />}>
+            <AdminUsersPage currentUser={adminUser} />
+          </Suspense>
+        )}
       </section>
       <AppFooter navigate={navigateAdminPage} mode="admin" />
       <ScrollToTopButton />

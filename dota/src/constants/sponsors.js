@@ -100,6 +100,19 @@ export const SPONSORS = [
       discord: "",
     },
   },
+  {
+    id: "sponsor-partner-2",
+    name: "JaamVant",
+    tagline: "Ashray Jayant",
+    tier: "partner",
+    order: 3,
+    logoUrl: "https://shared.fastly.steamstatic.com/community_assets/images/items/546560/35f54268b2e255954d79ebbb6ef5321b0abc0e4c.gif",
+    socials: {
+      instagram: "",
+      steam: "https://steamcommunity.com/profiles/76561198053191862",
+      discord: "",
+    },
+  },
   
 ];
 

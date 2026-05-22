@@ -13,6 +13,13 @@
   width: 100%;
 }
 
+.tournament-hero-countdown .landing-livestream {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
 /* Stat cards below hero */
 .tournament-stats {
   width: 100%;

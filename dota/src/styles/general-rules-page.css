@@ -42,6 +42,157 @@
   box-shadow: 0 0 24px color-mix(in srgb, var(--secondary) 8%, transparent);
 }
 
+.general-rules-intro__rulebook {
+  margin: 1.15rem 0 0;
+  max-width: 36rem;
+}
+
+.general-rules-rulebook-card {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem 1rem;
+  width: 100%;
+  padding: 0.9rem 1rem 0.9rem 0.95rem;
+  border-radius: 0.95rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, rgb(255 255 255 / 0.1));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--primary) 14%, rgb(255 255 255 / 0.04)) 0%,
+    rgb(0 0 0 / 0.28) 55%,
+    rgb(0 0 0 / 0.38) 100%
+  );
+  text-decoration: none;
+  color: inherit;
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.07) inset,
+    0 12px 28px rgb(0 0 0 / 0.32),
+    0 0 32px color-mix(in srgb, var(--primary) 10%, transparent);
+  transition:
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 220ms ease,
+    box-shadow 280ms ease,
+    background 280ms ease;
+}
+
+.general-rules-rulebook-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--primary) 48%, var(--secondary) 22%);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--primary) 22%, rgb(255 255 255 / 0.06)) 0%,
+    rgb(0 0 0 / 0.22) 50%,
+    rgb(0 0 0 / 0.34) 100%
+  );
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.1) inset,
+    0 16px 36px rgb(0 0 0 / 0.4),
+    0 0 40px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.general-rules-rulebook-card:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--secondary) 65%, white);
+  outline-offset: 3px;
+}
+
+.general-rules-rulebook-card__icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, rgb(255 255 255 / 0.1));
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--primary) 32%, rgb(20 14 8)) 0%,
+    rgb(0 0 0 / 0.45) 100%
+  );
+  color: var(--primary);
+  font-size: 1.35rem;
+  box-shadow: 0 0 20px color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+.general-rules-rulebook-card__copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.general-rules-rulebook-card__eyebrow {
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.general-rules-rulebook-card__title {
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--foreground);
+}
+
+.general-rules-rulebook-card__meta {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+}
+
+.general-rules-rulebook-card__action {
+  display: none;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding-left: 0.35rem;
+  color: color-mix(in srgb, var(--secondary) 88%, white);
+}
+
+.general-rules-rulebook-card__action-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.general-rules-rulebook-card__action-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+@media (min-width: 480px) {
+  .general-rules-rulebook-card {
+    padding: 1rem 1.1rem 1rem 1rem;
+    gap: 1rem 1.15rem;
+  }
+
+  .general-rules-rulebook-card__icon {
+    width: 3rem;
+    height: 3rem;
+    font-size: 1.5rem;
+  }
+
+  .general-rules-rulebook-card__title {
+    font-size: 1.0625rem;
+  }
+
+  .general-rules-rulebook-card__action {
+    display: flex;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .general-rules-rulebook-card:hover {
+    transform: none;
+  }
+}
+
 .general-rules-page__list {
   display: flex;
   flex-direction: column;

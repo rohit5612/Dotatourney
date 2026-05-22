@@ -383,7 +383,35 @@ function ScheduleListSection({
   );
 }
 
-export function SchedulePage({ state, saveCustomSchedule, teamDraft = [], approvedRoster = null }) {
+export function SchedulePage({
+  state,
+  saveCustomSchedule,
+  teamDraft = [],
+  approvedRoster = null,
+  liveYoutubeUrl = "",
+  onSaveLiveYoutubeUrl,
+}) {
+  const [liveStreamDraft, setLiveStreamDraft] = useState(() => String(liveYoutubeUrl || "").trim());
+  const [savingLiveStream, setSavingLiveStream] = useState(false);
+  const [liveStreamMessage, setLiveStreamMessage] = useState("");
+
+  useEffect(() => {
+    setLiveStreamDraft(String(liveYoutubeUrl || "").trim());
+  }, [liveYoutubeUrl]);
+
+  async function handleSaveLiveStream() {
+    if (!onSaveLiveYoutubeUrl) return;
+    setSavingLiveStream(true);
+    setLiveStreamMessage("");
+    try {
+      await onSaveLiveYoutubeUrl(liveStreamDraft.trim());
+      setLiveStreamMessage("Saved.");
+    } catch (error) {
+      setLiveStreamMessage(error?.message || "Could not save live stream link.");
+    } finally {
+      setSavingLiveStream(false);
+    }
+  }
   const [draft, setDraft] = useState({});
   const [phaseTab, setPhaseTab] = useState(SCHEDULE_PHASE_GROUPS);
   const [validationHint, setValidationHint] = useState("");
@@ -811,6 +839,41 @@ export function SchedulePage({ state, saveCustomSchedule, teamDraft = [], approv
 
   return (
     <div className="w-full space-y-4 rounded-lg border border-border bg-card p-4 sm:p-6">
+      <section className="space-y-3 rounded-lg border border-border bg-background/60 p-4">
+        <div>
+          <h3 className="font-serif text-lg">Live YouTube stream</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Tournament-wide broadcast embed for the public site during the live event window. Does not change per-match
+            stream links below.
+          </p>
+        </div>
+        <label className="block space-y-1">
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">Live YouTube stream URL</span>
+          <input
+            type="url"
+            className="w-full rounded-md border border-input bg-background p-2"
+            placeholder="https://youtube.com/watch?v=… or https://youtu.be/…"
+            value={liveStreamDraft}
+            onChange={(event) => setLiveStreamDraft(event.target.value)}
+          />
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="btn btn-primary btn-sm shrink-0"
+            disabled={savingLiveStream || !onSaveLiveYoutubeUrl}
+            onClick={() => void handleSaveLiveStream()}
+          >
+            {savingLiveStream ? "Saving…" : "Save stream link"}
+          </button>
+          {liveStreamMessage ? <span className="text-sm text-secondary">{liveStreamMessage}</span> : null}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Home page: embed appears below the status card when live. Tournament page: embed replaces the hero status card.
+          Clear the URL to fall back to the timer / live status panel.
+        </p>
+      </section>
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="font-serif text-xl">Schedule</h2>

@@ -9,6 +9,11 @@ import {
   requestRegistrationOtp,
   verifyRegistrationOtp,
 } from "../services/registrationRepository.js";
+import {
+  getCachedPublicPayload,
+  invalidatePublicCache,
+  setCachedPublicPayload,
+} from "../services/publicCache.js";
 import { getPublishedTournament, getPublishedTournamentForPublicRequest } from "../services/tournamentRepository.js";
 import { buildGroupedStandings, buildStandings } from "../services/standingsEngine.js";
 import { stageTabsForFormat } from "../services/formatGenerator.js";
@@ -102,6 +107,7 @@ function fallbackTournament(identifier) {
     registration_deadline: null,
     discord_url: "https://discord.gg/sV2PhYc6A3",
     rulebook: "Rules will be published before tournament lock-in.",
+    live_youtube_url: "",
     announcements: ["Tournament setup is in progress."],
     banner_announcements: [],
     visibility_mode: "demo",
@@ -240,9 +246,23 @@ function assertPublishedOpen(data) {
   }
 }
 
+const PUBLIC_HTTP_CACHE = "public, max-age=5, stale-while-revalidate=20";
+
+async function cachedPublicJson(res, cacheKey, loader) {
+  let payload = getCachedPublicPayload(cacheKey);
+  if (!payload) {
+    payload = await loader();
+    setCachedPublicPayload(cacheKey, payload);
+  }
+  res.set("Cache-Control", PUBLIC_HTTP_CACHE);
+  return res.json(payload);
+}
+
 router.get("/tournament", async (_req, res, next) => {
   try {
-    return res.json(await publicPayload(await getPublishedTournament()));
+    return await cachedPublicJson(res, "tournament:published", async () =>
+      publicPayload(await getPublishedTournament()),
+    );
   } catch (error) {
     return next(error);
   }
@@ -250,8 +270,11 @@ router.get("/tournament", async (_req, res, next) => {
 
 router.get("/tournaments/:identifier", async (req, res, next) => {
   try {
-    const data = await getPublishedTournamentForPublicRequest(req.params.identifier);
-    return res.json(await publicPayload(data, req.params.identifier));
+    const identifier = String(req.params.identifier || "").trim().toLowerCase();
+    return await cachedPublicJson(res, `tournament:${identifier}`, async () => {
+      const data = await getPublishedTournamentForPublicRequest(req.params.identifier);
+      return publicPayload(data, req.params.identifier);
+    });
   } catch (error) {
     return next(error);
   }
@@ -392,6 +415,7 @@ router.post("/tournaments/:identifier/register/complete", async (req, res, next)
     } catch (err) {
       console.error("[email] submitted registration mail failed:", err?.message || err);
     }
+    invalidatePublicCache();
     return res.status(200).json({ registration });
   } catch (error) {
     return next(error);

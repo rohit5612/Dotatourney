@@ -1,3 +1,5 @@
+import { cachedGet } from "./requestCache.js";
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 const TOKEN_KEY = "bpcl-admin-token";
 
@@ -76,7 +78,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  getPublicTournament: () => request("/public/tournament"),
+  getPublicTournament: () =>
+    cachedGet("public:tournament", () => request("/public/tournament"), { ttlMs: 20_000, persist: true }),
   getRegistrationSession: (identifier, email, publicCode) => {
     const q = new URLSearchParams({ email: String(email || "").trim() });
     if (publicCode) q.set("code", String(publicCode).trim());

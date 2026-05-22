@@ -1,0 +1,2 @@
+ALTER TABLE tournaments
+  ADD COLUMN IF NOT EXISTS live_youtube_url TEXT NOT NULL DEFAULT '';

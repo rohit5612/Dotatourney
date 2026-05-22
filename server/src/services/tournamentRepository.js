@@ -120,11 +120,11 @@ export async function createTournament(payload) {
     INSERT INTO tournaments (
       id, name, slug, format, series_type, team_count, dark_mode, series_rules,
       description, prize_pool, prize_pool_breakdown, entry_fee, start_date, end_date, registration_deadline,
-      discord_url, rulebook, announcements, banner_announcements, visibility_mode, bracket_active, status,
+      discord_url, rulebook, live_youtube_url, announcements, banner_announcements, visibility_mode, bracket_active, status,
       registration_code_prefix, registration_code_seq, payment_qr_image, payment_upi_id, registrations_open
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, 'draft',
-      $21, $22, $23, $24, $25, $26)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, 'draft',
+      $22, $23, $24, $25, $26, $27)
     RETURNING *;
   `;
   const values = [
@@ -145,6 +145,7 @@ export async function createTournament(payload) {
     payload.registrationDeadline || null,
     payload.discordUrl || "",
     payload.rulebook || "",
+    payload.liveYoutubeUrl || "",
     JSON.stringify(payload.announcements || []),
     JSON.stringify(payload.bannerAnnouncements || []),
     payload.visibilityMode || "demo",
@@ -178,15 +179,16 @@ export async function updateTournament(tournamentId, payload) {
         registration_deadline = $15,
         discord_url = $16,
         rulebook = $17,
-        announcements = $18,
-        banner_announcements = $19,
-        visibility_mode = $20,
-        bracket_active = $21,
-        status = CASE WHEN is_published THEN status ELSE COALESCE($22, status) END,
-        registration_code_prefix = $23,
-        payment_qr_image = $24,
-        payment_upi_id = $25,
-        registrations_open = $26,
+        live_youtube_url = $18,
+        announcements = $19,
+        banner_announcements = $20,
+        visibility_mode = $21,
+        bracket_active = $22,
+        status = CASE WHEN is_published THEN status ELSE COALESCE($23, status) END,
+        registration_code_prefix = $24,
+        payment_qr_image = $25,
+        payment_upi_id = $26,
+        registrations_open = $27,
         updated_at = NOW()
     WHERE id = $1
     RETURNING *;
@@ -209,6 +211,7 @@ export async function updateTournament(tournamentId, payload) {
     payload.registrationDeadline || null,
     payload.discordUrl || "",
     payload.rulebook || "",
+    payload.liveYoutubeUrl || "",
     JSON.stringify(payload.announcements || []),
     JSON.stringify(payload.bannerAnnouncements || []),
     payload.visibilityMode || "demo",

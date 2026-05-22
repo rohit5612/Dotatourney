@@ -1,0 +1,47 @@
+@import "./landing-panel.css";
+
+.landing-livestream {
+  width: 100%;
+}
+
+.landing-livestream__label {
+  margin: 0 0 0.5rem;
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.landing-livestream__frame {
+  overflow: hidden;
+  border-radius: 0.95rem;
+  padding: 0;
+}
+
+.landing-livestream__iframe {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 12rem;
+  border: 0;
+  background: rgb(0 0 0 / 0.5);
+}
+
+.landing-livestream--below-countdown {
+  margin-top: clamp(0.85rem, 2.5vw, 1.15rem);
+}
+
+.landing-livestream--hero {
+  width: 100%;
+}
+
+.landing-livestream--hero .landing-livestream__iframe {
+  min-height: 14rem;
+}
+
+@media (min-width: 1024px) {
+  .landing-livestream--hero .landing-livestream__iframe {
+    min-height: 16.5rem;
+  }
+}

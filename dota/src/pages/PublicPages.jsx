@@ -1,10 +1,15 @@
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { HiOutlineBolt, HiOutlineChatBubbleLeftRight, HiOutlineTrophy } from "react-icons/hi2";
+import {
+  HiOutlineArrowDownTray,
+  HiOutlineBolt,
+  HiOutlineChatBubbleLeftRight,
+  HiOutlineDocumentText,
+  HiOutlineTrophy,
+} from "react-icons/hi2";
 import { FaExternalLinkAlt, FaYoutube } from "react-icons/fa";
 import { AppFooter } from "../components/AppFooter";
 import { PageLoadingSpinner } from "../components/PageLoadingSpinner";
-import { BracketDiagram } from "../components/BracketDiagram";
 import {
   augmentGroupedBracketMatches,
   buildStageTabLabels,
@@ -23,21 +28,18 @@ import {
   PLAYER_RULES_SECTIONS,
 } from "../constants/playerRules.js";
 import { COOKIE_CONSENT_KEY, PUBLIC_CONTACT_EMAIL } from "../constants/legal.js";
-import { SITE_BRAND_FULL, SITE_BRAND_LINE, SITE_BRAND_SHORT } from "../constants/siteMeta.js";
+import { RULEBOOK_PDF_PATH, SITE_BRAND_FULL, SITE_BRAND_LINE, SITE_BRAND_SHORT } from "../constants/siteMeta.js";
 import { roles } from "../constants/tournament";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock.js";
 import { api } from "../lib/api";
+import { peekCache } from "../lib/requestCache.js";
 import { LandingBannerAnnouncement } from "../components/LandingBannerAnnouncement.jsx";
 import { LandingCoreTeam } from "../components/LandingCoreTeam.jsx";
 import { LandingSponsors } from "../components/LandingSponsors.jsx";
 import { CoSponsorSpotlight } from "../components/CoSponsorSpotlight.jsx";
 import { getCoSponsor } from "../constants/sponsors.js";
 import { LandingLeagueOverview } from "../components/LandingLeagueOverview.jsx";
-import { LandingTournamentStatus } from "../components/LandingTournamentStatus.jsx";
-import "../styles/landing-hero.css";
-import "../styles/tournament-page.css";
-import "../styles/general-rules-page.css";
-import "../styles/schedule-page.css";
+import { TournamentStatusSlot } from "../components/TournamentStatusSlot.jsx";
 import "../styles/team-logo-img.css";
 import { TeamLogoImg } from "../components/TeamLogoImg.jsx";
 import { StandingsTable } from "../components/StandingsTable.jsx";
@@ -45,6 +47,16 @@ import { SiteNavbar } from "../components/navigation/SiteNavbar.jsx";
 const PublicTeamsPage = lazy(() =>
   import("../components/teams/PublicTeamsPage.jsx").then((module) => ({ default: module.PublicTeamsPage })),
 );
+const BracketDiagram = lazy(() =>
+  import("../components/BracketDiagram.jsx").then((module) => ({ default: module.BracketDiagram })),
+);
+
+const PUBLIC_ROUTE_STYLES = {
+  "/": () => import("../styles/landing-hero.css"),
+  "/tournament": () => import("../styles/tournament-page.css"),
+  "/schedule": () => import("../styles/schedule-page.css"),
+  "/rules": () => import("../styles/general-rules-page.css"),
+};
 import { PrimaryViewTabs, SchedulePhaseTabs } from "../components/navigation/TournamentTabs.jsx";
 import {
   getMatchDisplayScores,
@@ -335,9 +347,9 @@ function EventShell({ path, navigate, children, registerClosedCentered = false }
 }
 
 export function PublicApp({ path, navigate }) {
-  const [event, setEvent] = useState(null);
+  const [event, setEvent] = useState(() => peekCache("public:tournament") ?? null);
   const [message, setMessage] = useState("");
-  const [publicBootstrapDone, setPublicBootstrapDone] = useState(false);
+  const [publicBootstrapDone, setPublicBootstrapDone] = useState(() => peekCache("public:tournament") != null);
 
   useEffect(() => {
     let active = true;
@@ -356,6 +368,11 @@ export function PublicApp({ path, navigate }) {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    const loadStyles = PUBLIC_ROUTE_STYLES[path];
+    if (loadStyles) void loadStyles();
+  }, [path]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
@@ -572,9 +589,11 @@ function LandingPage({ event, navigate, message }) {
       <div className="landing-stats-to-overview">
         <RevealSection>
           <section id="landing-explore" className="landing-stats relative mx-auto max-w-6xl scroll-mt-20 px-4">
-            <LandingTournamentStatus
+            <TournamentStatusSlot
+              placement="home"
               startDate={tournament?.start_date}
               endDate={tournament?.end_date}
+              liveYoutubeUrl={tournament?.live_youtube_url}
               fallbackStart={defaultTournamentStart}
               navigate={navigate}
             />
@@ -958,9 +977,11 @@ function TournamentInfo({ event, message, navigate }) {
             />
           </div>
           <div className="tournament-hero-countdown">
-            <LandingTournamentStatus
+            <TournamentStatusSlot
+              placement="tournament"
               startDate={tournament?.start_date}
               endDate={tournament?.end_date}
+              liveYoutubeUrl={tournament?.live_youtube_url}
               fallbackStart={defaultTournamentStart}
               navigate={navigate}
             />
@@ -1582,15 +1603,17 @@ function PublicSchedule({ event, message }) {
                   <h3 className="schedule-page__block-title">{tab.label}</h3>
                   <p className="schedule-page__block-copy">Bracket progression for this stage.</p>
                 </div>
-                <BracketDiagram
-                  matches={matches}
-                  blastSeedMatches={event?.matches ?? []}
-                  playoffFeedMatches={
-                    tab.id === "blast-qualifiers"
-                      ? (groupedMatches["blast-playoffs"] || []).filter((m) => (m.roundIndex ?? 0) === 0)
-                      : undefined
-                  }
-                />
+                <Suspense fallback={<PageLoadingSpinner label="Loading bracket…" />}>
+                  <BracketDiagram
+                    matches={matches}
+                    blastSeedMatches={event?.matches ?? []}
+                    playoffFeedMatches={
+                      tab.id === "blast-qualifiers"
+                        ? (groupedMatches["blast-playoffs"] || []).filter((m) => (m.roundIndex ?? 0) === 0)
+                        : undefined
+                    }
+                  />
+                </Suspense>
               </section>
             );
           })}
@@ -1745,6 +1768,26 @@ function GeneralRulesPage({ discordUrl }) {
           These rules cover player behavior, eligibility, communication, and fair-play expectations for every {SITE_BRAND_FULL} event.
         </p>
         <p className="general-rules-intro__notice">{PLAYER_RULES_REGISTRATION_NOTICE}</p>
+        <div className="general-rules-intro__rulebook">
+          <a
+            className="general-rules-rulebook-card"
+            href={RULEBOOK_PDF_PATH}
+            download="BPC-League-Rulebook.pdf"
+          >
+            <span className="general-rules-rulebook-card__icon" aria-hidden>
+              <HiOutlineDocumentText />
+            </span>
+            <span className="general-rules-rulebook-card__copy">
+              <span className="general-rules-rulebook-card__eyebrow">Official document</span>
+              <span className="general-rules-rulebook-card__title">Download full rulebook</span>
+              <span className="general-rules-rulebook-card__meta">PDF · player conduct, eligibility & tournament rules</span>
+            </span>
+            <span className="general-rules-rulebook-card__action" aria-hidden>
+              <HiOutlineArrowDownTray className="general-rules-rulebook-card__action-icon" />
+              <span className="general-rules-rulebook-card__action-label">Download</span>
+            </span>
+          </a>
+        </div>
       </header>
       <div className="general-rules-page__list">
         {PLAYER_RULES_SECTIONS.map(([title, body]) => (
