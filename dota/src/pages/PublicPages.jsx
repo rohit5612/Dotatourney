@@ -1584,11 +1584,14 @@ function PublicSchedule({ event, message }) {
       {viewMode === "bracket" ? (
         <>
           {(event?.groupedStandings || []).length ? (
-            <section className="schedule-page__block landing-panel space-y-3">
-              <h3 className="schedule-page__block-title">Group standings</h3>
-              <div className="grid gap-3 lg:grid-cols-2">
+            <section className="schedule-page__block landing-panel schedule-page__standings-block">
+              <div className="schedule-page__standings-head">
+                <h3 className="schedule-page__block-title">Group standings</h3>
+                <p className="schedule-page__block-copy">Live group-stage records.</p>
+              </div>
+              <div className="schedule-page__standings-grid">
                 {event.groupedStandings.map((group) => (
-                  <StandingsTable key={group.id} title={group.label} rows={group.rows} />
+                  <StandingsTable key={group.id} title={group.label} rows={group.rows} variant="public" teamLookup={teamByName} />
                 ))}
               </div>
             </section>
