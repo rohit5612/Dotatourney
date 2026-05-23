@@ -22,6 +22,7 @@ import {
   sendPlayerRegistrationSubmittedEmail,
   sendPlayerRegistrationVerifiedEmail,
 } from "../services/emailService.js";
+import { resolvePublicTeamLogo } from "../utils/teamLogoUrl.js";
 
 const router = express.Router();
 
@@ -157,7 +158,7 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
   const matches = data.matches.map((match) => publicMatch(match, visibilityMode));
   const workingTeamLogos = new Map(
     (data.teams || []).flatMap((team) => {
-      const logo = team.logoUrl || team.logo_url || "";
+      const logo = resolvePublicTeamLogo(team.logoUrl || team.logo_url || "");
       if (!logo) return [];
       return [
         [team.id, logo],
@@ -176,11 +177,11 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
     }),
   );
   const resolveTeamLogo = (team) =>
-    team.logoUrl ||
-    team.logo_url ||
-    workingTeamLogos.get(team.sourceTeamId) ||
-    workingTeamLogos.get(String(team.name || "").trim().toLowerCase()) ||
-    "";
+    resolvePublicTeamLogo(
+      team.logoUrl || team.logo_url || "",
+      workingTeamLogos.get(team.sourceTeamId) || "",
+      workingTeamLogos.get(String(team.name || "").trim().toLowerCase()) || "",
+    );
   const resolveTeamAccent = (team) =>
     team.accentColor ||
     team.accent_color ||
@@ -219,7 +220,7 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
         : (data.teams || []).map((team) => ({
             id: team.id,
             name: team.name,
-            logoUrl: team.logoUrl || team.logo_url || "",
+            logoUrl: resolvePublicTeamLogo(team.logoUrl || team.logo_url || ""),
             accentColor: team.accentColor || team.accent_color || "",
           })),
     matches,
