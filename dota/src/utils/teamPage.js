@@ -1,3 +1,5 @@
+import { resolvePublicTeamLogo } from "./teamLogoUrl.js";
+
 const ROLE_ORDER = ["Carry", "Mid", "Offlane", "Soft support", "Hard support"];
 
 export { ROLE_ORDER };
@@ -194,7 +196,7 @@ export function buildTeamSetupLookup(setupTeams) {
   const accentsByName = new Map();
 
   for (const team of setupTeams || []) {
-    const logo = String(team.logoUrl || team.logo_url || "").trim();
+    const logo = resolvePublicTeamLogo(team.logoUrl || team.logo_url || "");
     const accent = String(team.accentColor || team.accent_color || "").trim();
     if (team.id) {
       if (logo) logosById.set(team.id, logo);
@@ -212,17 +214,15 @@ export function buildTeamSetupLookup(setupTeams) {
 
 export function resolveTeamLogoFromSetup(team, setupTeamsOrLookup) {
   const direct = String(team?.logoUrl || team?.logo_url || "").trim();
-  if (direct) return direct;
-
   const lookup = setupTeamsOrLookup?.logosById
     ? setupTeamsOrLookup
     : buildTeamSetupLookup(setupTeamsOrLookup);
-
-  return (
+  const fromSetup =
     lookup.logosById.get(team?.sourceTeamId) ||
     lookup.logosByName.get(String(team?.name || "").trim().toLowerCase()) ||
-    ""
-  );
+    "";
+
+  return resolvePublicTeamLogo(direct, fromSetup);
 }
 
 export function resolveTeamAccentFromSetup(team, setupTeamsOrLookup) {

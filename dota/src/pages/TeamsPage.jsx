@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import { PlayerRoleIcons } from "../components/PlayerRoleIcons.jsx";
 import { roles } from "../constants/tournament";
+import { TEAM_LOGO_CATALOG } from "../constants/teamLogos.js";
 import { playerDisplayName, sortRolesByDefault } from "../utils/teamPage.js";
+import { isInlineTeamLogoUrl, isStaticTeamLogoUrl } from "../utils/teamLogoUrl.js";
 
 export function TeamsPage({
   teamDraft,
@@ -33,6 +35,7 @@ export function TeamsPage({
 }) {
   const [actionMenuTeamId, setActionMenuTeamId] = useState("");
   const [playerModalTeam, setPlayerModalTeam] = useState(null);
+  const [logoPickerTeam, setLogoPickerTeam] = useState(null);
   const [playerSearch, setPlayerSearch] = useState("");
   const [rosterName, setRosterName] = useState("");
   const assignedPlayers = poolDraft.filter((player) => player.teamId).length;
@@ -85,6 +88,11 @@ export function TeamsPage({
     const reader = new FileReader();
     reader.onload = () => updateTeam(team.id, { logoUrl: reader.result || "" });
     reader.readAsDataURL(file);
+  }
+
+  function selectCatalogLogo(team, url) {
+    updateTeam?.(team.id, { logoUrl: url });
+    setLogoPickerTeam(null);
   }
 
   function confirmDeleteTeam(team) {
@@ -191,6 +199,7 @@ export function TeamsPage({
             const roleCoverageText = missingRoles.length ? `Missing: ${missingRoles.join(", ")}` : "All roles covered";
             const logoUrl = team.logoUrl || team.logo_url || "";
             const accentColor = team.accentColor || team.accent_color || "#e9a84a";
+            const hasInlineLogo = isInlineTeamLogoUrl(logoUrl);
             const initials = (team.abbr || team.name || "?")
               .split(/\s+/)
               .map((part) => part[0])
@@ -209,8 +218,11 @@ export function TeamsPage({
                         <span className="font-serif text-2xl font-bold text-primary/75">{initials}</span>
                       )}
                     </div>
+                    <button type="button" className="btn btn-primary btn-xs" onClick={() => setLogoPickerTeam(team)}>
+                      {logoUrl && isStaticTeamLogoUrl(logoUrl) ? "Change logo" : "Choose logo"}
+                    </button>
                     <label className="btn btn-outline btn-xs cursor-pointer">
-                      {logoUrl ? "Change logo" : "Upload logo"}
+                      Upload custom
                       <input
                         type="file"
                         accept="image/*"
@@ -222,6 +234,11 @@ export function TeamsPage({
                         }}
                       />
                     </label>
+                    {hasInlineLogo ? (
+                      <p className="max-w-34 text-center text-[10px] leading-snug text-amber-600 dark:text-amber-400">
+                        Uploaded logo increases API payload — prefer catalog logos when possible.
+                      </p>
+                    ) : null}
                     {logoUrl ? (
                       <button type="button" className="text-[11px] text-muted-foreground underline-offset-2 hover:underline" onClick={() => updateTeam?.(team.id, { logoUrl: "" })}>
                         Remove logo
@@ -357,6 +374,38 @@ export function TeamsPage({
             </button>
           </div>
         </section>
+      ) : null}
+
+      {logoPickerTeam ? (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 p-4">
+          <div className="mx-auto max-w-2xl space-y-4 rounded-lg border border-border bg-card p-4 shadow-2xl">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="font-serif text-lg">Choose logo for {logoPickerTeam.name}</h3>
+                <p className="text-sm text-muted-foreground">Logos are served from the public site — fast and cacheable.</p>
+              </div>
+              <button type="button" className="btn btn-outline btn-sm" onClick={() => setLogoPickerTeam(null)}>
+                Close
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+              {TEAM_LOGO_CATALOG.map((entry) => {
+                const selected = logoPickerTeam.logoUrl === entry.url || logoPickerTeam.logo_url === entry.url;
+                return (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    className={`flex flex-col items-center gap-2 rounded-lg border p-3 transition hover:border-primary/60 hover:bg-background${selected ? " border-primary bg-background ring-2 ring-primary/30" : " border-border"}`}
+                    onClick={() => selectCatalogLogo(logoPickerTeam, entry.url)}
+                  >
+                    <img src={entry.url} alt="" className="h-16 w-16 object-contain" />
+                    <span className="text-center text-[11px] leading-tight text-muted-foreground">{entry.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {playerModalTeam ? (
