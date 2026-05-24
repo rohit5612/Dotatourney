@@ -99,3 +99,25 @@ export function applyBlastGroupSeeding(teams, matches) {
 
   return { matches: next, changedIds: [...changedIds] };
 }
+
+/**
+ * When both BO1 groups are finished, replace `Group A/B #n` placeholders in existing
+ * matches (Last chance, Play-In, playoffs) — no bracket regeneration required.
+ * @param {string} tournamentId
+ * @param {{ name: string }[]} teams
+ * @param {object[]} matches
+ * @param {(tournamentId: string, matchId: string, row: object) => Promise<unknown>} updateMatch
+ * @returns {Promise<{ matches: object[]; changed: boolean }>}
+ */
+export async function persistBlastGroupSeedingIfReady(tournamentId, teams, matches, updateMatch) {
+  const { matches: seeded, changedIds } = applyBlastGroupSeeding(teams, matches);
+  if (!changedIds.length) return { matches, changed: false };
+
+  for (const matchId of changedIds) {
+    const row = seeded.find((m) => String(m.id) === matchId);
+    if (row) {
+      await updateMatch(tournamentId, matchId, row);
+    }
+  }
+  return { matches: seeded, changed: true };
+}

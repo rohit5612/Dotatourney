@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import express from "express";
 import { z } from "zod";
-import { applyBlastGroupSeeding } from "../services/blastSeeding.js";
+import { persistBlastGroupSeedingIfReady } from "../services/blastSeeding.js";
 import { generateMatches, getFormatTeamCountMessage, stageTabsForFormat } from "../services/formatGenerator.js";
 import { buildGroupIndices, formatUsesGroupAssignment, validateGroupAssignment } from "../services/groupAssignment.js";
 import { applyProgression } from "../services/progressionEngine.js";
@@ -221,10 +221,18 @@ router.get("/:id", async (req, res, next) => {
     }
 
     const standingsTeams = data.approvedRoster?.teams || data.teams;
-    const standings = buildStandings(standingsTeams, data.matches, data.tournament.format);
-    const groupedStandings = buildGroupedStandings(standingsTeams, data.matches, data.tournament.format);
+    let matches = data.matches;
+    if (data.tournament.format === "blast") {
+      const seeded = await persistBlastGroupSeedingIfReady(req.params.id, standingsTeams, matches, updateMatch);
+      matches = seeded.matches;
+      if (seeded.changed) invalidatePublicCache();
+    }
+
+    const standings = buildStandings(standingsTeams, matches, data.tournament.format);
+    const groupedStandings = buildGroupedStandings(standingsTeams, matches, data.tournament.format);
     return res.json({
       ...data,
+      matches,
       tabs: stageTabsForFormat(data.tournament.format, { teamCount: data.tournament.team_count }),
       standings,
       groupedStandings,
@@ -547,17 +555,8 @@ router.post("/:id/matches/:matchId/result", async (req, res, next) => {
     const standingsTeams = snapshot.approvedRoster?.teams || snapshot.teams;
     let afterSeeding = progressed;
     if (snapshot.tournament.format === "blast") {
-      const { matches: seeded, changedIds } = applyBlastGroupSeeding(standingsTeams, progressed);
-      afterSeeding = seeded;
-      for (const matchId of changedIds) {
-        const matchRow = seeded.find((m) => String(m.id) === matchId);
-        if (matchRow) {
-          const saved = await updateMatch(req.params.id, matchId, matchRow);
-          if (!saved) {
-            return res.status(500).json({ message: "Failed to save BLAST seeding update" });
-          }
-        }
-      }
+      const seeded = await persistBlastGroupSeedingIfReady(req.params.id, standingsTeams, progressed, updateMatch);
+      afterSeeding = seeded.matches;
     }
 
     const standings = buildStandings(standingsTeams, afterSeeding, snapshot.tournament.format);

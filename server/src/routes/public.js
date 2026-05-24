@@ -15,6 +15,7 @@ import {
   setCachedPublicPayload,
 } from "../services/publicCache.js";
 import { getPublishedTournament, getPublishedTournamentForPublicRequest } from "../services/tournamentRepository.js";
+import { applyBlastGroupSeeding } from "../services/blastSeeding.js";
 import { buildGroupedStandings, buildStandings } from "../services/standingsEngine.js";
 import { stageTabsForFormat } from "../services/formatGenerator.js";
 import {
@@ -155,7 +156,7 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
   const approvedRegistrationCount = await countApprovedPlayerRegistrations(data.tournament.id);
 
   const visibilityMode = data.tournament.visibility_mode || "demo";
-  const matches = data.matches.map((match) => publicMatch(match, visibilityMode));
+  const format = data.tournament.format;
   const workingTeamLogos = new Map(
     (data.teams || []).flatMap((team) => {
       const logo = resolvePublicTeamLogo(team.logoUrl || team.logo_url || "");
@@ -207,9 +208,14 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
       : publicTeams.length > 0
         ? publicTeams
         : Array.from(
-            new Set(matches.flatMap((m) => [m.team1, m.team2]).filter((n) => typeof n === "string" && n.trim() !== "")),
+            new Set(data.matches.flatMap((m) => [m.team1, m.team2]).filter((n) => typeof n === "string" && n.trim() !== "")),
           ).map((name) => ({ name }));
-  const format = data.tournament.format;
+
+  let bracketMatches = data.matches;
+  if (format === "blast" && visibilityMode !== "demo") {
+    bracketMatches = applyBlastGroupSeeding(standingsTeams, bracketMatches).matches;
+  }
+  const matches = bracketMatches.map((match) => publicMatch(match, visibilityMode));
   return {
     tournament: data.tournament,
     teams: visibilityMode === "demo" ? [] : publicTeams,

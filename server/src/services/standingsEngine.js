@@ -2,6 +2,18 @@ import { compareBlastGroupTiebreak, mergeBlastFullRanking, neustadtlScore } from
 
 const BLAST_GROUP_STAGES = new Set(["blast-group-a", "blast-group-b"]);
 
+const BLAST_GROUP_STAGE_LABELS = {
+  "blast-group-a": "Group A",
+  "blast-group-b": "Group B",
+};
+
+/** Display / standings bucket for a league match (Group A/B when BLAST). */
+export function blastGroupLabelFromMatch(match) {
+  const gk = match.meta?.groupKey;
+  if (gk === "A" || gk === "B") return `Group ${gk}`;
+  return BLAST_GROUP_STAGE_LABELS[match.stageKey] || match.stageKey;
+}
+
 export function isBlastGroupMatch(match) {
   return BLAST_GROUP_STAGES.has(match.stageKey);
 }
@@ -133,7 +145,7 @@ export function buildGroupedStandings(teams, matches, format) {
   matches
     .filter((match) => leagueStages.has(match.stageKey) || match.meta?.groupKey)
     .forEach((match) => {
-      const key = match.meta?.groupKey ? `Group ${match.meta.groupKey}` : match.stageKey;
+      const key = blastGroupLabelFromMatch(match);
       if (!grouped[key]) grouped[key] = [];
       grouped[key].push(match);
     });
