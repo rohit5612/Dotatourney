@@ -68,6 +68,7 @@ import {
   scheduleViewHref,
 } from "../utils/schedule.js";
 import { buildTeamNameLookup, findTeamByName, teamInitials } from "../utils/teamPage.js";
+import { resolveBlastBracketMatches } from "../utils/blastSeeding.js";
 import { collectTeamLogoUrls, preloadTeamLogos } from "../utils/teamLogoCache.js";
 import { hexToRgbTriplet } from "../hooks/useLogoAccent.js";
 import { descriptionContentClassName, rulebookContentClassName, sanitizeDescriptionHtml, sanitizeRulebookHtml } from "../lib/sanitizeRulebookHtml.js";
@@ -353,21 +354,33 @@ export function PublicApp({ path, navigate }) {
 
   useEffect(() => {
     let active = true;
-    api
-      .getPublicTournament(tournamentSlug)
-      .then((payload) => {
-        if (active) setEvent(payload);
-      })
-      .catch((error) => {
-        if (active) setMessage(error.message);
-      })
-      .finally(() => {
-        if (active) setPublicBootstrapDone(true);
-      });
+    const load = () =>
+      api
+        .getPublicTournamentFresh()
+        .then((payload) => {
+          if (active) setEvent(payload);
+        })
+        .catch((error) => {
+          if (active) setMessage(error.message);
+        })
+        .finally(() => {
+          if (active) setPublicBootstrapDone(true);
+        });
+
+    load();
+    const poll = window.setInterval(load, 30_000);
     return () => {
       active = false;
+      window.clearInterval(poll);
     };
   }, []);
+
+  const displayEvent = useMemo(() => {
+    if (!event) return event;
+    const format = event.tournament?.format;
+    const matches = resolveBlastBracketMatches(event.matches || [], event.groupedStandings || [], format);
+    return { ...event, matches };
+  }, [event]);
 
   useEffect(() => {
     const loadStyles = PUBLIC_ROUTE_STYLES[path];
@@ -431,7 +444,7 @@ export function PublicApp({ path, navigate }) {
   if (path === "/schedule") {
     return (
       <EventShell path={path} navigate={navigate}>
-        <PublicSchedule event={event} message={message} />
+        <PublicSchedule event={displayEvent} message={message} />
       </EventShell>
     );
   }

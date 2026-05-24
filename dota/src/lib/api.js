@@ -1,4 +1,4 @@
-import { cachedGet } from "./requestCache.js";
+import { cachedGet, clearCache } from "./requestCache.js";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 const TOKEN_KEY = "bpcl-admin-token";
@@ -80,6 +80,8 @@ export const api = {
     }),
   getPublicTournament: () =>
     cachedGet("public:tournament", () => request("/public/tournament"), { ttlMs: 20_000, persist: true }),
+  getPublicTournamentFresh: () => request("/public/tournament"),
+  clearPublicTournamentCache: () => clearCache("public:tournament"),
   getRegistrationSession: (identifier, email, publicCode) => {
     const q = new URLSearchParams({ email: String(email || "").trim() });
     if (publicCode) q.set("code", String(publicCode).trim());

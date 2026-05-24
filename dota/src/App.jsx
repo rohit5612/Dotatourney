@@ -9,6 +9,7 @@ import { toDateInputValue, toDatetimeLocalValue } from "./utils/datetime";
 import { announcementsToAdminFormState, announcementsToApiPayload, bannerAnnouncementsToAdminFormState, bannerAnnouncementsToApiPayload } from "./lib/announcementEntries.js";
 import { PrimaryViewTabs } from "./components/navigation/TournamentTabs.jsx";
 import { augmentGroupedBracketMatches } from "./components/bracket/bracketLayout.js";
+import { resolveBlastBracketMatches } from "./utils/blastSeeding.js";
 import { createId, getInitialDarkMode } from "./utils/client";
 import { isGroupAssignmentValid } from "./utils/groupAssignment.js";
 import { playerDisplayName } from "./utils/teamPage.js";
@@ -722,7 +723,14 @@ function App() {
   }
 
   async function submitResult(matchId, winner) {
-    await api.recordResult(tournamentId, matchId, winner);
+    const result = await api.recordResult(tournamentId, matchId, winner);
+    api.clearPublicTournamentCache();
+    setState((prev) => ({
+      ...prev,
+      matches: result.matches ?? prev?.matches,
+      standings: result.standings ?? prev?.standings,
+      groupedStandings: result.groupedStandings ?? prev?.groupedStandings,
+    }));
     await refreshTournament(tournamentId, { keepActiveTab: true });
   }
 
@@ -762,14 +770,21 @@ function App() {
     setMessage("Import completed.");
   }
 
+  const bracketState = useMemo(() => {
+    if (!state) return state;
+    const format = setup?.format || state.tournament?.format;
+    const matches = resolveBlastBracketMatches(state.matches || [], state.groupedStandings || [], format);
+    return { ...state, matches };
+  }, [state, setup?.format]);
+
   const groupedMatches = useMemo(() => {
     const groups = {};
-    (state?.matches || []).forEach((match) => {
+    (bracketState?.matches || []).forEach((match) => {
       if (!groups[match.stageKey]) groups[match.stageKey] = [];
       groups[match.stageKey].push(match);
     });
     return augmentGroupedBracketMatches(groups);
-  }, [state?.matches]);
+  }, [bracketState?.matches]);
 
   async function logout() {
     await api.logoutAdmin().catch(() => {});
@@ -920,7 +935,7 @@ function App() {
             {bracketScheduleView === "brackets" ? (
               <Suspense fallback={<PageLoadingSpinner label="Loading bracket…" />}>
               <BracketPage
-                state={state}
+                state={bracketState}
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
                 groupedMatches={groupedMatches}
@@ -940,7 +955,7 @@ function App() {
               <div className="relative left-1/2 w-[min(100vw-2rem,88rem)] max-w-none -translate-x-1/2">
                 <Suspense fallback={<PageLoadingSpinner label="Loading schedule…" />}>
                 <SchedulePage
-                  state={state}
+                  state={bracketState}
                   saveCustomSchedule={saveCustomSchedule}
                   teamDraft={teamDraft}
                   approvedRoster={approvedRoster}
