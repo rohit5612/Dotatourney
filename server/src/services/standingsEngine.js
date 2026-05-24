@@ -1,4 +1,4 @@
-import { mergeBlastFullRanking, neustadtlScore } from "./blastStandings.js";
+import { compareBlastGroupTiebreak, mergeBlastFullRanking, neustadtlScore } from "./blastStandings.js";
 
 const BLAST_GROUP_STAGES = new Set(["blast-group-a", "blast-group-b"]);
 
@@ -22,25 +22,6 @@ function ensureStats(statMap, name) {
       tiebreakScore: 0,
     };
   }
-}
-
-/** Sort helper: negative if a should rank above b (BO1 group head-to-head). */
-function headToHeadNet(teamA, teamB, finishedMatches) {
-  let aWins = 0;
-  let bWins = 0;
-  for (const m of finishedMatches) {
-    if (!m.winner) continue;
-    if (m.team1 === teamA && m.team2 === teamB) {
-      if (m.winner === teamA) aWins += 1;
-      else bWins += 1;
-    } else if (m.team1 === teamB && m.team2 === teamA) {
-      if (m.winner === teamA) aWins += 1;
-      else bWins += 1;
-    }
-  }
-  if (aWins > bWins) return -1;
-  if (bWins > aWins) return 1;
-  return 0;
 }
 
 export function buildStandings(teams, matches, format, options = {}) {
@@ -104,9 +85,8 @@ export function buildStandings(teams, matches, format, options = {}) {
   entries.sort((a, b) => {
     if (b.wins !== a.wins) return b.wins - a.wins;
     if (blastGroupStandings) {
-      const h = headToHeadNet(a.team, b.team, finishedGroupMatches);
-      if (h !== 0) return h;
-      if ((b.neustadtl ?? 0) !== (a.neustadtl ?? 0)) return (b.neustadtl ?? 0) - (a.neustadtl ?? 0);
+      const tb = compareBlastGroupTiebreak(a, b, entries, finishedGroupMatches);
+      if (tb !== 0) return tb;
     }
     if (b.winPct !== a.winPct) return b.winPct - a.winPct;
     return b.tiebreakScore - a.tiebreakScore;
