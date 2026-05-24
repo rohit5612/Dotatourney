@@ -311,17 +311,14 @@ describe("BLAST grouped standings", () => {
     const teams = teamList(10);
     const matches = generateMatches("blast", teams.map((t) => t.name), {});
     const standings = buildStandings(teams, matches, "blast");
-    assert.ok(standings.every((r) => r.status === "in_progress"));
+    assert.equal(standings.length, 0);
   });
 
-  it("global blast standings for n=12 use merged group BO1 only (playoffs excluded)", () => {
+  it("n=12 omits global standings (bracket uses Group A/B #n only)", () => {
     const teams = teamList(12);
     const matches = generateMatches("blast", teams.map((t) => t.name), {});
     const withResults = matches.map((m) => {
       if (m.stageKey === "blast-group-a" || m.stageKey === "blast-group-b") {
-        return { ...m, winner: m.team1, status: "finished" };
-      }
-      if (m.stageKey === "blast-playoffs" && m.roundIndex === 0 && m.matchIndex === 0) {
         return { ...m, winner: m.team1, status: "finished" };
       }
       return m;
@@ -330,17 +327,24 @@ describe("BLAST grouped standings", () => {
     const grouped = buildGroupedStandings(teams, withResults, "blast");
     const gA = grouped.find((g) => g.label === "Group A");
     assert.ok(gA?.rows?.length);
-
-    const groupLeader = gA.rows[0];
-    assert.equal(groupLeader.played, 5);
-    assert.equal(groupLeader.wins, 5);
+    assert.equal(gA.rows[0].wins, 5);
 
     const standings = buildStandings(teams, withResults, "blast");
-    assert.equal(standings.length, 12);
-    const mergedLeader = standings.find((row) => row.team === groupLeader.team);
-    assert.equal(mergedLeader?.played, 5);
-    assert.equal(mergedLeader?.wins, 5);
-    assert.equal(standings[0].team, groupLeader.team);
+    assert.equal(standings.length, 0);
+  });
+
+  it("n=14 global blast standings merge both groups (tiered side bracket)", () => {
+    const teams = teamList(14);
+    const matches = generateMatches("blast", teams.map((t) => t.name), {});
+    const withResults = matches.map((m) => {
+      if (m.stageKey === "blast-group-a" || m.stageKey === "blast-group-b") {
+        return { ...m, winner: m.team1, status: "finished" };
+      }
+      return m;
+    });
+
+    const standings = buildStandings(teams, withResults, "blast");
+    assert.equal(standings.length, 14);
   });
 
   it("generateMatches('blast') respects custom groupIndices", () => {

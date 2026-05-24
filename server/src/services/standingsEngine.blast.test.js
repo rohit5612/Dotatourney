@@ -6,7 +6,7 @@ import {
   miniLeagueWins,
   neustadtlScore,
 } from "./blastStandings.js";
-import { buildGroupedStandings, buildStandings } from "./standingsEngine.js";
+import { buildGroupedStandings, buildStandings, blastBracketUsesGroupRanksOnly } from "./standingsEngine.js";
 
 function blastGroupMatch(team1, team2, winner, groupKey = "A") {
   return {
@@ -115,5 +115,11 @@ describe("BLAST group tiebreakers (wins → mini-league H2H → direct H2H → N
     assert.ok(gA);
     assert.equal(gA.rows[0].team, "Arrise Corp");
     assert.equal(gA.rows[1].team, "Ashborn");
+  });
+
+  it("n=12 uses group-rank bracket path — no merged global standings row set", () => {
+    assert.equal(blastBracketUsesGroupRanksOnly(12), true);
+    assert.equal(blastBracketUsesGroupRanksOnly(10), true);
+    assert.equal(blastBracketUsesGroupRanksOnly(14), false);
   });
 });

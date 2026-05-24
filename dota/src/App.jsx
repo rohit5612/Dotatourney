@@ -973,6 +973,7 @@ function App() {
           <StandingsPage
             standings={state?.standings}
             groupedStandings={state?.groupedStandings}
+            teamCount={setup?.teamCount || state?.tournament?.team_count || 0}
             format={state?.tournament?.format}
           />
           </Suspense>

@@ -129,6 +129,15 @@ export function getBlastPhaseSizesUi(n) {
   };
 }
 
+/** n=10 / n=12: bracket slots use Group A/B #n only — not merged global ranks. */
+export function blastBracketUsesGroupRanksOnly(teamCount) {
+  const sizes = getBlastPhaseSizesUi(teamCount);
+  if (!sizes) return false;
+  if (sizes.mainPlayoffPath === "ten_qf_seconds") return true;
+  if (sizes.mainPlayoffPath === "tiered_merged_standings" && teamCount === 12) return true;
+  return false;
+}
+
 /** Last chance series keys (depth depends on entrant count; generator picks among these). */
 const blastLcSeriesTemplates = [
   { key: "blast-lc-quarterfinal", label: "Last Chance — bracket round of 8 (if used)", defaultSeries: "bo3" },

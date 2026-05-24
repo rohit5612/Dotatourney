@@ -1,4 +1,5 @@
 import { compareBlastGroupTiebreak, mergeBlastFullRanking, neustadtlScore } from "./blastStandings.js";
+import { getBlastPhaseSizes } from "./formatGenerator.js";
 
 const BLAST_GROUP_STAGES = new Set(["blast-group-a", "blast-group-b"]);
 
@@ -36,6 +37,19 @@ function ensureStats(statMap, name) {
   }
 }
 
+/**
+ * n=10 and n=12 BLAST brackets seed from in-group rank (`Group A/B #n`) only.
+ * Merged global standings would conflict with bracket slots — skip for those sizes.
+ * @param {number} teamCount
+ */
+export function blastBracketUsesGroupRanksOnly(teamCount) {
+  const sizes = getBlastPhaseSizes(teamCount);
+  if (!sizes) return false;
+  if (sizes.mainPlayoffPath === "ten_qf_seconds") return true;
+  if (sizes.mainPlayoffPath === "tiered_merged_standings" && teamCount === 12) return true;
+  return false;
+}
+
 export function buildStandings(teams, matches, format, options = {}) {
   const blastGroupStandings = format === "blast" && options.blastGroupStandings === true;
 
@@ -43,6 +57,10 @@ export function buildStandings(teams, matches, format, options = {}) {
     const grouped = buildGroupedStandings(teams, matches, format);
     const gA = grouped.find((group) => group.label === "Group A");
     const gB = grouped.find((group) => group.label === "Group B");
+    const teamCount = (gA?.rows?.length || 0) + (gB?.rows?.length || 0);
+    if (blastBracketUsesGroupRanksOnly(teamCount)) {
+      return [];
+    }
     if (gA?.rows?.length && gB?.rows?.length) {
       const order = mergeBlastFullRanking(gA.rows, gB.rows);
       const rowByTeam = new Map([...gA.rows, ...gB.rows].map((row) => [row.team, row]));
