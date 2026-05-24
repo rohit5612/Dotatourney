@@ -124,8 +124,21 @@ export function buildStandings(teams, matches, format, options = {}) {
 
   if (format === "blast") {
     if (blastGroupStandings) {
+      const groupSize = entries.length;
       entries.forEach((entry, index) => {
-        entry.status = index < 2 ? "advancing" : "in_progress";
+        if (groupSize === 6) {
+          if (index === 0) entry.status = "advancing";
+          else if (index === 1) entry.status = "play_in_cross";
+          else if (index <= 3) entry.status = "play_in_middle";
+          else entry.status = "last_chance";
+        } else if (groupSize === 5) {
+          if (index === 0) entry.status = "advancing";
+          else if (index === 1) entry.status = "playoff_qf";
+          else if (index === 2) entry.status = "play_in";
+          else entry.status = "last_chance";
+        } else {
+          entry.status = index < 2 ? "advancing" : "in_progress";
+        }
       });
     } else {
       entries.forEach((entry) => {

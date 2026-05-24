@@ -54,13 +54,10 @@ function validateTeamCount(format, teamCount) {
 }
 
 function addMatch(result, teams, stageKey, roundIndex, matchIndex, team1, team2, seriesRules, seriesRuleKey, meta = {}) {
-  result.push(
-    match(team1, team2, stageKey, roundIndex, matchIndex, {
-      ...meta,
-      seriesRuleKey,
-      seriesType: resolveSeries(seriesRules, seriesRuleKey),
-    }),
-  );
+  const slotMeta = { ...meta, seriesRuleKey, seriesType: resolveSeries(seriesRules, seriesRuleKey) };
+  if (typeof team1 === "string" && /^Group [AB] #\d+$/.test(team1)) slotMeta.blastSlot1 = team1;
+  if (typeof team2 === "string" && /^Group [AB] #\d+$/.test(team2)) slotMeta.blastSlot2 = team2;
+  result.push(match(team1, team2, stageKey, roundIndex, matchIndex, slotMeta));
 }
 
 function roundRobinPairs(indices) {

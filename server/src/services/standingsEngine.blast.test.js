@@ -66,7 +66,7 @@ describe("BLAST group tiebreakers (wins → mini-league H2H → direct H2H → N
       ],
     );
     assert.equal(rows[0].status, "advancing");
-    assert.equal(rows[1].status, "advancing");
+    assert.equal(rows[1].status, "play_in_cross");
     assert.equal(rows[0].wins, 3);
     assert.equal(rows[1].wins, 3);
 

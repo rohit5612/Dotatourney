@@ -129,6 +129,41 @@ describe("BLAST n=12 qualifier & semifinal seeding paths", () => {
     }
   });
 
+  it("re-syncs wrong persisted seeds (Ashborn in SF → Arrise SF, Ashborn crossover only)", () => {
+    const groupAOrder = [
+      "Arrise Corp",
+      "Ashborn",
+      "Invictus",
+      "Phantom Division",
+      "Crimson Veil",
+      "Chaos Rift",
+    ];
+    const groupBOrder = ["T7", "T8", "T9", "T10", "T11", "T12"];
+    const teams = [
+      ...groupAOrder.map((name) => ({ name })),
+      ...groupBOrder.map((name) => ({ name })),
+    ];
+
+    const raw = generateMatches("blast", teams.map((t) => t.name), {});
+    const finished = finishGroupsWithOrder(raw, groupAOrder, groupBOrder);
+
+    const wronglySeeded = finished.map((m) => {
+      if (m.stageKey === "blast-playoffs" && m.roundIndex === 1 && m.matchIndex === 0) {
+        return { ...m, team1: "Ashborn", team2: m.team2 };
+      }
+      if (m.meta?.seriesRuleKey === "blast-playin-cross" && m.matchIndex === 0) {
+        return { ...m, team1: "Arrise Corp", team2: m.team2 };
+      }
+      return m;
+    });
+
+    const { matches: fixed } = applyBlastGroupSeeding(teams, wronglySeeded);
+    const sf = fixed.find((m) => m.stageKey === "blast-playoffs" && m.roundIndex === 1 && m.matchIndex === 0);
+    const cross = fixed.find((m) => m.meta?.seriesRuleKey === "blast-playin-cross" && m.matchIndex === 0);
+    assert.equal(sf?.team1, "Arrise Corp");
+    assert.equal(cross?.team1, "Ashborn");
+  });
+
   it("resolves Group A/B labels from stageKey when meta.groupKey is absent (legacy matches)", () => {
     const match = { stageKey: "blast-group-a", meta: {} };
     assert.equal(blastGroupLabelFromMatch(match), "Group A");

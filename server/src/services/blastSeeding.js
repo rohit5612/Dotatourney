@@ -1,5 +1,10 @@
 import { getBlastPhaseSizes } from "./formatGenerator.js";
 import { mergeBlastFullRanking } from "./blastStandings.js";
+import {
+  blastGroupSlotResyncAllowed,
+  blastGroupSlotsForMatch,
+  resolveBlastGroupTeam,
+} from "./blastGroupSlots.js";
 import { buildGroupedStandings } from "./standingsEngine.js";
 
 function blastGroupStageFinished(matches) {
@@ -88,13 +93,34 @@ export function applyBlastGroupSeeding(teams, matches) {
     return { matches, changedIds: [] };
   }
 
+  const grouped = buildGroupedStandings(teams, matches, "blast");
+  const gA = grouped.find((g) => g.label === "Group A");
+  const gB = grouped.find((g) => g.label === "Group B");
+  const teamCount = (gA?.rows?.length || 0) + (gB?.rows?.length || 0);
+
   const changedIds = new Set();
   const next = matches.map((m) => {
-    const t1 = m.team1 in placeholderMap ? placeholderMap[m.team1] : m.team1;
-    const t2 = m.team2 in placeholderMap ? placeholderMap[m.team2] : m.team2;
-    if (t1 === m.team1 && t2 === m.team2) return m;
+    const slots = blastGroupSlotsForMatch(m, teamCount);
+    const hasGroupSlot = slots.blastSlot1 || slots.blastSlot2 || m.team1 in placeholderMap || m.team2 in placeholderMap;
+    if (!hasGroupSlot) return m;
+
+    const canResync = blastGroupSlotResyncAllowed(m);
+    const t1 = canResync
+      ? resolveBlastGroupTeam(m.team1, slots.blastSlot1, placeholderMap)
+      : resolveBlastGroupTeam(m.team1, undefined, placeholderMap);
+    const t2 = canResync
+      ? resolveBlastGroupTeam(m.team2, slots.blastSlot2, placeholderMap)
+      : resolveBlastGroupTeam(m.team2, undefined, placeholderMap);
+
+    const meta = { ...(m.meta || {}) };
+    if (slots.blastSlot1) meta.blastSlot1 = slots.blastSlot1;
+    if (slots.blastSlot2) meta.blastSlot2 = slots.blastSlot2;
+
+    if (t1 === m.team1 && t2 === m.team2 && meta.blastSlot1 === m.meta?.blastSlot1 && meta.blastSlot2 === m.meta?.blastSlot2) {
+      return m;
+    }
     changedIds.add(String(m.id));
-    return { ...m, team1: t1, team2: t2 };
+    return { ...m, team1: t1, team2: t2, meta };
   });
 
   return { matches: next, changedIds: [...changedIds] };
