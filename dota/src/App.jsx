@@ -739,6 +739,29 @@ function App() {
     await refreshTournament(tournamentId, { keepActiveTab: true });
   }
 
+  async function applySeriesRulesToUpcoming() {
+    if (!tournamentId) {
+      setMessage("Create or select a tournament first.");
+      return;
+    }
+    try {
+      const result = await api.applySeriesRules(tournamentId);
+      setState((prev) => ({
+        ...prev,
+        matches: result.matches ?? prev?.matches,
+      }));
+      await refreshTournament(tournamentId, { keepActiveTab: true });
+      const count = result.updatedCount ?? 0;
+      setMessage(
+        count === 0
+          ? "No upcoming matches needed series updates."
+          : `Updated series length on ${count} upcoming match${count === 1 ? "" : "es"}.`,
+      );
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
   async function saveCustomSchedule(schedule) {
     if (!tournamentId) {
       throw new Error("No tournament selected.");
@@ -949,6 +972,7 @@ function App() {
                 updateBracketActivation={updateBracketActivation}
                 approveRoster={approveRoster}
                 saveGroupAssignments={saveGroupAssignments}
+                applySeriesRulesToUpcoming={applySeriesRulesToUpcoming}
               />
               </Suspense>
             ) : (

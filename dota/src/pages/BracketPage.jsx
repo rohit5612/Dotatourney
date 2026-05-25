@@ -20,10 +20,12 @@ export function BracketPage({
   updateBracketActivation,
   approveRoster,
   saveGroupAssignments,
+  applySeriesRulesToUpcoming,
 }) {
   const [scores, setScores] = useState({});
   const [selectedRosterId, setSelectedRosterId] = useState("");
   const [isSavingMode, setIsSavingMode] = useState(false);
+  const [isApplyingSeriesRules, setIsApplyingSeriesRules] = useState(false);
   const totalMatches = (state?.matches || []).length;
   const completedMatches = (state?.matches || []).filter((match) => match.winner).length;
   const completionPct = totalMatches ? Math.round((completedMatches / totalMatches) * 100) : 0;
@@ -81,6 +83,19 @@ export function BracketPage({
     approveRoster?.(rosterId);
   }
 
+  async function promptApplySeriesRules() {
+    const ok = window.confirm(
+      "Apply saved series rules to upcoming matches only? Finished and live matches are unchanged. Bracket structure is not regenerated.",
+    );
+    if (!ok) return;
+    setIsApplyingSeriesRules(true);
+    try {
+      await applySeriesRulesToUpcoming?.();
+    } finally {
+      setIsApplyingSeriesRules(false);
+    }
+  }
+
   return (
     <div className="space-y-4 rounded-lg border border-border bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -119,8 +134,20 @@ export function BracketPage({
                 {bracketActive ? "Deactivate bracket" : "Activate bracket"}
               </button>
               <span className={bracketActive ? "text-xs text-secondary" : "text-xs text-muted-foreground"}>
-                {bracketActive ? "Live bracket locked. Tournament regeneration is disabled." : "Activate once the tournament bracket is final."}
+                {bracketActive
+                  ? "Live bracket locked for regeneration. You can still change series rules in Setup and apply them to upcoming matches below."
+                  : "Activate once the tournament bracket is final."}
               </span>
+              {totalMatches > 0 ? (
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  disabled={isApplyingSeriesRules}
+                  onClick={promptApplySeriesRules}
+                >
+                  {isApplyingSeriesRules ? "Applying..." : "Apply series rules to upcoming matches"}
+                </button>
+              ) : null}
             </div>
           ) : null}
           {isSavingMode ? <p className="mt-2 text-xs text-secondary">Saving bracket mode...</p> : null}

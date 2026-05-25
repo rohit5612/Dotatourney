@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { resolveSeries } from "./seriesRulesEngine.js";
 
 export const formatTeamGuidance = {
   se: { min: 2, recommended: "4, 8, 16, 32", odd: "Supported with byes" },
@@ -14,10 +15,6 @@ export const formatTeamGuidance = {
     odd: "Odd totals split ⌈n/2⌉ / ⌊n/2⌋ into two BO1 groups. Last chance and Play-In round counts follow bracket generation for that entry count.",
   },
 };
-
-function resolveSeries(seriesRules, key, fallback = "bo3") {
-  return seriesRules?.[key] || fallback;
-}
 
 function match(team1, team2, stageKey, roundIndex, matchIndex, meta = {}) {
   return {

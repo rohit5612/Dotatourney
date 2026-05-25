@@ -793,6 +793,9 @@ export function SetupPage({
           <span className="font-medium text-foreground">Operational note:</span> these series rules are stored with tournament config and are meant to drive match
           pacing, stream time planning, and stage difficulty. You can tune them before each major phase.
         </p>
+        <p className="mt-2">
+          Mid-tournament: save your changes here, then use Bracket → Apply series rules to upcoming matches. That updates BO format on upcoming matches only — no bracket regeneration.
+        </p>
             </div>
 
             {state?.tournament?.id ? (

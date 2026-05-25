@@ -165,6 +165,11 @@ export const api = {
     request(`/tournaments/${id}/generate`, {
       method: "POST",
     }),
+  applySeriesRules: (id, payload = {}) =>
+    request(`/tournaments/${id}/series-rules/apply`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   recordResult: (id, matchId, winner) =>
     request(`/tournaments/${id}/matches/${matchId}/result`, {
       method: "POST",

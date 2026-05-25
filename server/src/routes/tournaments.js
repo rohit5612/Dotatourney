@@ -5,6 +5,7 @@ import { persistBlastGroupSeedingIfReady } from "../services/blastSeeding.js";
 import { generateMatches, getFormatTeamCountMessage, stageTabsForFormat } from "../services/formatGenerator.js";
 import { buildGroupIndices, formatUsesGroupAssignment, validateGroupAssignment } from "../services/groupAssignment.js";
 import { applyProgression } from "../services/progressionEngine.js";
+import { applySeriesRulesToMatches } from "../services/seriesRulesEngine.js";
 import { archivePlayerRegistration, getPlayerRegistrationById, listPlayerRegistrations, updatePlayerRegistration } from "../services/registrationRepository.js";
 import { sendPlayerRegistrationDecisionEmail } from "../services/emailService.js";
 import { buildGroupedStandings, buildStandings } from "../services/standingsEngine.js";
@@ -497,6 +498,48 @@ router.post("/:id/generate", async (req, res, next) => {
     res.json({ matches, tabs: stageTabsForFormat(data.tournament.format, { teamCount: data.tournament.team_count }) });
   } catch (error) {
     next(error);
+  }
+});
+
+router.post("/:id/series-rules/apply", async (req, res, next) => {
+  try {
+    const payload = z
+      .object({
+        seriesRules: z.record(z.string(), z.enum(["bo1", "bo2", "bo3", "bo5"])).optional(),
+      })
+      .parse(req.body ?? {});
+
+    const snapshot = await getTournament(req.params.id);
+    if (!snapshot) {
+      return res.status(404).json({ message: "Tournament not found" });
+    }
+
+    const seriesRules = payload.seriesRules ?? snapshot.tournament.series_rules ?? {};
+    const { matches: nextMatches, updatedCount, skippedCount } = applySeriesRulesToMatches(
+      snapshot.matches,
+      seriesRules,
+      { fallbackSeriesType: snapshot.tournament.series_type || "bo3" },
+    );
+
+    for (let index = 0; index < snapshot.matches.length; index += 1) {
+      const before = snapshot.matches[index];
+      const after = nextMatches[index];
+      if (before.meta?.seriesType === after.meta?.seriesType) continue;
+      const saved = await updateMatch(req.params.id, String(after.id), after);
+      if (!saved) {
+        return res.status(500).json({ message: "Failed to update match series type" });
+      }
+    }
+
+    const refreshed = await getTournament(req.params.id);
+    return res.json({
+      matches: refreshed?.matches ?? nextMatches,
+      updatedCount,
+      skippedCount,
+      tournament: refreshed?.tournament ?? snapshot.tournament,
+    });
+  } catch (error) {
+    return next(error);
   }
 });
 
