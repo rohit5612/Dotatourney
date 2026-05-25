@@ -12,14 +12,19 @@ import { AppFooter } from "../components/AppFooter";
 import { PageLoadingSpinner } from "../components/PageLoadingSpinner";
 import {
   augmentGroupedBracketMatches,
+  blastStageRoundColumnCount,
   buildStageTabLabels,
   formatMatchRoundSummary,
+  getBracketPhaseForTab,
   getSchedulePhase,
+  inferBlastBracketVariant,
   normalizedBlastBracketTabs,
   SCHEDULE_PHASE_GROUPS,
   SCHEDULE_PHASE_PLAYOFFS,
   SCHEDULE_PHASE_QUALIFIERS,
   stageRoundStructure,
+  summarizeSeriesTypes,
+  summarizeSeriesTypesForSchedulePhase,
 } from "../components/bracket/bracketLayout.js";
 import { ScrollToTopButton } from "../components/ScrollToTopButton";
 import {
@@ -69,6 +74,7 @@ import {
 } from "../utils/schedule.js";
 import { buildTeamNameLookup, findTeamByName, teamInitials } from "../utils/teamPage.js";
 import { resolveBlastBracketMatches } from "../utils/blastSeeding.js";
+import { buildBracketTokenHelp } from "../utils/bracketTokenHelp.js";
 import { collectTeamLogoUrls, preloadTeamLogos } from "../utils/teamLogoCache.js";
 import { hexToRgbTriplet } from "../hooks/useLogoAccent.js";
 import { descriptionContentClassName, rulebookContentClassName, sanitizeDescriptionHtml, sanitizeRulebookHtml } from "../lib/sanitizeRulebookHtml.js";
@@ -1165,6 +1171,7 @@ function scheduleTeamLogoStyle(team) {
 const ScheduleMatchTeam = memo(function ScheduleMatchTeam({
   name,
   team,
+  tokenHelp,
   isWinner = false,
   isLoser = false,
   logoPriority = "low",
@@ -1207,7 +1214,18 @@ const ScheduleMatchTeam = memo(function ScheduleMatchTeam({
           </span>
         )}
       </div>
-      <span className="schedule-match__team-name">{displayName}</span>
+      <div className="schedule-match__team-head">
+        <span className="schedule-match__team-name">{displayName}</span>
+        {tokenHelp ? (
+          <span
+            className="schedule-match__token-help"
+            title={tokenHelp}
+            aria-label={tokenHelp}
+          >
+            ?
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 });
@@ -1245,6 +1263,9 @@ const PublicScheduleMatchCard = memo(function PublicScheduleMatchCard({
   stageLabel,
   roundStructureAll,
   teamByName,
+  allMatches,
+  blastBracketDepths,
+  blastVariant,
 }) {
   const effectiveStatus = resolveScheduleStatus(slot, match);
   const isLive = effectiveStatus === "live";
@@ -1259,6 +1280,9 @@ const PublicScheduleMatchCard = memo(function PublicScheduleMatchCard({
   const team2 = match?.team2;
   const team1Record = findTeamByName(teamByName, team1);
   const team2Record = findTeamByName(teamByName, team2);
+  const tokenHelp1 = buildBracketTokenHelp(team1, allMatches, { blastBracketDepths, blastVariant });
+  const tokenHelp2 = buildBracketTokenHelp(team2, allMatches, { blastBracketDepths, blastVariant });
+  const seriesLabel = match?.meta?.seriesType ? String(match.meta.seriesType).toUpperCase() : "";
   const scores = getMatchDisplayScores(match);
   const hasResult = isFinished && (scores.ready || Boolean(scores.winner));
   const showStatus = !isLive && !isFinished && effectiveStatus !== "upcoming";
@@ -1300,6 +1324,7 @@ const PublicScheduleMatchCard = memo(function PublicScheduleMatchCard({
             <ScheduleMatchTeam
               name={team1}
               team={team1Record}
+              tokenHelp={tokenHelp1}
               logoPriority={logoPriority}
               isWinner={hasResult && scores.winner === team1}
               isLoser={hasResult && Boolean(scores.winner) && scores.winner !== team1}
@@ -1308,6 +1333,7 @@ const PublicScheduleMatchCard = memo(function PublicScheduleMatchCard({
             <ScheduleMatchTeam
               name={team2}
               team={team2Record}
+              tokenHelp={tokenHelp2}
               logoPriority={logoPriority}
               isWinner={hasResult && scores.winner === team2}
               isLoser={hasResult && Boolean(scores.winner) && scores.winner !== team2}
@@ -1338,6 +1364,7 @@ const PublicScheduleMatchCard = memo(function PublicScheduleMatchCard({
       <aside className="schedule-match__bracket">
         <p className="schedule-match__bracket-label">Bracket</p>
         <p className="schedule-match__bracket-stage">{stageLabel}</p>
+        {seriesLabel ? <p className="schedule-match__bracket-series">{seriesLabel}</p> : null}
         <p className="schedule-match__bracket-round">
           {match ? formatMatchRoundSummary(match, roundStructureAll) : "—"}
         </p>
@@ -1498,14 +1525,33 @@ function PublicSchedule({ event, message }) {
     return { groupedMatches: augmented, stageTabs: tabs, stageLabels: labels };
   }, [event]);
 
-  const phaseNavTabs = useMemo(
-    () => [
-      { id: SCHEDULE_PHASE_GROUPS, label: "Groups", shortLabel: "Groups" },
-      { id: SCHEDULE_PHASE_QUALIFIERS, label: "Last chance & play-ins", shortLabel: "Last chance" },
-      { id: SCHEDULE_PHASE_PLAYOFFS, label: "Playoffs", shortLabel: "Playoffs" },
-    ],
-    [],
+  const blastVariant = useMemo(() => inferBlastBracketVariant(event?.matches || []), [event?.matches]);
+  const blastBracketDepths = useMemo(
+    () => ({
+      lc: blastStageRoundColumnCount(event?.matches || [], "blast-lastchance"),
+      pi: blastStageRoundColumnCount(event?.matches || [], "blast-playin"),
+    }),
+    [event?.matches],
   );
+
+  const phaseNavTabs = useMemo(() => {
+    const allMatches = event?.matches || [];
+    return [
+      { id: SCHEDULE_PHASE_GROUPS, label: "Groups", shortLabel: "Groups" },
+      {
+        id: SCHEDULE_PHASE_QUALIFIERS,
+        label: "Last chance & play-ins",
+        shortLabel: "Last chance",
+        seriesSummary: summarizeSeriesTypesForSchedulePhase(allMatches, SCHEDULE_PHASE_QUALIFIERS),
+      },
+      {
+        id: SCHEDULE_PHASE_PLAYOFFS,
+        label: "Playoffs",
+        shortLabel: "Playoffs",
+        seriesSummary: summarizeSeriesTypesForSchedulePhase(allMatches, SCHEDULE_PHASE_PLAYOFFS),
+      },
+    ];
+  }, [event?.matches]);
 
   const phaseSlots = useMemo(() => {
     return [...(event?.schedule || [])]
@@ -1566,10 +1612,13 @@ function PublicSchedule({ event, message }) {
           stageLabel={stageLabel}
           roundStructureAll={roundStructureAll}
           teamByName={teamByName}
+          allMatches={event?.matches || []}
+          blastBracketDepths={blastBracketDepths}
+          blastVariant={blastVariant}
         />
       );
     },
-    [event?.matches, stageLabels, roundStructureAll, teamByName],
+    [event?.matches, stageLabels, roundStructureAll, teamByName, blastBracketDepths, blastVariant],
   );
 
   return (
@@ -1613,10 +1662,22 @@ function PublicSchedule({ event, message }) {
           {stageTabs.map((tab) => {
             const matches = groupedMatches[tab.id] || [];
             if (!matches.length) return null;
+            const phase = getBracketPhaseForTab(tab.id);
+            const seriesSummary =
+              phase === SCHEDULE_PHASE_QUALIFIERS || phase === SCHEDULE_PHASE_PLAYOFFS
+                ? summarizeSeriesTypes(matches)
+                : null;
             return (
               <section key={tab.id} className="schedule-page__block landing-panel space-y-3">
                 <div>
-                  <h3 className="schedule-page__block-title">{tab.label}</h3>
+                  <h3 className="schedule-page__block-title">
+                    {tab.label}
+                    {seriesSummary ? (
+                      <span className="schedule-page__series-badge" title={`Series: ${seriesSummary}`}>
+                        {seriesSummary}
+                      </span>
+                    ) : null}
+                  </h3>
                   <p className="schedule-page__block-copy">Bracket progression for this stage.</p>
                 </div>
                 <Suspense fallback={<PageLoadingSpinner label="Loading bracket…" />}>

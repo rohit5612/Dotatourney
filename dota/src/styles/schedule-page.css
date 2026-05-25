@@ -458,6 +458,39 @@
   word-break: break-word;
 }
 
+.schedule-match__team-head {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.schedule-match__token-help {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--muted-foreground);
+  cursor: help;
+  background: rgb(255 255 255 / 0.05);
+}
+
+.schedule-match__bracket-series {
+  margin: 0.15rem 0 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--secondary);
+}
+
 .schedule-match--live .schedule-match__team-name {
   color: var(--foreground);
 }
@@ -699,6 +732,10 @@
 }
 
 .schedule-page__block-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.65rem;
   margin: 0;
   font-family: var(--font-serif);
   font-size: clamp(1.15rem, 2.6vw, 1.35rem);
@@ -710,6 +747,21 @@
   margin: 0.35rem 0 0;
   font-size: 0.8125rem;
   color: var(--muted-foreground);
+}
+
+.schedule-page__series-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.45rem;
+  border-radius: 0.4rem;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(255 255 255 / 0.06);
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--secondary);
 }
 
 /* —— Group standings (bracket tab) —— */
@@ -729,7 +781,7 @@
   gap: 1rem;
 }
 
-@media (min-width: 960px) {
+@media (min-width: 640px) {
   .schedule-page__standings-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1.15rem;
@@ -737,7 +789,9 @@
 }
 
 .standings-table--public {
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
   border-radius: 1rem;
   border: 1px solid rgb(255 255 255 / 0.1);
   background: linear-gradient(160deg, rgb(255 255 255 / 0.04) 0%, rgb(0 0 0 / 0.28) 100%);
@@ -802,6 +856,31 @@
   .standings-table__row {
     gap: 0.75rem;
     padding: 0.7rem 0.85rem;
+  }
+}
+
+@media (max-width: 479px) {
+  .standings-table__row {
+    grid-template-columns: 2rem minmax(0, 1fr);
+    grid-template-areas:
+      "rank team"
+      "stats stats";
+    gap: 0.45rem 0.65rem;
+    padding: 0.65rem 0.6rem;
+  }
+
+  .standings-table__stats {
+    justify-self: stretch;
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .standings-table__name {
+    white-space: normal;
+  }
+
+  .standings-table__rows {
+    padding: 0.55rem;
   }
 }
 

@@ -223,6 +223,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.45rem;
   position: relative;
   isolation: isolate;
   overflow: hidden;
@@ -282,6 +284,31 @@
   z-index: 1;
   white-space: nowrap;
   line-height: 1.25;
+}
+
+.tourney-tab-chip__labels {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+}
+
+.tourney-tab-chip__series {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.38rem;
+  border-radius: 0.35rem;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(255 255 255 / 0.06);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  white-space: nowrap;
 }
 
 .tourney-tab-chip__label--short {

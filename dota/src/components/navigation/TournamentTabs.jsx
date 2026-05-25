@@ -12,12 +12,19 @@ function bracketTabShortLabel(label) {
   return text.length > 20 ? `${text.slice(0, 18)}…` : text;
 }
 
-function TabLabel({ label, shortLabel }) {
+function TabLabel({ label, shortLabel, seriesSummary }) {
   const short = shortLabel ?? label;
   return (
     <>
-      <span className="tourney-tab-chip__label tourney-tab-chip__label--full">{label}</span>
-      <span className="tourney-tab-chip__label tourney-tab-chip__label--short">{short}</span>
+      <span className="tourney-tab-chip__labels">
+        <span className="tourney-tab-chip__label tourney-tab-chip__label--full">{label}</span>
+        <span className="tourney-tab-chip__label tourney-tab-chip__label--short">{short}</span>
+      </span>
+      {seriesSummary ? (
+        <span className="tourney-tab-chip__series" title={`Series: ${seriesSummary}`}>
+          {seriesSummary}
+        </span>
+      ) : null}
     </>
   );
 }
@@ -64,7 +71,7 @@ export function SchedulePhaseTabs({ value, onChange, tabs, ariaLabel = "Schedule
               onClick={() => onChange(tab.id)}
             >
               <span className="tourney-tab-chip__glow" aria-hidden />
-              <TabLabel label={tab.label} shortLabel={short} />
+              <TabLabel label={tab.label} shortLabel={short} seriesSummary={tab.seriesSummary} />
             </button>
           );
         })}
@@ -90,7 +97,7 @@ export function BracketStageTabs({ value, onChange, tabs, ariaLabel = "Bracket s
               onClick={() => onChange(tab.id)}
             >
               <span className="tourney-tab-chip__glow" aria-hidden />
-              <TabLabel label={tab.label} shortLabel={short} />
+              <TabLabel label={tab.label} shortLabel={short} seriesSummary={tab.seriesSummary} />
             </button>
           );
         })}

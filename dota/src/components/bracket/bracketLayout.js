@@ -90,6 +90,23 @@ export function getSchedulePhase(stageKey) {
   return SCHEDULE_PHASE_PLAYOFFS;
 }
 
+/** Unique BO labels (e.g. `BO3 · BO5`) from match meta. */
+export function summarizeSeriesTypes(matches) {
+  const types = new Set();
+  for (const match of matches || []) {
+    const raw = match?.meta?.seriesType;
+    if (raw) types.add(String(raw).toUpperCase());
+  }
+  if (!types.size) return null;
+  return [...types].sort().join(" · ");
+}
+
+/** Series summary for a schedule phase tab (Groups / Qualifiers / Playoffs). */
+export function summarizeSeriesTypesForSchedulePhase(matches, phaseId) {
+  const filtered = (matches || []).filter((match) => getSchedulePhase(match.stageKey) === phaseId);
+  return summarizeSeriesTypes(filtered);
+}
+
 /**
  * Bucket for bracket diagram tabs (tab id may be merged `blast-qualifiers`).
  * @param {string} [tabId]
