@@ -4,6 +4,7 @@ import {
   describeBlastGroupSeedPlaceholder,
   describeBlastMatchFlow,
 } from "./bracketLayout.js";
+import { BracketTokenHelp } from "./BracketTokenHelp.jsx";
 import { datetimeLocalToIso, toDatetimeLocalValue } from "../../utils/datetime.js";
 
 /** 1-based round index from bracket win-token prefixes → Quarterfinals / Semifinals / Finals when applicable */
@@ -212,15 +213,7 @@ export function TeamLine({ name, winner, editable, score, onScoreChange, onWin, 
       title={tokenHelp || undefined}
     >
       <span className="min-w-0 flex-1 truncate">{name}</span>
-      {tokenHelp ? (
-        <span
-          className="grid h-5 w-5 shrink-0 place-items-center rounded-full border border-border text-[10px] text-muted-foreground"
-          title={`${name}: ${tokenHelp}`}
-          aria-label={`${name}: ${tokenHelp}`}
-        >
-          ?
-        </span>
-      ) : null}
+      {tokenHelp ? <BracketTokenHelp help={tokenHelp} label={name} /> : null}
       {editable ? (
         <>
           <input

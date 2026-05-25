@@ -16,8 +16,12 @@ import {
   buildStageTabLabels,
   formatMatchRoundSummary,
   getBracketPhaseForTab,
+  getPreferredSchedulePhaseTab,
   getSchedulePhase,
+  getSchedulePhaseCompleteNotice,
+  getSchedulePhaseTabOrder,
   inferBlastBracketVariant,
+  isSchedulePhaseComplete,
   normalizedBlastBracketTabs,
   SCHEDULE_PHASE_GROUPS,
   SCHEDULE_PHASE_PLAYOFFS,
@@ -48,6 +52,7 @@ import { TournamentStatusSlot } from "../components/TournamentStatusSlot.jsx";
 import "../styles/team-logo-img.css";
 import { TeamLogoImg } from "../components/TeamLogoImg.jsx";
 import { StandingsTable } from "../components/StandingsTable.jsx";
+import { BracketTokenHelp } from "../components/bracket/BracketTokenHelp.jsx";
 import { SiteNavbar } from "../components/navigation/SiteNavbar.jsx";
 const PublicTeamsPage = lazy(() =>
   import("../components/teams/PublicTeamsPage.jsx").then((module) => ({ default: module.PublicTeamsPage })),
@@ -1216,15 +1221,7 @@ const ScheduleMatchTeam = memo(function ScheduleMatchTeam({
       </div>
       <div className="schedule-match__team-head">
         <span className="schedule-match__team-name">{displayName}</span>
-        {tokenHelp ? (
-          <span
-            className="schedule-match__token-help"
-            title={tokenHelp}
-            aria-label={tokenHelp}
-          >
-            ?
-          </span>
-        ) : null}
+        {tokenHelp ? <BracketTokenHelp help={tokenHelp} label={displayName} /> : null}
       </div>
     </div>
   );
@@ -1489,9 +1486,20 @@ function PublicScheduleMatchListSection({
   );
 }
 
+function PublicSchedulePhaseCompleteNotice({ message }) {
+  if (!message) return null;
+  return (
+    <div className="schedule-phase-complete-notice landing-panel" role="status">
+      <p className="schedule-phase-complete-notice__text">{message}</p>
+    </div>
+  );
+}
+
 function PublicSchedule({ event, message }) {
   const [viewMode, setViewMode] = useState(() => parseScheduleViewHash());
   const [phaseTab, setPhaseTab] = useState(SCHEDULE_PHASE_GROUPS);
+  const completionSnapshotRef = useRef("");
+  const tournamentIdRef = useRef("");
 
   useEffect(() => {
     const onHash = () => setViewMode(parseScheduleViewHash());
@@ -1534,24 +1542,73 @@ function PublicSchedule({ event, message }) {
     [event?.matches],
   );
 
+  const phaseTabOrder = useMemo(() => getSchedulePhaseTabOrder(event?.matches || []), [event?.matches]);
+
+  const preferredPhaseTab = useMemo(
+    () => getPreferredSchedulePhaseTab(event?.matches || []),
+    [event?.matches],
+  );
+
+  const phaseCompletionKey = useMemo(() => {
+    const matches = event?.matches || [];
+    return [
+      isSchedulePhaseComplete(matches, SCHEDULE_PHASE_GROUPS),
+      isSchedulePhaseComplete(matches, SCHEDULE_PHASE_QUALIFIERS),
+      isSchedulePhaseComplete(matches, SCHEDULE_PHASE_PLAYOFFS),
+    ]
+      .map((value) => (value ? "1" : "0"))
+      .join("");
+  }, [event?.matches]);
+
+  useEffect(() => {
+    const tournamentId = event?.tournament?.id || "";
+    if (!tournamentId) return;
+    if (tournamentIdRef.current !== tournamentId) {
+      tournamentIdRef.current = tournamentId;
+      completionSnapshotRef.current = phaseCompletionKey;
+      setPhaseTab(preferredPhaseTab);
+      return;
+    }
+    if (completionSnapshotRef.current && completionSnapshotRef.current !== phaseCompletionKey) {
+      setPhaseTab(preferredPhaseTab);
+    }
+    completionSnapshotRef.current = phaseCompletionKey;
+  }, [event?.tournament?.id, phaseCompletionKey, preferredPhaseTab]);
+
   const phaseNavTabs = useMemo(() => {
     const allMatches = event?.matches || [];
-    return [
-      { id: SCHEDULE_PHASE_GROUPS, label: "Groups", shortLabel: "Groups" },
-      {
+    const tabDefs = {
+      [SCHEDULE_PHASE_GROUPS]: { id: SCHEDULE_PHASE_GROUPS, label: "Groups", shortLabel: "Groups" },
+      [SCHEDULE_PHASE_QUALIFIERS]: {
         id: SCHEDULE_PHASE_QUALIFIERS,
         label: "Last chance & play-ins",
         shortLabel: "Last chance",
         seriesSummary: summarizeSeriesTypesForSchedulePhase(allMatches, SCHEDULE_PHASE_QUALIFIERS),
       },
-      {
+      [SCHEDULE_PHASE_PLAYOFFS]: {
         id: SCHEDULE_PHASE_PLAYOFFS,
         label: "Playoffs",
         shortLabel: "Playoffs",
         seriesSummary: summarizeSeriesTypesForSchedulePhase(allMatches, SCHEDULE_PHASE_PLAYOFFS),
       },
-    ];
-  }, [event?.matches]);
+    };
+    return phaseTabOrder.map((phaseId) => {
+      const base = tabDefs[phaseId];
+      if (phaseId === SCHEDULE_PHASE_GROUPS) {
+        return {
+          ...base,
+          seriesSummary: summarizeSeriesTypesForSchedulePhase(allMatches, SCHEDULE_PHASE_GROUPS),
+        };
+      }
+      return base;
+    });
+  }, [event?.matches, phaseTabOrder]);
+
+  const phaseCompleteNotice = useMemo(() => {
+    const matches = event?.matches || [];
+    if (!isSchedulePhaseComplete(matches, phaseTab)) return "";
+    return getSchedulePhaseCompleteNotice(phaseTab);
+  }, [event?.matches, phaseTab]);
 
   const phaseSlots = useMemo(() => {
     return [...(event?.schedule || [])]
@@ -1719,6 +1776,10 @@ function PublicSchedule({ event, message }) {
               teamOptions={scheduleTeamOptions}
               grouped
               renderScheduleSlot={renderScheduleSlot}
+            />
+
+            <PublicSchedulePhaseCompleteNotice
+              message={phaseCompleteNotice && scheduleByStatus.finished.length > 0 ? phaseCompleteNotice : ""}
             />
 
             <PublicScheduleMatchListSection

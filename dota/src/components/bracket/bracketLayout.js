@@ -107,6 +107,69 @@ export function summarizeSeriesTypesForSchedulePhase(matches, phaseId) {
   return summarizeSeriesTypes(filtered);
 }
 
+export function isScheduleMatchComplete(match) {
+  return Boolean(match?.winner) || match?.status === "finished";
+}
+
+export function hasSchedulePhaseMatches(matches, phaseId) {
+  return (matches || []).some((match) => getSchedulePhase(match.stageKey) === phaseId);
+}
+
+/** True when every match in the phase has a result (phase must exist). */
+export function isSchedulePhaseComplete(matches, phaseId) {
+  const phaseMatches = (matches || []).filter((match) => getSchedulePhase(match.stageKey) === phaseId);
+  if (!phaseMatches.length) return false;
+  return phaseMatches.every(isScheduleMatchComplete);
+}
+
+/**
+ * Public schedule tab order shifts as stages finish:
+ * default → Groups, Qualifiers, Playoffs;
+ * groups done → Qualifiers, Playoffs, Groups;
+ * qualifiers done → Playoffs, Groups, Qualifiers.
+ */
+export function getSchedulePhaseTabOrder(matches) {
+  const list = matches || [];
+  const hasGroups = hasSchedulePhaseMatches(list, SCHEDULE_PHASE_GROUPS);
+  const hasQualifiers = hasSchedulePhaseMatches(list, SCHEDULE_PHASE_QUALIFIERS);
+  const groupsComplete = isSchedulePhaseComplete(list, SCHEDULE_PHASE_GROUPS);
+  const qualifiersComplete = isSchedulePhaseComplete(list, SCHEDULE_PHASE_QUALIFIERS);
+
+  if (qualifiersComplete && hasQualifiers) {
+    return [SCHEDULE_PHASE_PLAYOFFS, SCHEDULE_PHASE_GROUPS, SCHEDULE_PHASE_QUALIFIERS];
+  }
+  if (groupsComplete && hasGroups) {
+    if (hasQualifiers) {
+      return [SCHEDULE_PHASE_QUALIFIERS, SCHEDULE_PHASE_PLAYOFFS, SCHEDULE_PHASE_GROUPS];
+    }
+    return [SCHEDULE_PHASE_PLAYOFFS, SCHEDULE_PHASE_GROUPS, SCHEDULE_PHASE_QUALIFIERS];
+  }
+  return [SCHEDULE_PHASE_GROUPS, SCHEDULE_PHASE_QUALIFIERS, SCHEDULE_PHASE_PLAYOFFS];
+}
+
+/** First incomplete phase in the current tab order, else the lead tab. */
+export function getPreferredSchedulePhaseTab(matches) {
+  const order = getSchedulePhaseTabOrder(matches);
+  for (const phaseId of order) {
+    if (!isSchedulePhaseComplete(matches, phaseId)) return phaseId;
+  }
+  return order[0];
+}
+
+/** Player-facing copy when a schedule phase is fully decided. */
+export function getSchedulePhaseCompleteNotice(phaseId) {
+  if (phaseId === SCHEDULE_PHASE_GROUPS) {
+    return "Group stage is over. All round-robin matches are complete — follow Last chance & play-ins or playoffs for what’s next.";
+  }
+  if (phaseId === SCHEDULE_PHASE_QUALIFIERS) {
+    return "Last chance and Play-In are over. Main playoffs are underway or up next — results below are final for this stage.";
+  }
+  if (phaseId === SCHEDULE_PHASE_PLAYOFFS) {
+    return "Playoffs are complete. Match history below is the final record for this stage.";
+  }
+  return "";
+}
+
 /**
  * Bucket for bracket diagram tabs (tab id may be merged `blast-qualifiers`).
  * @param {string} [tabId]

@@ -1,0 +1,83 @@
+.bracket-token-help {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.bracket-token-help__btn {
+  display: inline-grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  margin: -0.65rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.bracket-token-help__btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--secondary) 70%, white);
+  outline-offset: 2px;
+}
+
+.bracket-token-help__mark {
+  display: inline-grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--muted-foreground);
+  background: rgb(255 255 255 / 0.05);
+}
+
+.bracket-token-help__btn:hover .bracket-token-help__mark,
+.bracket-token-help__btn[aria-expanded="true"] .bracket-token-help__mark {
+  border-color: color-mix(in srgb, var(--secondary) 45%, rgb(255 255 255 / 0.14));
+  color: var(--foreground);
+  background: rgb(255 255 255 / 0.08);
+}
+
+.bracket-token-help__popover {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 0.15rem);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max(12rem, min(18rem, calc(100vw - 2rem)));
+  max-width: 18rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.55rem;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: color-mix(in srgb, var(--card, #111) 92%, black);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.06) inset,
+    0 12px 28px rgb(0 0 0 / 0.45);
+  font-size: 0.75rem;
+  font-weight: 450;
+  line-height: 1.45;
+  letter-spacing: 0;
+  text-transform: none;
+  text-align: left;
+  color: var(--foreground);
+  pointer-events: auto;
+}
+
+@media (max-width: 639px) {
+  .bracket-token-help__popover {
+    left: auto;
+    right: 0;
+    transform: none;
+    width: min(18rem, calc(100vw - 2rem));
+  }
+}
