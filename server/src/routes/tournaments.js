@@ -14,6 +14,7 @@ import { syncCrmRegistrationsToGoogleSheet } from "../services/googleSheetsSync.
 import { invalidatePublicCache } from "../services/publicCache.js";
 import {
   approveRosterSnapshot,
+  adjustApprovedRoster,
   createRosterSnapshot,
   createTournament,
   deleteDraftTournament,
@@ -26,6 +27,7 @@ import {
   replaceMatches,
   replaceSchedule,
   replaceTeamsAndPlayers,
+  syncApprovedRosterFromTeamSave,
   unpublishTournament,
   updateMatch,
   updateRosterSnapshot,
@@ -275,6 +277,7 @@ router.post("/:id/teams", async (req, res, next) => {
             teamId: z.string().uuid().nullable().optional(),
           }),
         ),
+        syncApprovedRosterId: z.string().uuid().optional(),
       })
       .parse(req.body);
 
@@ -296,7 +299,27 @@ router.post("/:id/teams", async (req, res, next) => {
       }));
 
     await replaceTeamsAndPlayers(req.params.id, teams, players, teamPlayers);
-    res.json({ teams, players });
+
+    let approvedRoster = null;
+    if (payload.syncApprovedRosterId) {
+      const data = await getTournament(req.params.id);
+      if (!data?.approvedRoster || data.approvedRoster.id !== payload.syncApprovedRosterId) {
+        return res.status(400).json({ message: "Only the approved roster can be updated from team save" });
+      }
+      const syncResult = await syncApprovedRosterFromTeamSave(
+        req.params.id,
+        payload.syncApprovedRosterId,
+        req.adminUser.id,
+        teams,
+        players,
+      );
+      if (syncResult.error) {
+        return res.status(400).json({ message: syncResult.error });
+      }
+      approvedRoster = syncResult.approvedRoster || null;
+    }
+
+    res.json({ teams, players, approvedRoster });
   } catch (error) {
     next(error);
   }
@@ -394,6 +417,60 @@ router.post("/:id/rosters/:rosterId/approve", async (req, res, next) => {
 
     const approvedRoster = await approveRosterSnapshot(req.params.id, req.params.rosterId, req.adminUser.id);
     return res.json({ approvedRoster, rosters: await listRosterSnapshots(req.params.id) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post("/:id/rosters/:rosterId/adjustments", async (req, res, next) => {
+  try {
+    const payload = z
+      .object({
+        operations: z
+          .array(
+            z.discriminatedUnion("type", [
+              z.object({
+                type: z.literal("remove"),
+                playerId: z.string().uuid(),
+                teamId: z.string().uuid(),
+              }),
+              z.object({
+                type: z.literal("move"),
+                playerId: z.string().uuid(),
+                fromTeamId: z.string().uuid(),
+                toTeamId: z.string().uuid(),
+              }),
+              z.object({
+                type: z.literal("add"),
+                registrationId: z.string().uuid(),
+                teamId: z.string().uuid(),
+                isCaptain: z.boolean().optional().default(false),
+              }),
+            ]),
+          )
+          .min(1),
+      })
+      .parse(req.body);
+
+    const data = await getTournament(req.params.id);
+    if (!data) return res.status(404).json({ message: "Tournament not found" });
+    if (!data.approvedRoster || data.approvedRoster.id !== req.params.rosterId) {
+      return res.status(400).json({ message: "Only the approved roster can be adjusted" });
+    }
+
+    const roster = await getRosterSnapshot(req.params.id, req.params.rosterId);
+    if (!roster) return res.status(404).json({ message: "Roster not found" });
+    if (roster.status !== "approved") {
+      return res.status(400).json({ message: "Only an approved roster can be adjusted" });
+    }
+
+    const result = await adjustApprovedRoster(req.params.id, req.params.rosterId, payload.operations, req.adminUser.id);
+    if (result.error) {
+      return res.status(400).json({ message: result.error });
+    }
+
+    invalidatePublicCache();
+    return res.json({ approvedRoster: result.approvedRoster });
   } catch (error) {
     return next(error);
   }

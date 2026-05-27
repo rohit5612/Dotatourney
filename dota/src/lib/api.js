@@ -3,6 +3,12 @@ import { cachedGet, clearCache } from "./requestCache.js";
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 const TOKEN_KEY = "bpcl-admin-token";
 
+let unauthorizedHandler = null;
+
+export function setUnauthorizedHandler(handler) {
+  unauthorizedHandler = typeof handler === "function" ? handler : null;
+}
+
 export function getAuthToken() {
   try {
     return window.localStorage.getItem(TOKEN_KEY) || "";
@@ -34,6 +40,7 @@ async function request(path, options = {}) {
     const body = await response.json().catch(() => ({}));
     if (response.status === 401) {
       setAuthToken("");
+      unauthorizedHandler?.();
     }
     const hint = body.message || (response.status === 404 ? "Not found — check API is running and URL includes /api" : null);
     const err = new Error(hint || `API request failed (${response.status})`);
@@ -151,6 +158,11 @@ export const api = {
   approveRoster: (id, rosterId) =>
     request(`/tournaments/${id}/rosters/${rosterId}/approve`, {
       method: "POST",
+    }),
+  adjustRoster: (id, rosterId, operations) =>
+    request(`/tournaments/${id}/rosters/${rosterId}/adjustments`, {
+      method: "POST",
+      body: JSON.stringify({ operations }),
     }),
   saveGroupAssignments: (id, assignments) =>
     request(`/tournaments/${id}/group-assignments`, {

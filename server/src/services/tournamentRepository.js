@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { pool } from "../db/pool.js";
 import { defaultGroupKeysForTeams } from "./groupAssignment.js";
+import { getPlayerRegistrationById } from "./registrationRepository.js";
 
 function parseMeta(raw) {
   if (raw == null) return {};
@@ -365,11 +366,29 @@ async function loadWorkingRoster(client, tournamentId) {
   };
 }
 
+async function seedRosterMemberships(client, rosterId, tournamentId, adminUserId = null) {
+  await client.query("DELETE FROM roster_snapshot_team_memberships WHERE roster_snapshot_id = $1", [rosterId]);
+  const { rows } = await client.query(
+    "SELECT team_id, player_id FROM roster_snapshot_team_players WHERE roster_snapshot_id = $1",
+    [rosterId],
+  );
+  for (const row of rows) {
+    await client.query(
+      `INSERT INTO roster_snapshot_team_memberships (
+        id, roster_snapshot_id, tournament_id, snapshot_team_id, snapshot_player_id, status, adjusted_by
+      )
+      VALUES ($1, $2, $3, $4, $5, 'active', $6)`,
+      [randomUUID(), rosterId, tournamentId, row.team_id, row.player_id, adminUserId],
+    );
+  }
+}
+
 async function replaceRosterSnapshotContents(client, tournamentId, rosterId) {
   const roster = await loadWorkingRoster(client, tournamentId);
   const teamIdMap = new Map();
   const playerIdMap = new Map();
 
+  await client.query("DELETE FROM roster_snapshot_team_memberships WHERE roster_snapshot_id = $1", [rosterId]);
   await client.query("DELETE FROM roster_snapshot_team_players WHERE roster_snapshot_id = $1", [rosterId]);
   await client.query("DELETE FROM roster_snapshot_players WHERE roster_snapshot_id = $1", [rosterId]);
   await client.query("DELETE FROM roster_snapshot_teams WHERE roster_snapshot_id = $1", [rosterId]);
@@ -447,7 +466,18 @@ export async function listRosterSnapshots(tournamentId) {
             rs.updated_at AS "updatedAt",
             COUNT(DISTINCT rst.id)::int AS "teamCount",
             COUNT(DISTINCT rsp.id)::int AS "playerCount",
-            COUNT(DISTINCT rstp.player_id)::int AS "assignedPlayerCount"
+            CASE
+              WHEN EXISTS (
+                SELECT 1 FROM roster_snapshot_team_memberships rstm_check
+                WHERE rstm_check.roster_snapshot_id = rs.id
+              )
+              THEN (
+                SELECT COUNT(DISTINCT rstm_active.snapshot_player_id)::int
+                FROM roster_snapshot_team_memberships rstm_active
+                WHERE rstm_active.roster_snapshot_id = rs.id AND rstm_active.status = 'active'
+              )
+              ELSE COUNT(DISTINCT rstp.player_id)::int
+            END AS "assignedPlayerCount"
      FROM roster_snapshots rs
      LEFT JOIN roster_snapshot_teams rst ON rst.roster_snapshot_id = rs.id
      LEFT JOIN roster_snapshot_players rsp ON rsp.roster_snapshot_id = rs.id
@@ -488,18 +518,43 @@ export async function getRosterSnapshot(tournamentId, rosterId) {
      ORDER BY created_at ASC`,
     [rosterId],
   );
-  const teamPlayersResult = await pool.query(
+  const baselineTeamPlayersResult = await pool.query(
     `SELECT team_id, player_id
      FROM roster_snapshot_team_players
      WHERE roster_snapshot_id = $1`,
     [rosterId],
   );
+  const membershipsResult = await pool.query(
+    `SELECT id,
+            snapshot_team_id AS "snapshotTeamId",
+            snapshot_player_id AS "snapshotPlayerId",
+            status,
+            started_at AS "startedAt",
+            ended_at AS "endedAt",
+            adjusted_by AS "adjustedBy"
+     FROM roster_snapshot_team_memberships
+     WHERE roster_snapshot_id = $1
+     ORDER BY started_at ASC, created_at ASC`,
+    [rosterId],
+  );
+  const memberships = membershipsResult.rows;
+  const teamPlayers =
+    memberships.length > 0
+      ? memberships
+          .filter((record) => record.status === "active")
+          .map((record) => ({
+            team_id: record.snapshotTeamId,
+            player_id: record.snapshotPlayerId,
+          }))
+      : baselineTeamPlayersResult.rows;
 
   return {
     ...snapshot,
     teams: teamsResult.rows,
     players: playersResult.rows,
-    teamPlayers: teamPlayersResult.rows,
+    teamPlayers,
+    baselineTeamPlayers: baselineTeamPlayersResult.rows,
+    memberships,
   };
 }
 
@@ -609,6 +664,8 @@ export async function approveRosterSnapshot(tournamentId, rosterId, adminUserId)
       );
     }
 
+    await seedRosterMemberships(client, rosterId, tournamentId, adminUserId);
+
     await client.query("COMMIT");
     return getRosterSnapshot(tournamentId, rows[0].id);
   } catch (error) {
@@ -651,6 +708,433 @@ export async function updateRosterGroupAssignments(tournamentId, assignments) {
   }
 
   return { approvedRoster: await getRosterSnapshot(tournamentId, approved.id) };
+}
+
+function registrationIsReady(registration) {
+  return (
+    registration &&
+    registration.paymentStatus === "paid" &&
+    registration.registrationStatus === "approved" &&
+    !registration.archivedAt
+  );
+}
+
+function primaryRoleFromRegistration(registration) {
+  const roles = Array.isArray(registration.roles) ? registration.roles : [];
+  return roles[0] || "flex";
+}
+
+async function loadRosterAdjustmentState(client, tournamentId, rosterId) {
+  const snapshotResult = await client.query(
+    "SELECT id, status FROM roster_snapshots WHERE tournament_id = $1 AND id = $2",
+    [tournamentId, rosterId],
+  );
+  const snapshot = snapshotResult.rows[0];
+  if (!snapshot) return null;
+
+  const teamsResult = await client.query(
+    "SELECT id, name FROM roster_snapshot_teams WHERE roster_snapshot_id = $1",
+    [rosterId],
+  );
+  const playersResult = await client.query(
+    `SELECT id, registration_id AS "registrationId", name, display_name AS "displayName", role, roles, mmr,
+            steam_name AS "steamName", steam_profile AS "steamProfile", discord_handle AS "discordHandle",
+            location, is_captain AS "isCaptain"
+     FROM roster_snapshot_players
+     WHERE roster_snapshot_id = $1`,
+    [rosterId],
+  );
+  const membershipsResult = await client.query(
+    `SELECT id, snapshot_team_id AS "snapshotTeamId", snapshot_player_id AS "snapshotPlayerId", status
+     FROM roster_snapshot_team_memberships
+     WHERE roster_snapshot_id = $1`,
+    [rosterId],
+  );
+
+  return {
+    snapshot,
+    teams: teamsResult.rows,
+    players: playersResult.rows,
+    memberships: membershipsResult.rows,
+  };
+}
+
+function buildActiveAssignmentMaps(state) {
+  const activeByPlayer = new Map();
+  const activeByTeam = new Map();
+  for (const team of state.teams) {
+    activeByTeam.set(team.id, new Set());
+  }
+  for (const membership of state.memberships) {
+    if (membership.status !== "active") continue;
+    activeByPlayer.set(membership.snapshotPlayerId, {
+      teamId: membership.snapshotTeamId,
+      membershipId: membership.id,
+    });
+    const teamSet = activeByTeam.get(membership.snapshotTeamId);
+    if (teamSet) teamSet.add(membership.snapshotPlayerId);
+  }
+  return { activeByPlayer, activeByTeam };
+}
+
+function validateActiveRosterState(state, activeByTeam, playersById) {
+  for (const team of state.teams) {
+    const activePlayerIds = activeByTeam.get(team.id) || new Set();
+    if (activePlayerIds.size > 5) {
+      return `${team.name} cannot have more than 5 active players`;
+    }
+    const hasCaptain = [...activePlayerIds].some((playerId) => playersById.get(playerId)?.isCaptain);
+    if (activePlayerIds.size > 0 && !hasCaptain) {
+      return `Assign a captain for ${team.name} before saving teams`;
+    }
+  }
+  return "";
+}
+
+async function deactivateMembership(client, rosterId, teamId, playerId, adminUserId) {
+  await client.query(
+    `UPDATE roster_snapshot_team_memberships
+     SET status = 'inactive', ended_at = NOW(), adjusted_by = $4
+     WHERE roster_snapshot_id = $1
+       AND snapshot_team_id = $2
+       AND snapshot_player_id = $3
+       AND status = 'active'`,
+    [rosterId, teamId, playerId, adminUserId],
+  );
+}
+
+async function activateMembership(client, rosterId, tournamentId, teamId, playerId, adminUserId) {
+  await client.query(
+    `INSERT INTO roster_snapshot_team_memberships (
+      id, roster_snapshot_id, tournament_id, snapshot_team_id, snapshot_player_id, status, adjusted_by
+    )
+    VALUES ($1, $2, $3, $4, $5, 'active', $6)`,
+    [randomUUID(), rosterId, tournamentId, teamId, playerId, adminUserId],
+  );
+}
+
+async function ensureSnapshotPlayerForRegistration(client, tournamentId, rosterId, registration) {
+  const existing = await client.query(
+    "SELECT id FROM roster_snapshot_players WHERE roster_snapshot_id = $1 AND registration_id = $2",
+    [rosterId, registration.id],
+  );
+  if (existing.rows[0]) {
+    return existing.rows[0].id;
+  }
+
+  const snapshotPlayerId = randomUUID();
+  const role = primaryRoleFromRegistration(registration);
+  await client.query(
+    `INSERT INTO roster_snapshot_players (
+      id, roster_snapshot_id, tournament_id, source_player_id, registration_id, name, display_name, role, roles, mmr,
+      steam_name, steam_profile, discord_handle, location, is_captain
+    )
+    VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, FALSE)`,
+    [
+      snapshotPlayerId,
+      rosterId,
+      tournamentId,
+      registration.id,
+      registration.name,
+      registration.displayName || registration.name || "",
+      role,
+      JSON.stringify(registration.roles || (role ? [role] : [])),
+      registration.mmr || null,
+      registration.steamName || "",
+      registration.steamProfile || "",
+      registration.discordHandle || "",
+      registration.location || "",
+    ],
+  );
+  return snapshotPlayerId;
+}
+
+function resolveSnapshotTeamId(savedTeamId, savedTeams, snapshotTeams) {
+  const savedTeam = savedTeams.find((team) => team.id === savedTeamId);
+  if (!savedTeam) return null;
+  return (
+    snapshotTeams.find((team) => team.id === savedTeam.id)?.id ||
+    snapshotTeams.find((team) => team.sourceTeamId === savedTeam.id)?.id ||
+    snapshotTeams.find((team) => team.name === savedTeam.name)?.id ||
+    null
+  );
+}
+
+function resolveSnapshotPlayerId(savedPlayer, snapshotPlayers) {
+  return (
+    snapshotPlayers.find((player) => player.id === savedPlayer.id)?.id ||
+    snapshotPlayers.find((player) => player.sourcePlayerId === savedPlayer.id)?.id ||
+    (savedPlayer.registrationId
+      ? snapshotPlayers.find((player) => player.registrationId === savedPlayer.registrationId)?.id
+      : null) ||
+    null
+  );
+}
+
+export async function syncApprovedRosterFromTeamSave(tournamentId, rosterId, adminUserId, savedTeams, savedPlayers) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const state = await loadRosterAdjustmentState(client, tournamentId, rosterId);
+    if (!state) {
+      await client.query("ROLLBACK");
+      return { error: "Roster not found" };
+    }
+    if (state.snapshot.status !== "approved") {
+      await client.query("ROLLBACK");
+      return { error: "Only an approved roster can be updated from team save" };
+    }
+
+    const teamsResult = await client.query(
+      `SELECT id, source_team_id AS "sourceTeamId", name
+       FROM roster_snapshot_teams
+       WHERE roster_snapshot_id = $1`,
+      [rosterId],
+    );
+    const snapshotTeams = teamsResult.rows;
+    const playersResult = await client.query(
+      `SELECT id, source_player_id AS "sourcePlayerId", registration_id AS "registrationId", name, display_name AS "displayName",
+              role, roles, mmr, steam_name AS "steamName", steam_profile AS "steamProfile", discord_handle AS "discordHandle",
+              location, is_captain AS "isCaptain"
+       FROM roster_snapshot_players
+       WHERE roster_snapshot_id = $1`,
+      [rosterId],
+    );
+    const snapshotPlayers = [...playersResult.rows];
+    const playersById = new Map(snapshotPlayers.map((player) => [player.id, { ...player }]));
+    const desiredAssignments = [];
+
+    for (const savedPlayer of savedPlayers) {
+      if (!savedPlayer.teamId) continue;
+
+      const snapshotTeamId = resolveSnapshotTeamId(savedPlayer.teamId, savedTeams, snapshotTeams);
+      if (!snapshotTeamId) {
+        await client.query("ROLLBACK");
+        return { error: "Team assignment references a team that is not on the approved roster" };
+      }
+
+      let snapshotPlayerId = resolveSnapshotPlayerId(savedPlayer, snapshotPlayers);
+      if (!snapshotPlayerId) {
+        if (!savedPlayer.registrationId) {
+          await client.query("ROLLBACK");
+          return { error: "Only registered players can be assigned to teams" };
+        }
+        const registration = await getPlayerRegistrationById(tournamentId, savedPlayer.registrationId);
+        if (!registrationIsReady(registration)) {
+          await client.query("ROLLBACK");
+          return { error: "Team rosters can only include paid, approved, active registrations" };
+        }
+        snapshotPlayerId = await ensureSnapshotPlayerForRegistration(client, tournamentId, rosterId, registration);
+        const createdPlayer = {
+          id: snapshotPlayerId,
+          registrationId: registration.id,
+          isCaptain: Boolean(savedPlayer.isCaptain),
+        };
+        snapshotPlayers.push(createdPlayer);
+        playersById.set(snapshotPlayerId, createdPlayer);
+      }
+
+      desiredAssignments.push({
+        snapshotTeamId,
+        snapshotPlayerId,
+        isCaptain: Boolean(savedPlayer.isCaptain),
+      });
+    }
+
+    await client.query("UPDATE roster_snapshot_players SET is_captain = FALSE WHERE roster_snapshot_id = $1", [rosterId]);
+    for (const assignment of desiredAssignments) {
+      await client.query("UPDATE roster_snapshot_players SET is_captain = $2 WHERE id = $1", [
+        assignment.snapshotPlayerId,
+        assignment.isCaptain,
+      ]);
+      if (playersById.has(assignment.snapshotPlayerId)) {
+        playersById.get(assignment.snapshotPlayerId).isCaptain = assignment.isCaptain;
+      }
+    }
+
+    const desiredActive = new Map();
+    const activeByTeam = new Map(snapshotTeams.map((team) => [team.id, new Set()]));
+    for (const assignment of desiredAssignments) {
+      if (desiredActive.has(assignment.snapshotPlayerId)) {
+        await client.query("ROLLBACK");
+        return { error: "A player cannot be assigned to more than one team" };
+      }
+      desiredActive.set(assignment.snapshotPlayerId, assignment.snapshotTeamId);
+      activeByTeam.get(assignment.snapshotTeamId)?.add(assignment.snapshotPlayerId);
+    }
+
+    const validationMessage = validateActiveRosterState({ teams: snapshotTeams }, activeByTeam, playersById);
+    if (validationMessage) {
+      await client.query("ROLLBACK");
+      return { error: validationMessage.replace("roster adjustments", "saving teams") };
+    }
+
+    const { activeByPlayer } = buildActiveAssignmentMaps(state);
+    for (const [playerId, active] of activeByPlayer.entries()) {
+      const desiredTeamId = desiredActive.get(playerId);
+      if (!desiredTeamId || desiredTeamId !== active.teamId) {
+        await deactivateMembership(client, rosterId, active.teamId, playerId, adminUserId);
+      }
+    }
+
+    for (const [playerId, teamId] of desiredActive.entries()) {
+      const current = activeByPlayer.get(playerId);
+      if (!current || current.teamId !== teamId) {
+        await activateMembership(client, rosterId, tournamentId, teamId, playerId, adminUserId);
+      }
+    }
+
+    await client.query("UPDATE roster_snapshots SET updated_at = NOW() WHERE tournament_id = $1 AND id = $2", [
+      tournamentId,
+      rosterId,
+    ]);
+    await client.query("COMMIT");
+    return { approvedRoster: await getRosterSnapshot(tournamentId, rosterId) };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function adjustApprovedRoster(tournamentId, rosterId, operations, adminUserId) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const state = await loadRosterAdjustmentState(client, tournamentId, rosterId);
+    if (!state) {
+      await client.query("ROLLBACK");
+      return { error: "Roster not found" };
+    }
+    if (state.snapshot.status !== "approved") {
+      await client.query("ROLLBACK");
+      return { error: "Only an approved roster can be adjusted" };
+    }
+
+    const teamIds = new Set(state.teams.map((team) => team.id));
+    const playersById = new Map(state.players.map((player) => [player.id, { ...player }]));
+    const { activeByPlayer, activeByTeam } = buildActiveAssignmentMaps(state);
+
+    for (const operation of operations) {
+      if (operation.type === "remove") {
+        if (!teamIds.has(operation.teamId)) {
+          await client.query("ROLLBACK");
+          return { error: "Remove operation references a team that is not on this roster" };
+        }
+        if (!playersById.has(operation.playerId)) {
+          await client.query("ROLLBACK");
+          return { error: "Remove operation references a player that is not on this roster" };
+        }
+        const active = activeByPlayer.get(operation.playerId);
+        if (!active || active.teamId !== operation.teamId) {
+          await client.query("ROLLBACK");
+          return { error: "Player is not actively assigned to that team" };
+        }
+        await deactivateMembership(client, rosterId, operation.teamId, operation.playerId, adminUserId);
+        activeByTeam.get(operation.teamId)?.delete(operation.playerId);
+        activeByPlayer.delete(operation.playerId);
+        continue;
+      }
+
+      if (operation.type === "move") {
+        if (!teamIds.has(operation.fromTeamId) || !teamIds.has(operation.toTeamId)) {
+          await client.query("ROLLBACK");
+          return { error: "Move operation references a team that is not on this roster" };
+        }
+        if (operation.fromTeamId === operation.toTeamId) {
+          await client.query("ROLLBACK");
+          return { error: "Move operation must use different source and destination teams" };
+        }
+        if (!playersById.has(operation.playerId)) {
+          await client.query("ROLLBACK");
+          return { error: "Move operation references a player that is not on this roster" };
+        }
+        const active = activeByPlayer.get(operation.playerId);
+        if (!active || active.teamId !== operation.fromTeamId) {
+          await client.query("ROLLBACK");
+          return { error: "Player is not actively assigned to the source team" };
+        }
+        const destinationCount = activeByTeam.get(operation.toTeamId)?.size || 0;
+        if (destinationCount >= 5) {
+          await client.query("ROLLBACK");
+          return { error: "Destination team already has 5 active players" };
+        }
+        await deactivateMembership(client, rosterId, operation.fromTeamId, operation.playerId, adminUserId);
+        await activateMembership(client, rosterId, tournamentId, operation.toTeamId, operation.playerId, adminUserId);
+        activeByTeam.get(operation.fromTeamId)?.delete(operation.playerId);
+        activeByTeam.get(operation.toTeamId)?.add(operation.playerId);
+        activeByPlayer.set(operation.playerId, { teamId: operation.toTeamId });
+        continue;
+      }
+
+      if (operation.type === "add") {
+        if (!teamIds.has(operation.teamId)) {
+          await client.query("ROLLBACK");
+          return { error: "Add operation references a team that is not on this roster" };
+        }
+        const registration = await getPlayerRegistrationById(tournamentId, operation.registrationId);
+        if (!registrationIsReady(registration)) {
+          await client.query("ROLLBACK");
+          return { error: "Only paid, approved, active registrations can be added to a roster" };
+        }
+
+        let playerId = [...playersById.values()].find((player) => player.registrationId === operation.registrationId)?.id;
+        if (!playerId) {
+          playerId = await ensureSnapshotPlayerForRegistration(client, tournamentId, rosterId, registration);
+          playersById.set(playerId, {
+            id: playerId,
+            registrationId: registration.id,
+            name: registration.name,
+            displayName: registration.displayName || registration.name || "",
+            role: primaryRoleFromRegistration(registration),
+            roles: registration.roles || [],
+            isCaptain: Boolean(operation.isCaptain),
+          });
+          state.players.push(playersById.get(playerId));
+        } else if (operation.isCaptain) {
+          await client.query("UPDATE roster_snapshot_players SET is_captain = TRUE WHERE id = $1", [playerId]);
+          playersById.get(playerId).isCaptain = true;
+        }
+
+        if (activeByPlayer.has(playerId)) {
+          await client.query("ROLLBACK");
+          return { error: "Registration is already actively assigned to a team" };
+        }
+
+        const teamCount = activeByTeam.get(operation.teamId)?.size || 0;
+        if (teamCount >= 5) {
+          await client.query("ROLLBACK");
+          return { error: "Team already has 5 active players" };
+        }
+
+        await activateMembership(client, rosterId, tournamentId, operation.teamId, playerId, adminUserId);
+        if (!activeByTeam.has(operation.teamId)) {
+          activeByTeam.set(operation.teamId, new Set());
+        }
+        activeByTeam.get(operation.teamId).add(playerId);
+        activeByPlayer.set(playerId, { teamId: operation.teamId });
+      }
+    }
+
+    const validationMessage = validateActiveRosterState(state, activeByTeam, playersById);
+    if (validationMessage) {
+      await client.query("ROLLBACK");
+      return { error: validationMessage };
+    }
+
+    await client.query("UPDATE roster_snapshots SET updated_at = NOW() WHERE tournament_id = $1 AND id = $2", [
+      tournamentId,
+      rosterId,
+    ]);
+    await client.query("COMMIT");
+    return { approvedRoster: await getRosterSnapshot(tournamentId, rosterId) };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function deleteRosterSnapshot(tournamentId, rosterId) {

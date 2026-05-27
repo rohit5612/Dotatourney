@@ -38,6 +38,7 @@ export function TeamsPage({
   const [logoPickerTeam, setLogoPickerTeam] = useState(null);
   const [playerSearch, setPlayerSearch] = useState("");
   const [rosterName, setRosterName] = useState("");
+  const editingApprovedRoster = Boolean(approvedRoster?.id && activeRosterId === approvedRoster.id);
   const assignedPlayers = poolDraft.filter((player) => player.teamId).length;
   const unassignedPlayers = poolDraft.length - assignedPlayers;
   const playerModalTeamCount = playerModalTeam ? poolDraft.filter((player) => player.teamId === playerModalTeam.id).length : 0;
@@ -167,7 +168,9 @@ export function TeamsPage({
             <h3 className="font-serif text-lg">Teams</h3>
             <p className="text-sm text-muted-foreground">
               {isTeamPaneActive
-                ? "Each card is one team. Add up to 5 registered players and mark one assigned player as captain."
+                ? editingApprovedRoster
+                  ? "Editing the approved roster. Change players or captains, then Save teams — no re-approval or bracket regen needed."
+                  : "Each card is one team. Add up to 5 registered players and mark one assigned player as captain."
                 : "Select a saved roster below or start a new roster to show teams here."}
             </p>
           </div>
@@ -181,7 +184,7 @@ export function TeamsPage({
                 Auto assign
               </button>
               <button type="button" className="btn btn-primary" onClick={saveTeams}>
-                Save teams
+                {editingApprovedRoster ? "Save teams & update roster" : "Save teams"}
               </button>
             </div>
           ) : (
@@ -557,15 +560,31 @@ export function TeamsPage({
         </div>
 
         {approvedRoster ? (
-          <div className="rounded-lg border border-secondary/50 bg-background p-3">
-            <h4 className="font-medium text-secondary">Approved roster: {approvedRoster.name}</h4>
+          <div className="rounded-lg border border-secondary/50 bg-card p-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h4 className="font-medium text-secondary">Approved roster: {approvedRoster.name}</h4>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Click the approved roster card above to edit in the team builder, then use Save teams — same flow as logo updates, no re-approval.
+                </p>
+              </div>
+              {!editingApprovedRoster ? (
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={() => loadRosterForEditing?.(approvedRoster.id)}
+                >
+                  Edit in team builder
+                </button>
+              ) : null}
+            </div>
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               {approvedRoster.teams?.map((team) => {
                 const playerIds = new Set((approvedRoster.teamPlayers || []).filter((record) => record.team_id === team.id).map((record) => record.player_id));
                 const players = (approvedRoster.players || []).filter((player) => playerIds.has(player.id));
                 return (
-                  <div key={team.id} className="rounded-md border border-border p-2 text-sm">
-                    <div className="font-medium">{team.name}</div>
+                  <div key={team.id} className="rounded-md border border-border bg-background p-2 text-sm">
+                    <div className="font-medium text-foreground">{team.name}</div>
                     <div className="text-xs text-muted-foreground">{players.map((player) => playerDisplayName(player)).join(", ") || "No players assigned"}</div>
                   </div>
                 );

@@ -4,7 +4,7 @@ import { AppHeader } from "./components/AppHeader";
 import { PageLoadingSpinner } from "./components/PageLoadingSpinner";
 import { ScrollToTopButton } from "./components/ScrollToTopButton";
 import { buildDefaultSeriesRules, mergeBlastSeriesRules, roles } from "./constants/tournament";
-import { api, getAuthToken, setAuthToken } from "./lib/api";
+import { api, getAuthToken, setAuthToken, setUnauthorizedHandler } from "./lib/api";
 import { toDateInputValue, toDatetimeLocalValue } from "./utils/datetime";
 import { announcementsToAdminFormState, announcementsToApiPayload, bannerAnnouncementsToAdminFormState, bannerAnnouncementsToApiPayload } from "./lib/announcementEntries.js";
 import { PrimaryViewTabs } from "./components/navigation/TournamentTabs.jsx";
@@ -557,6 +557,10 @@ function App() {
       setMessage("Create tournament first.");
       return;
     }
+    if (!getAuthToken()) {
+      setMessage("Admin session expired. Please log in again before saving teams.");
+      return;
+    }
     const normalizedPlayers = poolDraft.map((player) => {
       const label = playerDisplayName(player);
       return {
@@ -572,10 +576,27 @@ function App() {
         captain: captain ? playerDisplayName(captain) : "",
       };
     });
-    await api.saveTeams(tournamentId, { teams: teamsWithCaptains, players: normalizedPlayers });
-    await refreshTournament(tournamentId, { keepTeamPane: true });
-    await refreshRosters();
-    setMessage("Teams saved.");
+    const syncApprovedRosterId =
+      approvedRoster?.id && activeRosterId === approvedRoster.id ? approvedRoster.id : undefined;
+    try {
+      const payload = await api.saveTeams(tournamentId, {
+        teams: teamsWithCaptains,
+        players: normalizedPlayers,
+        syncApprovedRosterId,
+      });
+      if (payload.approvedRoster) {
+        setApprovedRoster(payload.approvedRoster);
+      }
+      await refreshTournament(tournamentId, { keepTeamPane: true });
+      await refreshRosters();
+      setMessage(
+        syncApprovedRosterId
+          ? "Teams saved. Approved roster updated without re-approval."
+          : "Teams saved.",
+      );
+    } catch (error) {
+      setMessage(error.message);
+    }
   }
 
   async function saveRosterSnapshot(name) {
@@ -708,7 +729,11 @@ function App() {
       );
       setActiveRosterId(roster.id);
       setIsTeamPaneActive(true);
-      setMessage(`Loaded roster "${roster.name}".`);
+      setMessage(
+        roster.status === "approved"
+          ? `Loaded approved roster "${roster.name}". Edit teams above, then Save teams — no re-approval needed.`
+          : `Loaded roster "${roster.name}".`,
+      );
     } catch (error) {
       setMessage(error.message);
     }

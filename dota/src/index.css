@@ -3,6 +3,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  color-scheme: light;
   --background: #f8fafc;
   --foreground: #0f172a;
   --card: #ffffff;
@@ -58,6 +59,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: #06060a;
   --foreground: #f1f5f9;
   --card: #0c0c12;
@@ -307,6 +309,67 @@
   cursor: not-allowed;
   opacity: 0.5;
   pointer-events: none;
+}
+
+.input,
+select.input,
+textarea.input {
+  width: 100%;
+  min-width: 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--input);
+  background-color: var(--background);
+  color: var(--foreground);
+  padding: 0.5rem 0.75rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+select.input {
+  padding-right: 2rem;
+  cursor: pointer;
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 1rem) calc(50% + 0.1em),
+    calc(100% - 0.65rem) calc(50% + 0.1em);
+  background-size: 0.35rem 0.35rem, 0.35rem 0.35rem;
+  background-repeat: no-repeat;
+}
+
+select.input option {
+  background-color: var(--card);
+  color: var(--foreground);
+}
+
+.input-sm,
+select.input-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+}
+
+select.input-sm {
+  padding-right: 1.75rem;
+}
+
+.input:focus,
+select.input:focus,
+textarea.input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--ring) 55%, var(--input));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 22%, transparent);
+}
+
+.input::placeholder {
+  color: var(--muted-foreground);
 }
 
 @keyframes landing-card-float {
