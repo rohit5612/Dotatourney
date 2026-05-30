@@ -4,7 +4,7 @@ import { z } from "zod";
 import { persistBlastGroupSeedingIfReady } from "../services/blastSeeding.js";
 import { generateMatches, getFormatTeamCountMessage, stageTabsForFormat } from "../services/formatGenerator.js";
 import { buildGroupIndices, formatUsesGroupAssignment, validateGroupAssignment } from "../services/groupAssignment.js";
-import { applyProgression } from "../services/progressionEngine.js";
+import { reapplyAllProgression } from "../services/progressionEngine.js";
 import { applySeriesRulesToMatches } from "../services/seriesRulesEngine.js";
 import { archivePlayerRegistration, getPlayerRegistrationById, listPlayerRegistrations, updatePlayerRegistration } from "../services/registrationRepository.js";
 import { sendPlayerRegistrationDecisionEmail } from "../services/emailService.js";
@@ -120,6 +120,31 @@ async function validateRosterRegistrations(tournamentId, players) {
   }
 
   return "";
+}
+
+async function persistProgressedMatches(tournamentId, snapshot, baseMatches) {
+  const progressed = reapplyAllProgression(baseMatches);
+
+  for (const match of progressed) {
+    const saved = await updateMatch(tournamentId, String(match.id), match);
+    if (!saved) {
+      return { error: "Failed to save match progression" };
+    }
+  }
+
+  let afterSeeding = progressed;
+  if (snapshot.tournament.format === "blast") {
+    const standingsTeams = snapshot.approvedRoster?.teams || snapshot.teams;
+    const seeded = await persistBlastGroupSeedingIfReady(tournamentId, standingsTeams, progressed, updateMatch);
+    afterSeeding = seeded.matches;
+  }
+
+  const standingsTeams = snapshot.approvedRoster?.teams || snapshot.teams;
+  return {
+    matches: afterSeeding,
+    standings: buildStandings(standingsTeams, afterSeeding, snapshot.tournament.format),
+    groupedStandings: buildGroupedStandings(standingsTeams, afterSeeding, snapshot.tournament.format),
+  };
 }
 
 router.use(requireAdmin);
@@ -661,27 +686,14 @@ router.post("/:id/matches/:matchId/result", async (req, res, next) => {
       },
     };
     const baseMatches = snapshot.matches.map((m) => (String(m.id) === resMatchId ? updatedMatch : m));
-    const progressed = applyProgression(baseMatches, updatedMatch);
-
-    for (const match of progressed) {
-      const saved = await updateMatch(req.params.id, String(match.id), match);
-      if (!saved) {
-        return res.status(500).json({ message: "Failed to save match result" });
-      }
+    const result = await persistProgressedMatches(req.params.id, snapshot, baseMatches);
+    if (result.error) {
+      return res.status(500).json({ message: result.error });
     }
 
     await updateScheduleStatusByMatchId(req.params.id, resMatchId, "finished");
 
-    const standingsTeams = snapshot.approvedRoster?.teams || snapshot.teams;
-    let afterSeeding = progressed;
-    if (snapshot.tournament.format === "blast") {
-      const seeded = await persistBlastGroupSeedingIfReady(req.params.id, standingsTeams, progressed, updateMatch);
-      afterSeeding = seeded.matches;
-    }
-
-    const standings = buildStandings(standingsTeams, afterSeeding, snapshot.tournament.format);
-    const groupedStandings = buildGroupedStandings(standingsTeams, afterSeeding, snapshot.tournament.format);
-    res.json({ matches: afterSeeding, standings, groupedStandings });
+    res.json(result);
   } catch (error) {
     next(error);
   }
@@ -722,12 +734,29 @@ router.patch("/:id/matches/:matchId", async (req, res, next) => {
     const nextStatus =
       "status" in payload ? payload.status : payload.winner ? "finished" : match.status;
 
-    const updated = await updateMatch(req.params.id, matchIdParam, {
+    const updatedMatch = {
       ...match,
       ...payload,
       status: nextStatus,
       meta: nextMeta,
-    });
+    };
+
+    const winnerChanged = "winner" in payload && payload.winner !== match.winner;
+    const shouldReprogress = Boolean(updatedMatch.winner && updatedMatch.meta?.winToken && winnerChanged);
+
+    if (shouldReprogress) {
+      const baseMatches = snapshot.matches.map((entry) => (String(entry.id) === matchIdParam ? updatedMatch : entry));
+      const result = await persistProgressedMatches(req.params.id, snapshot, baseMatches);
+      if (result.error) {
+        return res.status(500).json({ message: result.error });
+      }
+      if (nextStatus === "finished" || payload.winner) {
+        await updateScheduleStatusByMatchId(req.params.id, matchIdParam, "finished");
+      }
+      return res.json(result);
+    }
+
+    const updated = await updateMatch(req.params.id, matchIdParam, updatedMatch);
     if (!updated) {
       return res.status(404).json({ message: "Match not found or could not be updated" });
     }

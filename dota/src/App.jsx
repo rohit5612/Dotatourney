@@ -760,7 +760,16 @@ function App() {
   }
 
   async function updateMatch(matchId, payload) {
-    await api.updateMatch(tournamentId, matchId, payload);
+    const result = await api.updateMatch(tournamentId, matchId, payload);
+    if (result.matches) {
+      api.clearPublicTournamentCache();
+      setState((prev) => ({
+        ...prev,
+        matches: result.matches ?? prev?.matches,
+        standings: result.standings ?? prev?.standings,
+        groupedStandings: result.groupedStandings ?? prev?.groupedStandings,
+      }));
+    }
     await refreshTournament(tournamentId, { keepActiveTab: true });
   }
 
