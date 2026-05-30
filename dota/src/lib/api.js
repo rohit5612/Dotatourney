@@ -182,6 +182,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  refreshBracketProgression: (id) =>
+    request(`/tournaments/${id}/bracket/refresh-progression`, {
+      method: "POST",
+    }),
   recordResult: (id, matchId, winner) =>
     request(`/tournaments/${id}/matches/${matchId}/result`, {
       method: "POST",

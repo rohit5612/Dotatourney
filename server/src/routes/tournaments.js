@@ -603,6 +603,37 @@ router.post("/:id/generate", async (req, res, next) => {
   }
 });
 
+router.post("/:id/bracket/refresh-progression", async (req, res, next) => {
+  try {
+    const snapshot = await getTournament(req.params.id);
+    if (!snapshot) {
+      return res.status(404).json({ message: "Tournament not found" });
+    }
+    if (!snapshot.matches?.length) {
+      return res.status(400).json({ message: "Generate a bracket before refreshing progression" });
+    }
+
+    const beforeById = new Map(snapshot.matches.map((match) => [String(match.id), match]));
+    const result = await persistProgressedMatches(req.params.id, snapshot, snapshot.matches);
+    if (result.error) {
+      return res.status(500).json({ message: result.error });
+    }
+
+    let changedCount = 0;
+    for (const after of result.matches) {
+      const before = beforeById.get(String(after.id));
+      if (!before) continue;
+      if (before.team1 !== after.team1 || before.team2 !== after.team2 || before.winner !== after.winner) {
+        changedCount += 1;
+      }
+    }
+
+    return res.json({ ...result, changedCount });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.post("/:id/series-rules/apply", async (req, res, next) => {
   try {
     const payload = z

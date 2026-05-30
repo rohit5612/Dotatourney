@@ -21,11 +21,13 @@ export function BracketPage({
   approveRoster,
   saveGroupAssignments,
   applySeriesRulesToUpcoming,
+  refreshBracketProgression,
 }) {
   const [scores, setScores] = useState({});
   const [selectedRosterId, setSelectedRosterId] = useState("");
   const [isSavingMode, setIsSavingMode] = useState(false);
   const [isApplyingSeriesRules, setIsApplyingSeriesRules] = useState(false);
+  const [isRefreshingProgression, setIsRefreshingProgression] = useState(false);
   const totalMatches = (state?.matches || []).length;
   const completedMatches = (state?.matches || []).filter((match) => match.winner).length;
   const completionPct = totalMatches ? Math.round((completedMatches / totalMatches) * 100) : 0;
@@ -96,6 +98,19 @@ export function BracketPage({
     }
   }
 
+  async function promptRefreshBracketProgression() {
+    const ok = window.confirm(
+      "Refresh playoff and other fed team slots from saved match results? Scores and bracket structure stay as they are — only downstream team names are re-synced (bracket, schedule, and public site).",
+    );
+    if (!ok) return;
+    setIsRefreshingProgression(true);
+    try {
+      await refreshBracketProgression?.();
+    } finally {
+      setIsRefreshingProgression(false);
+    }
+  }
+
   return (
     <div className="space-y-4 rounded-lg border border-border bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -139,14 +154,24 @@ export function BracketPage({
                   : "Activate once the tournament bracket is final."}
               </span>
               {totalMatches > 0 ? (
-                <button
-                  type="button"
-                  className="btn btn-outline btn-sm"
-                  disabled={isApplyingSeriesRules}
-                  onClick={promptApplySeriesRules}
-                >
-                  {isApplyingSeriesRules ? "Applying..." : "Apply series rules to upcoming matches"}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    disabled={isRefreshingProgression}
+                    onClick={() => void promptRefreshBracketProgression()}
+                  >
+                    {isRefreshingProgression ? "Refreshing…" : "Refresh playoff slots from results"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    disabled={isApplyingSeriesRules}
+                    onClick={() => void promptApplySeriesRules()}
+                  >
+                    {isApplyingSeriesRules ? "Applying..." : "Apply series rules to upcoming matches"}
+                  </button>
+                </>
               ) : null}
             </div>
           ) : null}

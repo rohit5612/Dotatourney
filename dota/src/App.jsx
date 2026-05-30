@@ -796,6 +796,32 @@ function App() {
     }
   }
 
+  async function refreshBracketProgression() {
+    if (!tournamentId) {
+      setMessage("Create or select a tournament first.");
+      return;
+    }
+    try {
+      const result = await api.refreshBracketProgression(tournamentId);
+      api.clearPublicTournamentCache();
+      setState((prev) => ({
+        ...prev,
+        matches: result.matches ?? prev?.matches,
+        standings: result.standings ?? prev?.standings,
+        groupedStandings: result.groupedStandings ?? prev?.groupedStandings,
+      }));
+      await refreshTournament(tournamentId, { keepActiveTab: true });
+      const count = result.changedCount ?? 0;
+      setMessage(
+        count === 0
+          ? "Playoff and fed slots already match saved results."
+          : `Refreshed team slots on ${count} match${count === 1 ? "" : "es"} from saved results (bracket, schedule, and public site).`,
+      );
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
   async function saveCustomSchedule(schedule) {
     if (!tournamentId) {
       throw new Error("No tournament selected.");
@@ -1007,6 +1033,7 @@ function App() {
                 approveRoster={approveRoster}
                 saveGroupAssignments={saveGroupAssignments}
                 applySeriesRulesToUpcoming={applySeriesRulesToUpcoming}
+                refreshBracketProgression={refreshBracketProgression}
               />
               </Suspense>
             ) : (
