@@ -100,14 +100,8 @@ export function buildProgressionFeedMap(matches) {
   for (const match of matches) {
     for (const side of ["team1", "team2"]) {
       const value = String(match[side] || "");
-      const key = slotKey(match.id, side);
-      const storedFeed = match.meta?.[`${side}Feed`];
-      if (storedFeed) {
-        map.set(key, storedFeed);
-        continue;
-      }
       if (TEAM_TOKEN_REGEX.test(value)) {
-        map.set(key, value);
+        map.set(slotKey(match.id, side), value);
       }
     }
   }
@@ -128,6 +122,12 @@ export function buildProgressionFeedMap(matches) {
       const structuralFeed = inferFeedTokenFromPrior(prior, match, side);
       if (structuralFeed) {
         map.set(key, structuralFeed);
+        continue;
+      }
+
+      const storedFeed = match.meta?.[`${side}Feed`];
+      if (storedFeed && typeof storedFeed === "string") {
+        map.set(key, storedFeed);
         continue;
       }
 
@@ -153,10 +153,25 @@ function resetProgressiveSlots(matches, feedMap) {
   return matches.map((match) => {
     const feed1 = feedMap.get(slotKey(match.id, "team1"));
     const feed2 = feedMap.get(slotKey(match.id, "team2"));
+    const meta = { ...(match.meta || {}) };
+
+    let team1 = match.team1;
+    let team2 = match.team2;
+
+    if (feed1 && TEAM_TOKEN_REGEX.test(feed1)) {
+      team1 = feed1;
+      meta.team1Feed = feed1;
+    }
+    if (feed2 && TEAM_TOKEN_REGEX.test(feed2)) {
+      team2 = feed2;
+      meta.team2Feed = feed2;
+    }
+
     return {
       ...match,
-      team1: feed1 && TEAM_TOKEN_REGEX.test(feed1) ? feed1 : match.team1,
-      team2: feed2 && TEAM_TOKEN_REGEX.test(feed2) ? feed2 : match.team2,
+      team1,
+      team2,
+      meta,
     };
   });
 }

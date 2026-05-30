@@ -685,6 +685,9 @@ router.post("/:id/matches/:matchId/result", async (req, res, next) => {
         team2Score: "team2Score" in payload ? payload.team2Score : (prev.team2Score ?? null),
       },
     };
+    if (payload.winner !== updatedMatch.team1 && payload.winner !== updatedMatch.team2) {
+      return res.status(400).json({ message: "Winner must match one of the teams in this match" });
+    }
     const baseMatches = snapshot.matches.map((m) => (String(m.id) === resMatchId ? updatedMatch : m));
     const result = await persistProgressedMatches(req.params.id, snapshot, baseMatches);
     if (result.error) {

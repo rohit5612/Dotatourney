@@ -377,13 +377,8 @@ function inferFeedTokenFromStructure(producer, consumer, side) {
 
 /** @param {object[]} prior @param {object} consumer @param {"team1"|"team2"} side */
 function resolveFeederMatch(prior, consumer, side, tokenLookup) {
-  const storedFeed = consumer.meta?.[`${side}Feed`];
-  if (storedFeed) {
-    const fromMeta = tokenLookup.get(storedFeed);
-    if (fromMeta) return fromMeta;
-  }
-
   const slot = String(consumer[side] || "");
+
   if (slot && BRACKET_TOKEN_REGEX.test(slot)) {
     const fromToken = tokenLookup.get(slot);
     if (fromToken) return fromToken;
@@ -395,6 +390,12 @@ function resolveFeederMatch(prior, consumer, side, tokenLookup) {
     if (structural && candidate.meta?.winToken === structural) {
       return candidate;
     }
+  }
+
+  const storedFeed = consumer.meta?.[`${side}Feed`];
+  if (storedFeed) {
+    const fromMeta = tokenLookup.get(storedFeed);
+    if (fromMeta) return fromMeta;
   }
 
   if (slot && !BRACKET_TOKEN_REGEX.test(slot)) {

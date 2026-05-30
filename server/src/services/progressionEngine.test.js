@@ -135,4 +135,45 @@ describe("progressionEngine", () => {
     const corrected = reapplyAllProgression([groupWin, qf, sf]);
     assert.equal(corrected.find((m) => m.id === "sf1").team2, "Emberfall");
   });
+
+  it("reapplyAllProgression overrides stale team feed meta from wrong upstream", () => {
+    const groupWin = {
+      id: "ga1",
+      stageKey: "blast-group-a",
+      roundIndex: 0,
+      matchIndex: 0,
+      team1: "Mortal Oath",
+      team2: "Other Team",
+      winner: "Mortal Oath",
+      status: "finished",
+      meta: { winToken: "GAR1M1W" },
+    };
+    const qf = {
+      id: "qf1",
+      stageKey: "blast-playoffs",
+      roundIndex: 0,
+      matchIndex: 0,
+      team1: "Emberfall",
+      team2: "Mortal Oath",
+      winner: "Emberfall",
+      status: "finished",
+      meta: { winToken: "QFR1M1W" },
+    };
+    const sf = {
+      id: "sf1",
+      stageKey: "blast-playoffs",
+      roundIndex: 1,
+      matchIndex: 0,
+      team1: "Arrise Corp",
+      team2: "Mortal Oath",
+      winner: null,
+      status: "upcoming",
+      meta: { winToken: "SFR1M1W", team2Feed: "GAR1M1W" },
+    };
+
+    const corrected = reapplyAllProgression([groupWin, qf, sf]);
+    const nextSf = corrected.find((m) => m.id === "sf1");
+    assert.equal(nextSf.team2, "Emberfall");
+    assert.equal(nextSf.meta.team2Feed, "QFR1M1W");
+  });
 });
