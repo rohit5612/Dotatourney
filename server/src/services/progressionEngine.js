@@ -51,12 +51,43 @@ function inferFeedTokenFromStructure(producer, consumer, side) {
   const token = producer.meta?.winToken;
   if (!token || compareMatchOrder(producer, consumer) >= 0) return null;
 
-  if (producer.stageKey === consumer.stageKey && (consumer.roundIndex ?? 0) === (producer.roundIndex ?? 0) + 1) {
-    if ((consumer.matchIndex ?? 0) === (producer.matchIndex ?? 0)) {
-      return token;
-    }
+  const producerRound = producer.roundIndex ?? 0;
+  const consumerRound = consumer.roundIndex ?? 0;
+  const producerMatch = producer.matchIndex ?? 0;
+  const consumerMatch = consumer.matchIndex ?? 0;
+
+  if (producer.stageKey !== consumer.stageKey || consumerRound !== producerRound + 1) {
+    return null;
   }
 
+  // BLAST playoffs: semis keep the group champion on team1 and QF winners on team2.
+  if (consumer.stageKey === "blast-playoffs") {
+    if (consumerRound === 1 && consumerMatch === producerMatch) {
+      return side === "team2" ? token : null;
+    }
+    if (consumerRound === 2 && consumerMatch === 0) {
+      if (side === "team1" && producerMatch === 0) return token;
+      if (side === "team2" && producerMatch === 1) return token;
+      return null;
+    }
+    return null;
+  }
+
+  if (consumerMatch === producerMatch) {
+    return token;
+  }
+
+  return null;
+}
+
+function inferFeedTokenFromPrior(prior, consumer, side) {
+  for (let index = prior.length - 1; index >= 0; index -= 1) {
+    const candidate = prior[index];
+    const structural = inferFeedTokenFromStructure(candidate, consumer, side);
+    if (structural && candidate.meta?.winToken === structural) {
+      return candidate.meta.winToken;
+    }
+  }
   return null;
 }
 
@@ -94,22 +125,19 @@ export function buildProgressionFeedMap(matches) {
         continue;
       }
 
+      const structuralFeed = inferFeedTokenFromPrior(prior, match, side);
+      if (structuralFeed) {
+        map.set(key, structuralFeed);
+        continue;
+      }
+
       if (!TEAM_TOKEN_REGEX.test(value)) {
         for (let index = prior.length - 1; index >= 0; index -= 1) {
           const candidate = prior[index];
-          if (candidate?.winner && String(candidate.winner) === value && candidate.meta?.winToken) {
-            map.set(key, candidate.meta.winToken);
-            break;
-          }
-        }
-      }
-
-      if (!map.has(key)) {
-        for (let index = prior.length - 1; index >= 0; index -= 1) {
-          const candidate = prior[index];
+          if (!candidate?.winner || String(candidate.winner) !== value || !candidate.meta?.winToken) continue;
           const structural = inferFeedTokenFromStructure(candidate, match, side);
-          if (structural) {
-            map.set(key, structural);
+          if (structural === candidate.meta.winToken) {
+            map.set(key, candidate.meta.winToken);
             break;
           }
         }

@@ -342,6 +342,75 @@ export function buildWinTokenLookup(matches) {
   return map;
 }
 
+/** @param {object} producer @param {object} consumer @param {"team1"|"team2"} side */
+function inferFeedTokenFromStructure(producer, consumer, side) {
+  const token = producer.meta?.winToken;
+  if (!token || typeof token !== "string") return null;
+
+  const producerRound = producer.roundIndex ?? 0;
+  const consumerRound = consumer.roundIndex ?? 0;
+  const producerMatch = producer.matchIndex ?? 0;
+  const consumerMatch = consumer.matchIndex ?? 0;
+
+  if (producer.stageKey !== consumer.stageKey || consumerRound !== producerRound + 1) {
+    return null;
+  }
+
+  if (consumer.stageKey === "blast-playoffs") {
+    if (consumerRound === 1 && consumerMatch === producerMatch) {
+      return side === "team2" ? token : null;
+    }
+    if (consumerRound === 2 && consumerMatch === 0) {
+      if (side === "team1" && producerMatch === 0) return token;
+      if (side === "team2" && producerMatch === 1) return token;
+      return null;
+    }
+    return null;
+  }
+
+  if (consumerMatch === producerMatch) {
+    return token;
+  }
+
+  return null;
+}
+
+/** @param {object[]} prior @param {object} consumer @param {"team1"|"team2"} side */
+function resolveFeederMatch(prior, consumer, side, tokenLookup) {
+  const storedFeed = consumer.meta?.[`${side}Feed`];
+  if (storedFeed) {
+    const fromMeta = tokenLookup.get(storedFeed);
+    if (fromMeta) return fromMeta;
+  }
+
+  const slot = String(consumer[side] || "");
+  if (slot && BRACKET_TOKEN_REGEX.test(slot)) {
+    const fromToken = tokenLookup.get(slot);
+    if (fromToken) return fromToken;
+  }
+
+  for (let index = prior.length - 1; index >= 0; index -= 1) {
+    const candidate = prior[index];
+    const structural = inferFeedTokenFromStructure(candidate, consumer, side);
+    if (structural && candidate.meta?.winToken === structural) {
+      return candidate;
+    }
+  }
+
+  if (slot && !BRACKET_TOKEN_REGEX.test(slot)) {
+    for (let index = prior.length - 1; index >= 0; index -= 1) {
+      const candidate = prior[index];
+      if (!candidate?.winner || String(candidate.winner) !== slot) continue;
+      const structural = inferFeedTokenFromStructure(candidate, consumer, side);
+      if (structural === candidate.meta?.winToken) {
+        return candidate;
+      }
+    }
+  }
+
+  return null;
+}
+
 /** @typedef {{ fromId: string, toId: string }} BracketConnectorEdge */
 
 /** @param {BracketConnectorEdge[]} edges */
@@ -384,20 +453,8 @@ export function eliminationFeederEdges(sortedRoundsPairs) {
     prior.push(...columns[i].rounds);
     const nextRoundMatches = columns[i + 1].rounds;
     for (const m of nextRoundMatches) {
-      for (const slot of [m.team1, m.team2]) {
-        const s = String(slot || "");
-        let feeder = tokenLookup.get(s);
-        if (!feeder && s && !BRACKET_TOKEN_REGEX.test(s)) {
-          // After a result save, the server may replace token placeholders with real team names.
-          // Find the closest upstream match (in UI column order) that produced this winner name.
-          for (let k = prior.length - 1; k >= 0; k -= 1) {
-            const cand = prior[k];
-            if (cand?.winner && String(cand.winner) === s) {
-              feeder = cand;
-              break;
-            }
-          }
-        }
+      for (const side of ["team1", "team2"]) {
+        const feeder = resolveFeederMatch(prior, m, side, tokenLookup);
         if (!feeder || feeder.id === m.id) continue;
         edges.push({ fromId: feeder.id, toId: m.id });
       }

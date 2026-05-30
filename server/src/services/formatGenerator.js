@@ -399,17 +399,25 @@ function generateBlast(teams, seriesRules, options = {}) {
 
     addMatch(result, teams, "blast-playoffs", 0, 0, "Group A #2", "PIR1M1W", seriesRules, "blast-po-quarterfinal", {
       winToken: "QFR1M1W",
+      team2Feed: "PIR1M1W",
     });
     addMatch(result, teams, "blast-playoffs", 0, 1, "Group B #2", "PIR1M2W", seriesRules, "blast-po-quarterfinal", {
       winToken: "QFR1M2W",
+      team2Feed: "PIR1M2W",
     });
     addMatch(result, teams, "blast-playoffs", 1, 0, "Group A #1", "QFR1M1W", seriesRules, "blast-po-semifinal", {
       winToken: "SFR1M1W",
+      team2Feed: "QFR1M1W",
     });
     addMatch(result, teams, "blast-playoffs", 1, 1, "Group B #1", "QFR1M2W", seriesRules, "blast-po-semifinal", {
       winToken: "SFR1M2W",
+      team2Feed: "QFR1M2W",
     });
-    addMatch(result, teams, "blast-playoffs", 2, 0, "SFR1M1W", "SFR1M2W", seriesRules, "blast-po-final", { winToken: "CHAMPION" });
+    addMatch(result, teams, "blast-playoffs", 2, 0, "SFR1M1W", "SFR1M2W", seriesRules, "blast-po-final", {
+      winToken: "CHAMPION",
+      team1Feed: "SFR1M1W",
+      team2Feed: "SFR1M2W",
+    });
   } else if (sizes.mainPlayoffPath === "tiered_merged_standings") {
     const middleCount = sizes.middleBracketEntrants ?? 0;
     if (middleCount < 1) {
@@ -452,19 +460,27 @@ function generateBlast(teams, seriesRules, options = {}) {
     // Cross seeds: crossover (#2 vs LC finalists) feeds opposite middle-band (#3/#4) survivors — avoids parallel 1–1 / 2–2 lanes.
     addMatch(result, teams, "blast-playoffs", 0, 0, mw1, px2, seriesRules, "blast-po-quarterfinal", {
       winToken: "QFR1M1W",
+      team2Feed: px2,
     });
     addMatch(result, teams, "blast-playoffs", 0, 1, mw2, px1, seriesRules, "blast-po-quarterfinal", {
       winToken: "QFR1M2W",
+      team2Feed: px1,
     });
     const waitSF1 = n === 12 ? "Group A #1" : "BLR1";
     const waitSF2 = n === 12 ? "Group B #1" : "BLR2";
     addMatch(result, teams, "blast-playoffs", 1, 0, waitSF1, "QFR1M1W", seriesRules, "blast-po-semifinal", {
       winToken: "SFR1M1W",
+      team2Feed: "QFR1M1W",
     });
     addMatch(result, teams, "blast-playoffs", 1, 1, waitSF2, "QFR1M2W", seriesRules, "blast-po-semifinal", {
       winToken: "SFR1M2W",
+      team2Feed: "QFR1M2W",
     });
-    addMatch(result, teams, "blast-playoffs", 2, 0, "SFR1M1W", "SFR1M2W", seriesRules, "blast-po-final", { winToken: "CHAMPION" });
+    addMatch(result, teams, "blast-playoffs", 2, 0, "SFR1M1W", "SFR1M2W", seriesRules, "blast-po-final", {
+      winToken: "CHAMPION",
+      team1Feed: "SFR1M1W",
+      team2Feed: "SFR1M2W",
+    });
   }
 
   return result;
