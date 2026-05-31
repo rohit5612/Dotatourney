@@ -5,6 +5,7 @@ import { persistBlastGroupSeedingIfReady } from "../services/blastSeeding.js";
 import { generateMatches, getFormatTeamCountMessage, stageTabsForFormat } from "../services/formatGenerator.js";
 import { buildGroupIndices, formatUsesGroupAssignment, validateGroupAssignment } from "../services/groupAssignment.js";
 import { reapplyAllProgression } from "../services/progressionEngine.js";
+import { buildPublicHonorsPayload } from "../services/bracketHonorsEngine.js";
 import { applySeriesRulesToMatches } from "../services/seriesRulesEngine.js";
 import { archivePlayerRegistration, getPlayerRegistrationById, listPlayerRegistrations, updatePlayerRegistration } from "../services/registrationRepository.js";
 import { sendPlayerRegistrationDecisionEmail } from "../services/emailService.js";
@@ -96,6 +97,37 @@ const tournamentSchema = z.object({
   paymentQrImage: z.string().optional().default(""),
   paymentUpiId: z.string().optional().default(""),
   registrationsOpen: z.boolean().optional().default(false),
+    tournamentHonors: z
+    .object({
+      displayPodiumCount: z.number().int().min(1).max(12).optional().default(2),
+      mvp: z
+        .object({
+          prize: z.string().optional().default(""),
+          teamName: z.string().optional().default(""),
+          playerId: z.string().optional().default(""),
+          playerName: z.string().optional().default(""),
+          notes: z.string().optional().default(""),
+        })
+        .nullable()
+        .optional(),
+      customCards: z
+        .array(
+          z.object({
+            id: z.string().optional(),
+            title: z.string().optional().default(""),
+            prize: z.string().optional().default(""),
+            winnerLabel: z.string().optional().default(""),
+            teamName: z.string().optional().default(""),
+            playerName: z.string().optional().default(""),
+            notes: z.string().optional().default(""),
+            sortOrder: z.number().int().optional(),
+          }),
+        )
+        .optional()
+        .default([]),
+    })
+    .optional()
+    .default({ customCards: [] }),
 });
 
 async function validateRosterRegistrations(tournamentId, players) {
@@ -258,12 +290,14 @@ router.get("/:id", async (req, res, next) => {
 
     const standings = buildStandings(standingsTeams, matches, data.tournament.format);
     const groupedStandings = buildGroupedStandings(standingsTeams, matches, data.tournament.format);
+    const honors = buildPublicHonorsPayload(matches, data.tournament.format, data.tournament.tournament_honors);
     return res.json({
       ...data,
       matches,
       tabs: stageTabsForFormat(data.tournament.format, { teamCount: data.tournament.team_count }),
       standings,
       groupedStandings,
+      honors,
     });
   } catch (error) {
     next(error);

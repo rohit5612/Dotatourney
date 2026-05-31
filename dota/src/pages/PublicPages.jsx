@@ -62,8 +62,9 @@ const BracketDiagram = lazy(() =>
 );
 
 const PUBLIC_ROUTE_STYLES = {
-  "/": () => import("../styles/landing-hero.css"),
-  "/tournament": () => import("../styles/tournament-page.css"),
+  "/": () => Promise.all([import("../styles/landing-hero.css"), import("../styles/tournament-honors.css")]),
+  "/tournament": () => Promise.all([import("../styles/tournament-page.css"), import("../styles/tournament-honors.css")]),
+  "/teams": () => Promise.all([import("../styles/teams-page.css"), import("../styles/tournament-honors.css")]),
   "/schedule": () => import("../styles/schedule-page.css"),
   "/rules": () => import("../styles/general-rules-page.css"),
 };
@@ -79,6 +80,8 @@ import {
 } from "../utils/schedule.js";
 import { buildTeamNameLookup, findTeamByName, teamInitials } from "../utils/teamPage.js";
 import { resolveBlastBracketMatches } from "../utils/blastSeeding.js";
+import { TournamentWinnersBlock } from "../components/honors/TournamentWinnersBlock.jsx";
+import { hasPublicHonorsContent } from "../utils/tournamentHonors.js";
 import { buildBracketTokenHelp } from "../utils/bracketTokenHelp.js";
 import { collectTeamLogoUrls, preloadTeamLogos } from "../utils/teamLogoCache.js";
 import { hexToRgbTriplet } from "../hooks/useLogoAccent.js";
@@ -610,6 +613,20 @@ function LandingPage({ event, navigate, message }) {
         </div>
       </section>
 
+      {hasPublicHonorsContent(event?.honors) ? (
+        <div className="relative left-1/2 w-screen -translate-x-1/2 border-y border-border/60 bg-background/95">
+          <div className="mx-auto max-w-6xl px-4 py-10">
+            <TournamentWinnersBlock
+              honors={event?.honors}
+              teams={event?.teams}
+              teamLookup={buildTeamNameLookup(event?.teams, event?.setupTeams)}
+              tournament={tournament}
+              variant="landing"
+            />
+          </div>
+        </div>
+      ) : null}
+
       <div className="landing-stats-to-overview">
         <RevealSection>
           <section id="landing-explore" className="landing-stats relative mx-auto max-w-6xl scroll-mt-20 px-4">
@@ -922,6 +939,11 @@ function PrizePoolBreakdown({ total, items }) {
 
 function TournamentInfo({ event, message, navigate }) {
   const tournament = event?.tournament;
+  const teamLookup = useMemo(
+    () => buildTeamNameLookup(event?.teams, event?.setupTeams),
+    [event?.teams, event?.setupTeams],
+  );
+  const showHonors = hasPublicHonorsContent(event?.honors);
   const [announcementPage, setAnnouncementPage] = useState(0);
 
   const announcementEntries = useMemo(() => {
@@ -1012,6 +1034,20 @@ function TournamentInfo({ event, message, navigate }) {
           </div>
         </div>
       </section>
+
+      {showHonors ? (
+        <div className="relative left-1/2 w-screen -translate-x-1/2 border-b border-border/70 bg-background/95 shadow-lg">
+          <div className="mx-auto max-w-6xl px-4 py-8">
+            <TournamentWinnersBlock
+              honors={event?.honors}
+              teams={event?.teams}
+              teamLookup={teamLookup}
+              tournament={tournament}
+              showCustomCards
+            />
+          </div>
+        </div>
+      ) : null}
 
       <div className="relative left-1/2 w-screen -translate-x-1/2">
         <div className="pointer-events-none absolute inset-0 z-0 min-h-full" aria-hidden="true">

@@ -239,6 +239,7 @@
 }
 
 .teams-card__spotlight {
+  position: relative;
   flex: 0 0 auto;
   min-height: 16.5rem;
   display: flex;

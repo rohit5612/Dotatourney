@@ -7,6 +7,7 @@ const PAGE_LABELS = {
   teams: "Teams",
   setup: "Setup",
   announcements: "News",
+  honors: "Honors",
   bracketSchedule: "Bracket",
   standings: "Standings",
   users: "Users",

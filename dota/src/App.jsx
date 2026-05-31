@@ -7,6 +7,7 @@ import { buildDefaultSeriesRules, mergeBlastSeriesRules, roles } from "./constan
 import { api, getAuthToken, setAuthToken, setUnauthorizedHandler } from "./lib/api";
 import { toDateInputValue, toDatetimeLocalValue } from "./utils/datetime";
 import { announcementsToAdminFormState, announcementsToApiPayload, bannerAnnouncementsToAdminFormState, bannerAnnouncementsToApiPayload } from "./lib/announcementEntries.js";
+import { honorsToApiPayload, normalizeHonorsAdmin } from "./utils/tournamentHonors.js";
 import { PrimaryViewTabs } from "./components/navigation/TournamentTabs.jsx";
 import { augmentGroupedBracketMatches } from "./components/bracket/bracketLayout.js";
 import { resolveBlastBracketMatches } from "./utils/blastSeeding.js";
@@ -14,12 +15,13 @@ import { createId, getInitialDarkMode } from "./utils/client";
 import { isGroupAssignmentValid } from "./utils/groupAssignment.js";
 import { playerDisplayName } from "./utils/teamPage.js";
 
-const adminPages = ["registrations", "teams", "setup", "announcements", "bracketSchedule", "standings", "users"];
+const adminPages = ["registrations", "teams", "setup", "announcements", "honors", "bracketSchedule", "standings", "users"];
 
 const PublicApp = lazy(() => import("./pages/PublicPages.jsx").then((m) => ({ default: m.PublicApp })));
 const AdminAuthPage = lazy(() => import("./pages/AdminAuthPage.jsx").then((m) => ({ default: m.AdminAuthPage })));
 const AdminUsersPage = lazy(() => import("./pages/AdminUsersPage.jsx").then((m) => ({ default: m.AdminUsersPage })));
 const AnnouncementsPage = lazy(() => import("./pages/AnnouncementsPage.jsx").then((m) => ({ default: m.AnnouncementsPage })));
+const HonorsPage = lazy(() => import("./pages/HonorsPage.jsx").then((m) => ({ default: m.HonorsPage })));
 const BracketPage = lazy(() => import("./pages/BracketPage.jsx").then((m) => ({ default: m.BracketPage })));
 const RegistrationCrmPage = lazy(() =>
   import("./pages/RegistrationCrmPage.jsx").then((m) => ({ default: m.RegistrationCrmPage })),
@@ -55,6 +57,7 @@ function App() {
     liveYoutubeUrl: "",
     announcements: [],
     bannerAnnouncement: { body: "", postedAt: "" },
+    tournamentHonors: { displayPodiumCount: 2, mvp: null, customCards: [] },
     visibilityMode: "demo",
     bracketActive: false,
     registrationCodePrefix: "BPC",
@@ -210,6 +213,7 @@ function App() {
         liveYoutubeUrl: payload.tournament.live_youtube_url ?? prev.liveYoutubeUrl ?? "",
         announcements: announcementsToAdminFormState(payload.tournament.announcements),
         bannerAnnouncement: bannerAnnouncementsToAdminFormState(payload.tournament.banner_announcements),
+        tournamentHonors: normalizeHonorsAdmin(payload.tournament.tournament_honors),
         visibilityMode: payload.tournament.visibility_mode ?? prev.visibilityMode,
         bracketActive: payload.tournament.bracket_active ?? prev.bracketActive,
         registrationCodePrefix: payload.tournament.registration_code_prefix ?? prev.registrationCodePrefix ?? "BPC",
@@ -272,6 +276,7 @@ function App() {
       darkMode: true,
       announcements: announcementsToApiPayload(overrides.announcements ?? setup.announcements),
       bannerAnnouncements: bannerAnnouncementsToApiPayload(overrides.bannerAnnouncement ?? setup.bannerAnnouncement),
+      tournamentHonors: honorsToApiPayload(overrides.tournamentHonors ?? setup.tournamentHonors),
     };
   }
 
@@ -1000,6 +1005,18 @@ function App() {
         {activePage === "announcements" && (
           <Suspense fallback={<PageLoadingSpinner label="Loading announcements…" />}>
             <AnnouncementsPage setup={setup} setSetup={setSetup} saveTournament={bootstrapTournament} />
+          </Suspense>
+        )}
+
+        {activePage === "honors" && (
+          <Suspense fallback={<PageLoadingSpinner label="Loading honors…" />}>
+            <HonorsPage
+              setup={setup}
+              setSetup={setSetup}
+              saveTournament={bootstrapTournament}
+              honorsPreview={state?.honors}
+              approvedRoster={approvedRoster}
+            />
           </Suspense>
         )}
 

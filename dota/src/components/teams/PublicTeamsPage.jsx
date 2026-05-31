@@ -16,6 +16,7 @@ import {
   squadCountLabel,
   teamInitials,
 } from "../../utils/teamPage.js";
+import { TeamHonorBadge } from "../honors/TournamentHonorsPanel.jsx";
 
 function CrownIcon() {
   return (
@@ -69,6 +70,10 @@ const TeamCard = memo(function TeamCard({ team, index }) {
             <span className="teams-card__live-dot" aria-hidden />
             Live
           </span>
+        ) : null}
+
+        {team.bracketBadge ? (
+          <TeamHonorBadge badge={team.bracketBadge} className="teams-card__honor-badge" />
         ) : null}
 
         <div className="teams-card__spotlight-main">
@@ -168,6 +173,7 @@ export function PublicTeamsPage({ event, message, navigate }) {
       schedule: event?.schedule,
       format: tournament?.format,
       setupTeams,
+      honors: event?.honors,
     };
     return orderTeamsForTeamsPage(rawTeams, context).map((team) => enrichTeam(team, context));
   }, [
@@ -177,6 +183,7 @@ export function PublicTeamsPage({ event, message, navigate }) {
     event?.groupedStandings,
     event?.matches,
     event?.schedule,
+    event?.honors,
     tournament?.format,
   ]);
 

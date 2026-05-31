@@ -16,6 +16,7 @@ import {
 } from "../services/publicCache.js";
 import { getPublishedTournament, getPublishedTournamentForPublicRequest } from "../services/tournamentRepository.js";
 import { applyBlastGroupSeeding } from "../services/blastSeeding.js";
+import { buildPublicHonorsPayload } from "../services/bracketHonorsEngine.js";
 import { buildGroupedStandings, buildStandings } from "../services/standingsEngine.js";
 import { stageTabsForFormat } from "../services/formatGenerator.js";
 import {
@@ -216,6 +217,7 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
     bracketMatches = applyBlastGroupSeeding(standingsTeams, bracketMatches).matches;
   }
   const matches = bracketMatches.map((match) => publicMatch(match, visibilityMode));
+  const honors = buildPublicHonorsPayload(matches, format, data.tournament.tournament_honors);
   return {
     tournament: data.tournament,
     teams: visibilityMode === "demo" ? [] : publicTeams,
@@ -230,6 +232,7 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
             accentColor: team.accentColor || team.accent_color || "",
           })),
     matches,
+    honors,
     schedule: data.schedule,
     tabs: stageTabsForFormat(format, { teamCount: data.tournament.team_count }),
     standings: buildStandings(standingsTeams, matches, format),

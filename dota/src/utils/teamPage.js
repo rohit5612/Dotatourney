@@ -251,7 +251,7 @@ export function applyTeamSetupAssets(team, setupTeamsOrLookup) {
 }
 
 export function enrichTeam(team, context) {
-  const { standings, groupedStandings, matches, schedule, format, setupTeams } = context;
+  const { standings, groupedStandings, matches, schedule, format, setupTeams, honors } = context;
   const base = setupTeams ? applyTeamSetupAssets(team, setupTeams) : team;
   const isBlast = format === "blast";
   const players = sortPlayersByRole(base.players || []);
@@ -279,6 +279,7 @@ export function enrichTeam(team, context) {
     },
     form: getRecentForm(base.name, formMatches),
     isLive: isTeamLive(base.name, schedule, matches),
+    bracketBadge: honors?.badgesByTeam?.[base.name] || null,
   };
 }
 
@@ -334,9 +335,41 @@ function compareByOverallRank(a, b, overallRank) {
 }
 
 /**
- * Teams page: A1 & B1 (by overall), then A2 & B2 (by overall), …, then rest of overall table, then seed.
+ * After the final, order by bracket placement (champion → runner-up → SF → QF → …).
+ * Teams missing from placement data fall back to badge depth, then seed.
  */
-export function orderTeamsForTeamsPage(teams, { standings = [], groupedStandings = [] } = {}) {
+function orderTeamsByTournamentPlacement(teams, honors) {
+  const byName = new Map((teams || []).map((team) => [team.name, team]));
+  const placementTeams = honors?.placementTeams || [];
+  const ordered = [];
+  const seen = new Set();
+
+  for (const entry of placementTeams) {
+    const team = byName.get(entry.teamName);
+    if (!team || seen.has(team.name)) continue;
+    seen.add(team.name);
+    ordered.push(team);
+  }
+
+  const remainder = (teams || []).filter((team) => !seen.has(team.name));
+  remainder.sort((a, b) => {
+    const depthA = honors?.badgesByTeam?.[a.name]?.depth ?? 0;
+    const depthB = honors?.badgesByTeam?.[b.name]?.depth ?? 0;
+    if (depthA !== depthB) return depthB - depthA;
+    return (a.seed ?? Number.MAX_SAFE_INTEGER) - (b.seed ?? Number.MAX_SAFE_INTEGER);
+  });
+
+  return [...ordered, ...remainder];
+}
+
+/**
+ * Teams page: group-tier order while the event is live; bracket placement once the final has a winner.
+ */
+export function orderTeamsForTeamsPage(teams, { standings = [], groupedStandings = [], honors } = {}) {
+  if (honors?.finalFinished && honors?.placementTeams?.length) {
+    return orderTeamsByTournamentPlacement(teams, honors);
+  }
+
   const list = teams || [];
   const byName = new Map(list.map((team) => [team.name, team]));
   const orderedNames = [];
