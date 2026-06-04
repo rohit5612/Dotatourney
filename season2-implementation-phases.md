@@ -39,7 +39,17 @@ git checkout main       # production hotfixes only
 | Gold (custom logo, stats, Discord perks TBD) | ₹450 | ₹360 (20%) | ₹660 |
 | Holo (custom avatar, tagline, role, perks TBD) | ₹700 | ₹595 (15%) | ₹895 |
 
-Payment gateway: **abstract in Phase 3**; Razorpay when business KYC ready; manual provider until then.
+Payment gateway: **Razorpay** (production). Payment service stays provider-abstracted; `manual` only for local dev without Razorpay keys.
+
+### Infrastructure (locked)
+
+| Item | Choice |
+|------|--------|
+| **Domain** | `bpcleague.com` (configure `www` → same app or redirect) |
+| **Hosting** | Hostinger VPS — Node API + PostgreSQL on same VPS (or managed Postgres if Hostinger offers it on your plan) |
+| **Payments** | Razorpay (Orders API + webhook for `payment.captured`) |
+
+See [Deployment & domain (Hostinger + bpcleague.com)](#deployment--domain-hostinger--bpcleaguecom) below.
 
 ---
 
@@ -84,8 +94,8 @@ flowchart LR
 ### Prerequisites
 
 - PostgreSQL backups of production/staging before migration.
-- Steam Web API key + Discord application created (redirect URLs for dev + prod).
-- Google OAuth client for login.
+- Steam Web API key + Discord application created (redirect URLs for `localhost` + `https://bpcleague.com`).
+- Google OAuth client for login (authorized origins: `https://bpcleague.com`, `http://localhost:5173`).
 
 ### 1.1 Database (migrations `025`–`028`)
 
@@ -301,35 +311,51 @@ Update [SiteNavbar](dota/src/components/) (or equivalent):
 
 - Phases 1–2 complete.
 - Tournament row for Season 2 created in admin (draft OK for staging).
+- **Razorpay:** account created (test mode for dev; live mode after KYC on your business entity).
+- Env vars documented: `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`.
 
-### 3.1 Payment abstraction
+### 3.1 Payment — Razorpay (primary)
 
 **New**
 
-- `server/src/services/paymentService.js`
-- `checkout_orders` table: `id`, `player_account_id`, `tournament_id`, `line_items` JSONB, `subtotal`, `coin_discount`, `total`, `provider` (`manual`|`razorpay`), `status`, `provider_ref`, timestamps
-- `payment_webhooks` log table (future Razorpay)
+- `server/src/services/paymentService.js` + `razorpayService.js`
+- `checkout_orders` table: `id`, `player_account_id`, `tournament_id`, `line_items` JSONB, `subtotal`, `coin_discount`, `total_paise`, `currency` (`INR`), `provider` (`razorpay`|`manual`), `razorpay_order_id`, `status`, timestamps
+- `payment_webhooks` log table (raw payload + signature verified flag)
 
-**Providers**
+**Razorpay flow (production)**
 
-| Provider | Behavior |
-|----------|----------|
-| `manual` | Order `pending_payment` → show UPI QR from tournament + “I’ve paid” optional; admin/auto mark paid (webhook simulation button in dev) |
-| `razorpay` | Stub adapter interface; implement when KYC ready |
+1. `checkout/preview` → totals in INR paise.
+2. `checkout/confirm` → create Razorpay Order (`amount`, `currency`, `receipt` = checkout order id, `notes` = tournament + player account).
+3. Frontend loads **Razorpay Checkout** (`key_id`, `order_id`, prefill email/name) — UPI, cards, wallets per Razorpay dashboard.
+4. `POST /api/webhooks/razorpay` — verify `X-Razorpay-Signature` with webhook secret; on `payment.captured` → mark order paid, approve registration, deduct coins (idempotent by `payment_id`).
 
-**On paid**
+**Dev fallback**
 
-- Create/update `player_registrations`: `payment_status=paid`, `registration_status=approved`, `auto_approved_at=NOW()`, `card_tier`, link `checkout_order_id`.
-- Deduct coins in same DB transaction.
-- Idempotent webhook handler.
+| Provider | When |
+|----------|------|
+| `razorpay` | Default whenever keys are set |
+| `manual` | Local only if `RAZORPAY_KEY_ID` empty — simulates paid via guarded dev endpoint |
+
+**On paid (webhook or verified client callback + server confirm)**
+
+- Update `player_registrations`: `payment_status=paid`, `registration_status=approved`, `auto_approved_at=NOW()`, `card_tier`, `payment_provider=razorpay`, `payment_ref`.
+- Deduct BPC coins in same transaction.
+- Never rely on client-only success — webhook is source of truth.
+
+**Razorpay dashboard setup (before S2 reg open)**
+
+- Webhook URL: `https://bpcleague.com/api/webhooks/razorpay` (staging: tunnel or staging subdomain).
+- Events: `payment.captured`, `payment.failed` (optional logging).
+- Activate UPI / preferred methods in Razorpay account settings.
 
 ### 3.2 Checkout API
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/api/player/tournaments/:slug/checkout/preview` | Line items + coin discount + total |
-| POST | `/api/player/tournaments/:slug/checkout/confirm` | Create order + return payment instructions |
-| POST | `/api/player/tournaments/:slug/checkout/complete` | Manual mark paid (dev) or webhook |
+| POST | `/api/player/tournaments/:slug/checkout/preview` | Line items + coin discount + total (INR) |
+| POST | `/api/player/tournaments/:slug/checkout/confirm` | Create `checkout_orders` + Razorpay Order; return `orderId`, `keyId`, amount |
+| POST | `/api/webhooks/razorpay` | Webhook (no auth cookie; signature only) |
+| GET | `/api/player/checkout/:orderId/status` | Poll until paid (optional UX) |
 
 **Preview logic**
 
@@ -371,7 +397,7 @@ Admin CRM filter: “Substitutes only”.
 3. Checkout wizard:
    - Step 1: Card tier selector (grey default / player / gold / holo) with live price table
    - Step 2: Apply BPC coins (slider or input, max shown)
-   - Step 3: Payment (QR + status polling or Razorpay embed)
+   - Step 3: Razorpay Checkout modal (UPI/cards); poll or redirect handler until confirmed
    - Step 4: Confirmation + BPC ID + tier purchased
 4. **Substitute signup** — when reg closed
 
@@ -390,7 +416,8 @@ Store in `player_card_assets` table: `player_account_id`, `tier`, `asset_url`, `
 
 ### 3.8 Testing & exit criteria
 
-- [ ] Reg-only ₹300 completes and appears in CRM as paid+approved.
+- [ ] Reg-only ₹300 completes via Razorpay test mode; webhook marks paid+approved in CRM.
+- [ ] Webhook replay is idempotent (duplicate `payment.captured` ignored).
 - [ ] Reg + Player = ₹540; coins reduce total correctly; ledger updated.
 - [ ] Ineligible (no Discord) blocked with clear message.
 - [ ] Substitute registers without payment when reg closed.
@@ -398,8 +425,9 @@ Store in `player_card_assets` table: `player_account_id`, `tier`, `asset_url`, `
 
 **Exit criteria**
 
-1. End-to-end registration without admin screenshot approval (manual payment provider OK).
+1. End-to-end registration via **Razorpay** without admin screenshot approval.
 2. Card tier persisted on registration row.
+3. Staging webhook reachable (ngrok or VPS staging host) before production cutover.
 
 **Out of scope**
 
@@ -714,11 +742,11 @@ Coordinate with existing WebSocket GSI app (external).
 | MVP community vote | Low → Season 2.5 |
 | Fantasy / predictions | Defer |
 
-### 7.4 Razorpay go-live (when legal ready)
+### 7.4 Production hardening (VPS + domain)
 
-- Implement `razorpay` provider in `paymentService.js`
-- Webhook URL + signature verification
-- Switch tournament `payment_provider` field in Setup
+- Switch Razorpay **live** keys on VPS; confirm webhook on `bpcleague.com`
+- Smoke-test real ₹1 order (optional) before opening registration
+- PM2/log rotation, DB backups, SSL renewal reminder
 
 ### 7.5 Testing & exit criteria
 
@@ -730,6 +758,119 @@ Coordinate with existing WebSocket GSI app (external).
 
 1. Stream overlay shows player cards without manual asset uploads.
 2. Discord distinguishes card tiers visually.
+
+---
+
+# Deployment & domain (Hostinger VPS + bpcleague.com)
+
+**Target architecture**
+
+```mermaid
+flowchart TB
+  User[Browser bpcleague.com]
+  Nginx[Nginx on Hostinger VPS]
+  Static[Vite build static files]
+  API[Node Express :3000]
+  PG[(PostgreSQL)]
+  RZP[Razorpay]
+  User --> Nginx
+  Nginx --> Static
+  Nginx -->|/api proxy| API
+  API --> PG
+  RZP -->|webhook| API
+  User -->|Checkout| RZP
+```
+
+### Recommended URL layout
+
+| URL | Serves |
+|-----|--------|
+| `https://bpcleague.com` | React SPA (`dota/dist`) |
+| `https://www.bpcleague.com` | 301 → apex or same site |
+| `https://bpcleague.com/api/*` | Express (Nginx `proxy_pass` to `127.0.0.1:3000`) |
+
+Alternative: `api.bpcleague.com` — only if you prefer split origin (then update `CORS_ORIGIN` + `VITE_API_BASE_URL`).
+
+### DNS (at registrar / Hostinger)
+
+| Record | Value |
+|--------|--------|
+| `A` `@` | VPS public IP |
+| `A` `www` | VPS public IP (or CNAME to `@`) |
+
+### VPS stack checklist (implement during Phase 3 staging or before launch)
+
+1. **OS:** Ubuntu 22.04+ on Hostinger VPS.
+2. **PostgreSQL:** install on VPS; `DATABASE_URL=postgresql://...@127.0.0.1:5432/bpcl` — restrict port to localhost.
+3. **Node 20 LTS** + **PM2** for `server/` (`pm2 start src/index.js --name bpcl-api`).
+4. **Nginx:** serve `dota/dist`; `location /api { proxy_pass http://127.0.0.1:3000; }`; `client_max_body_size` for card uploads.
+5. **SSL:** Certbot Let’s Encrypt for `bpcleague.com` + `www`.
+6. **Firewall:** allow 80/443; block 3000 and 5432 from public internet.
+7. **Deploy script:** `git pull` on `season2` → `npm ci` → `npm run build` (dota) → `npm run migrate` (server) → `pm2 reload`.
+8. **Backups:** daily `pg_dump` cron to off-VPS storage.
+
+### Environment variables (production)
+
+**Server (`server/.env` on VPS)**
+
+```env
+NODE_ENV=production
+PORT=3000
+DATABASE_URL=postgresql://...
+CORS_ORIGIN=https://bpcleague.com,https://www.bpcleague.com
+APP_URL=https://bpcleague.com
+
+# Auth (Phase 1+)
+PLAYER_SESSION_SECRET=...
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+STEAM_API_KEY=...
+DISCORD_CLIENT_ID=...
+DISCORD_CLIENT_SECRET=...
+
+# Razorpay (Phase 3)
+RAZORPAY_KEY_ID=rzp_live_...
+RAZORPAY_KEY_SECRET=...
+RAZORPAY_WEBHOOK_SECRET=...
+
+# Email — use domain mailbox (see server/.env.example)
+EMAIL_FROM="BPC League" <noreply@bpcleague.com>
+SMTP_...
+```
+
+**Frontend build (`dota/.env.production`)**
+
+```env
+VITE_API_BASE_URL=/api
+VITE_SITE_URL=https://bpcleague.com
+```
+
+Build on VPS or CI; API same-origin via Nginx avoids CORS complexity.
+
+### OAuth & Razorpay redirect allowlists
+
+Register these **exact** URLs in Google, Discord, Steam, and Razorpay:
+
+| Provider | Callback / URL |
+|----------|----------------|
+| Google OAuth | `https://bpcleague.com/api/player/auth/google/callback` (or your chosen path) |
+| Discord | `https://bpcleague.com/api/player/auth/discord/callback` |
+| Steam OpenID | `https://bpcleague.com/api/player/auth/steam/callback` |
+| Razorpay webhook | `https://bpcleague.com/api/webhooks/razorpay` |
+
+Local dev: keep `http://localhost:5173` + `http://localhost:3000` equivalents in provider dashboards.
+
+### Razorpay account note
+
+Razorpay still requires **merchant KYC** (business/sole prop + bank). Complete that before switching from `rzp_test_` to `rzp_live_` keys. Development uses **test mode** without blocking Phase 3 implementation.
+
+### Phase alignment
+
+| Phase | Infra work |
+|-------|------------|
+| 1 | Staging VPS optional; set OAuth redirect URLs to production domain early |
+| 3 | Razorpay test keys + webhook tunnel/VPS; Nginx `/api` on staging host |
+| 7 | Live keys, SSL, backups, `bpcleague.com` go-live checklist |
 
 ---
 
@@ -769,7 +910,7 @@ Coordinate with existing WebSocket GSI app (external).
 |-------|-------------------|
 | 1 | Every S1 player has one global account and BPC ID; OAuth works. |
 | 2 | Public site is emerald light theme with expanded nav. |
-| 3 | Registration + optional card + coins + substitutes work without CRM screenshots. |
+| 3 | Razorpay checkout completes; reg + card + coins + substitutes without CRM screenshots. |
 | 4 | Profiles and dashboard show card, team, and matches. |
 | 5 | Seasons, trophy, and cards appear across the marketing site. |
 | 6 | Admins are scoped; tournament presets are selectable. |
