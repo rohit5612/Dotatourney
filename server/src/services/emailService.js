@@ -432,3 +432,54 @@ export async function sendPlayerRegistrationDecisionEmail({
   });
   await sendMail({ to, subject, text: textBody, html });
 }
+
+/**
+ * @param {{ to: string; verifyUrl: string; displayName?: string }} params
+ */
+export async function sendPlayerEmailVerificationEmail({ to, verifyUrl, displayName = "" }) {
+  const name = displayName || "there";
+  const subject = `Verify your email — ${BRAND_SHORT}`;
+  const text = [
+    `Hi ${name},`,
+    ``,
+    `Verify your ${BRAND_LINE} player account:`,
+    verifyUrl,
+    ``,
+    `If you didn't create this account, ignore this email.`,
+  ].join("\n");
+  const innerHtml = `
+    <p style="margin:0;font-size:15px;color:#d4d4d8;">Hi <strong style="color:#fff;">${escapeHtml(name)}</strong>,</p>
+    <p style="margin:16px 0 0;font-size:14px;color:#a1a1aa;">Confirm your email to sign in and link Steam &amp; Discord for tournament registration.</p>
+    ${buttonHtml(verifyUrl, "Verify email")}
+  `;
+  const html = baseEmailWrapper({
+    title: "Verify your email",
+    preheader: `Complete your ${BRAND_SHORT} account setup.`,
+    innerHtml,
+  });
+  await sendMail({ to, subject, text, html });
+}
+
+/**
+ * @param {{ to: string; resetUrl: string }} params
+ */
+export async function sendPlayerPasswordResetEmail({ to, resetUrl }) {
+  const subject = `Reset your password — ${BRAND_SHORT}`;
+  const text = [
+    `Reset your ${BRAND_LINE} player account password:`,
+    resetUrl,
+    ``,
+    `This link expires in a few hours. If you didn't request this, ignore this email.`,
+  ].join("\n");
+  const innerHtml = `
+    <p style="margin:0;font-size:15px;color:#d4d4d8;">Use the button below to set a new password.</p>
+    ${buttonHtml(resetUrl, "Reset password")}
+    <p style="margin:16px 0 0;font-size:13px;color:#71717a;">Link expires in about 2 hours.</p>
+  `;
+  const html = baseEmailWrapper({
+    title: "Password reset",
+    preheader: `Reset your ${BRAND_SHORT} password.`,
+    innerHtml,
+  });
+  await sendMail({ to, subject, text, html });
+}

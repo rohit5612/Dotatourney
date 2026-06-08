@@ -13,6 +13,47 @@ git checkout main       # production hotfixes only
 
 ---
 
+## Data preservation policy (confirmed)
+
+**Yes — all existing table data is preserved.** Season 2 work is **additive**. Nothing in Phase 1–7 should delete or rewrite historical tournament, registration, bracket, or roster data required for the seasons page and future features.
+
+### What stays untouched (rows and core columns)
+
+| Data | Tables / fields | Used later for |
+|------|-----------------|----------------|
+| Season 1 tournament config | `tournaments` (+ `published_snapshot`, honors, announcements) | `/seasons/season-1`, homepage champions |
+| Every registration ever | `player_registrations` (all rows, including **archived**) | CRM history, season participation, BPC ID source |
+| Teams & working players | `teams`, `players`, `team_players` | Admin + historical reference |
+| Bracket & results | `matches`, `schedule_slots` | Season standings, match pages |
+| Approved rosters | `roster_snapshots` + child tables | S1 teams, draft history, dashboard team linkage |
+| Admin | `admin_users`, sessions, invites | Unchanged |
+
+### What we add (never replace)
+
+- **New tables only:** `player_accounts`, `player_sessions`, `bpc_coin_ledger`, `seasons`, etc.
+- **New nullable columns only** on existing tables (e.g. `player_registrations.player_account_id`) — old columns (`public_code`, `payment_screenshot`, OTP fields) **remain**.
+- **No** `DROP TABLE`, `DROP COLUMN`, `TRUNCATE`, or bulk `DELETE` on legacy data in any phase migration.
+- **S1 link script** (`migrate-s1-to-player-accounts.js`): `INSERT` accounts + `UPDATE` FK links only — does **not** remove or merge away registration rows.
+
+### Seasons page strategy (why preservation matters)
+
+- **Phase 5** builds `/seasons/season-1` from **existing** tournament + `published_snapshot` + honors/bracket engines.
+- Recommended: copy a **read-only JSON snapshot** into `seasons.snapshot` for concluded seasons so S1 stays visible even when S2 is the live published tournament.
+- Source tables stay the source of truth; snapshot is a cache for fast public pages, not a replacement DB.
+
+### Operator safeguards (every phase)
+
+1. **`pg_dump` full backup** before first migration on production.
+2. Migration script **`--dry-run`** reports row counts before writes.
+3. Post-migration checks: registration count unchanged; match count unchanged; snapshot still readable via existing admin/public APIs.
+
+### Phase 1 migration scope adjustment
+
+- Link **all** `player_registrations` (including archived) to `player_accounts` by email so season history and CRM stay complete.
+- Keep `public_code` on each registration row for audit even after global `bpc_id` on the account.
+
+---
+
 ## Requirements traceability
 
 | ID | Your requirement | Primary phase(s) |
@@ -99,6 +140,8 @@ flowchart LR
 
 ### 1.1 Database (migrations `025`–`028`)
 
+**Rules:** `CREATE TABLE` / `ADD COLUMN IF NOT EXISTS` only. See [Data preservation policy](#data-preservation-policy-confirmed).
+
 **New tables**
 
 - `player_accounts` — canonical identity  
@@ -133,14 +176,15 @@ flowchart LR
 
 `server/scripts/migrate-s1-to-player-accounts.js`
 
-1. Select all non-archived `player_registrations` ordered by `email_verified_at`, `created_at`.
+1. Select **all** `player_registrations` (including archived) with a real email (skip synthetic `legacy-*@migrated.forge` unless you choose to map them).
 2. Group by `lower(email)` → one `player_accounts` row.
-3. `bpc_id` = minimum `public_code` per email (preserve `BPC-001` ordering).
-4. Copy: phone (if column exists), email, verified time, Discord, Steam fields, display name.
+3. `bpc_id` = minimum `public_code` per email across that group (preserve `BPC-001` ordering); registrations without `public_code` get account on first login or manual assign.
+4. Copy: phone, email, verified time, Discord, Steam fields, display name — **do not delete** registration columns.
 5. Generate `slug` from display name (dedupe with suffix).
-6. Set `player_registrations.player_account_id` for all rows in group.
-7. Report: duplicates skipped, accounts created, max BPC number for seq init.
-8. **Dry-run mode** + confirmation prompt in production.
+6. `UPDATE` `player_registrations.player_account_id` for **every** row in group (no row deletion).
+7. Assert: `COUNT(player_registrations)` before = after; same for `matches`, `tournaments`.
+8. Init `bpc_id_seq` to `MAX(existing numeric suffix) + 1`.
+9. **Dry-run mode** + confirmation prompt in production.
 
 ### 1.3 Backend — player auth
 
@@ -211,9 +255,10 @@ flowchart LR
 
 **Exit criteria (do not start Phase 2 until all pass)**
 
-1. Migration dry-run reviewed; production migration executed.
+1. Migration dry-run reviewed; production migration executed; **row counts unchanged** on legacy tables.
 2. ≥1 real S1 player can log in and see correct `BPC-###`.
 3. OAuth callbacks work on staging domain.
+4. Existing public site still loads S1 tournament/bracket/schedule from same DB (no regression).
 
 **Out of scope for Phase 1**
 

@@ -322,10 +322,27 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
                   <p className="text-sm text-muted-foreground">Discord: {registration.discordHandle || "N/A"} - Submitted: {new Date(registration.createdAt).toLocaleString()}</p>
                   <p className="text-sm text-muted-foreground">
                     Email: {registration.email || "N/A"}
-                    {registration.publicCode ? (
+                    {registration.playerBpcId || registration.publicCode ? (
                       <>
                         {" "}
-                        — ID: <span className="font-mono text-foreground">{registration.publicCode}</span>
+                        — ID:{" "}
+                        <span className="font-mono text-foreground">
+                          {registration.playerBpcId || registration.publicCode}
+                        </span>
+                      </>
+                    ) : null}
+                    {registration.playerSlug ? (
+                      <>
+                        {" "}
+                        ·{" "}
+                        <a
+                          href={`/player/${registration.playerSlug}`}
+                          className="text-primary underline hover:no-underline"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Profile
+                        </a>
                       </>
                     ) : null}
                     {registration.registrationFlowStage ? ` — Flow: ${registration.registrationFlowStage}` : null}

@@ -67,6 +67,9 @@ export function mapRegistrationRow(row, { includeAdminFields = true } = {}) {
     paymentStatus: row.payment_status,
     registrationStatus: row.registration_status,
     publicCode: row.public_code,
+    playerAccountId: row.player_account_id || null,
+    playerBpcId: row.player_bpc_id || null,
+    playerSlug: row.player_slug || null,
     registrationFlowStage: row.registration_flow_stage,
     emailVerifiedAt: row.email_verified_at,
     termsAcceptedAt: row.terms_accepted_at,
@@ -83,11 +86,16 @@ export function mapRegistrationRow(row, { includeAdminFields = true } = {}) {
   return base;
 }
 
-const listSelect = `SELECT id, tournament_id, email, name, display_name, location, roles, mmr,
-      steam_name, steam_profile, discord_handle, phone_number, payment_screenshot, notes,
-      payment_status, registration_status, admin_notes, public_code, registration_flow_stage,
-      email_verified_at, terms_accepted_at, draft_payload,
-      archived_at, archived_by, archived_reason, created_at, updated_at`;
+const listSelect = `SELECT r.id, r.tournament_id, r.email, r.name, r.display_name, r.location, r.roles, r.mmr,
+      r.steam_name, r.steam_profile, r.discord_handle, r.phone_number, r.payment_screenshot, r.notes,
+      r.payment_status, r.registration_status, r.admin_notes, r.public_code, r.player_account_id,
+      pa.bpc_id AS player_bpc_id, pa.slug AS player_slug,
+      r.registration_flow_stage,
+      r.email_verified_at, r.terms_accepted_at, r.draft_payload,
+      r.archived_at, r.archived_by, r.archived_reason, r.created_at, r.updated_at`;
+
+const registrationFrom = `FROM player_registrations r
+     LEFT JOIN player_accounts pa ON pa.id = r.player_account_id`;
 
 export async function createPlayerRegistration(tournamentId, payload) {
   const id = randomUUID();
@@ -130,9 +138,9 @@ export async function createPlayerRegistration(tournamentId, payload) {
 export async function listPlayerRegistrations(tournamentId) {
   const { rows } = await pool.query(
     `${listSelect}
-     FROM player_registrations
-     WHERE tournament_id = $1
-     ORDER BY created_at DESC`,
+     ${registrationFrom}
+     WHERE r.tournament_id = $1
+     ORDER BY r.created_at DESC`,
     [tournamentId],
   );
   return rows.map((row) => mapRegistrationRow(row));
@@ -156,8 +164,8 @@ export async function countApprovedPlayerRegistrations(tournamentId) {
 export async function getActiveRegistrationByEmail(tournamentId, email) {
   const { rows } = await pool.query(
     `${listSelect}
-     FROM player_registrations
-     WHERE tournament_id = $1 AND lower(email) = lower($2) AND archived_at IS NULL`,
+     ${registrationFrom}
+     WHERE r.tournament_id = $1 AND lower(r.email) = lower($2) AND r.archived_at IS NULL`,
     [tournamentId, email],
   );
   return rows[0] || null;
@@ -166,8 +174,8 @@ export async function getActiveRegistrationByEmail(tournamentId, email) {
 export async function getActiveRegistrationByEmailAndCode(tournamentId, email, publicCode) {
   const { rows } = await pool.query(
     `${listSelect}
-     FROM player_registrations
-     WHERE tournament_id = $1 AND lower(email) = lower($2) AND public_code = $3 AND archived_at IS NULL`,
+     ${registrationFrom}
+     WHERE r.tournament_id = $1 AND lower(r.email) = lower($2) AND r.public_code = $3 AND r.archived_at IS NULL`,
     [tournamentId, email, publicCode.trim().toUpperCase()],
   );
   return rows[0] || null;
@@ -485,7 +493,7 @@ export async function updatePlayerRegistration(tournamentId, registrationId, pay
 }
 
 export async function getPlayerRegistrationById(tournamentId, registrationId) {
-  const { rows } = await pool.query(`${listSelect} FROM player_registrations WHERE tournament_id = $1 AND id = $2`, [
+  const { rows } = await pool.query(`${listSelect} ${registrationFrom} WHERE r.tournament_id = $1 AND r.id = $2`, [
     tournamentId,
     registrationId,
   ]);

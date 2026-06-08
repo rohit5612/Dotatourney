@@ -27,8 +27,10 @@ const emailPass = process.env.EMAIL_PASS?.trim() || "";
 const databaseSsl =
   process.env.DATABASE_SSL === "false" ? false : process.env.DATABASE_SSL === "true" ? true : null;
 
+const defaultPort = toNumber(process.env.PORT, 3000);
+
 export const env = {
-  port: toNumber(process.env.PORT, 3000),
+  port: defaultPort,
   dbHost: process.env.DB_HOST || "localhost",
   dbPort: toNumber(process.env.DB_PORT, 5432),
   dbName: process.env.DB_NAME || "",
@@ -56,10 +58,26 @@ export const env = {
   smtpConfigured: Boolean(emailUser && emailPass),
   /** Used to hash player registration OTPs. Set a strong secret in production. */
   registrationOtpSecret: process.env.REGISTRATION_OTP_SECRET?.trim() || "",
+  /** Player sessions, email verify, password reset, OAuth state */
+  playerTokenSecret:
+    process.env.PLAYER_TOKEN_SECRET?.trim() ||
+    process.env.REGISTRATION_OTP_SECRET?.trim() ||
+    "dev-player-token-secret-change-me",
+  /** Public API origin for OAuth callbacks (e.g. http://localhost:3000 or https://bpcleague.com) */
+  apiPublicUrl: (process.env.API_PUBLIC_URL || "").trim().replace(/\/$/, "") || null,
+  googleClientId: process.env.GOOGLE_CLIENT_ID?.trim() || "",
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET?.trim() || "",
+  discordClientId: process.env.DISCORD_CLIENT_ID?.trim() || "",
+  discordClientSecret: process.env.DISCORD_CLIENT_SECRET?.trim() || "",
+  steamApiKey: process.env.STEAM_API_KEY?.trim() || "",
   /** Service account JSON (minified one-line). Or use GOOGLE_SERVICE_ACCOUNT_JSON_B64 / GOOGLE_APPLICATION_CREDENTIALS. */
   googleServiceAccountJson: process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim() || "",
   googleServiceAccountJsonB64: process.env.GOOGLE_SERVICE_ACCOUNT_JSON_B64?.trim() || "",
 };
+
+if (!env.apiPublicUrl) {
+  env.apiPublicUrl = `http://localhost:${env.port}`;
+}
 
 const hasDiscreteDbCreds = Boolean(env.dbHost && env.dbName && env.dbUser);
 if (!env.databaseUrl && !hasDiscreteDbCreds) {

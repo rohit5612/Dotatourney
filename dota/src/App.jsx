@@ -17,7 +17,12 @@ import { playerDisplayName } from "./utils/teamPage.js";
 
 const adminPages = ["registrations", "teams", "setup", "announcements", "honors", "bracketSchedule", "standings", "users"];
 
+import { isPlayerAuthPath } from "./pages/PlayerAuthPages.jsx";
+
 const PublicApp = lazy(() => import("./pages/PublicPages.jsx").then((m) => ({ default: m.PublicApp })));
+const PlayerAuthRouter = lazy(() =>
+  import("./pages/PlayerAuthPages.jsx").then((m) => ({ default: m.PlayerAuthRouter })),
+);
 const AdminAuthPage = lazy(() => import("./pages/AdminAuthPage.jsx").then((m) => ({ default: m.AdminAuthPage })));
 const AdminUsersPage = lazy(() => import("./pages/AdminUsersPage.jsx").then((m) => ({ default: m.AdminUsersPage })));
 const AnnouncementsPage = lazy(() => import("./pages/AnnouncementsPage.jsx").then((m) => ({ default: m.AnnouncementsPage })));
@@ -882,6 +887,13 @@ function App() {
   }
 
   if (!path.startsWith("/admin")) {
+    if (isPlayerAuthPath(path)) {
+      return (
+        <Suspense fallback={<PageLoadingSpinner label="Loading…" />}>
+          <PlayerAuthRouter path={path} navigate={navigate} />
+        </Suspense>
+      );
+    }
     return (
       <Suspense fallback={<PageLoadingSpinner label="Loading…" />}>
         <PublicApp path={path} navigate={navigate} />

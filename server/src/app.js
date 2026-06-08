@@ -4,6 +4,7 @@ import { env } from "./config/env.js";
 import adminRouter from "./routes/admin.js";
 import publicRouter from "./routes/public.js";
 import tournamentsRouter from "./routes/tournaments.js";
+import playerRouter from "./routes/player.js";
 
 function buildAllowedOrigins() {
   const fromEnv = Array.isArray(env.corsOrigin) ? env.corsOrigin : [env.corsOrigin];
@@ -36,6 +37,7 @@ app.get("/health", (_req, res) => {
 app.use("/api/tournaments", tournamentsRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/public", publicRouter);
+app.use("/api/player", playerRouter);
 
 function httpErrorStatus(err) {
   const raw = err?.status ?? err?.statusCode;
@@ -52,5 +54,6 @@ app.use((err, _req, res, _next) => {
     issues: err?.issues || null,
   };
   if (err?.registrationConflict) body.registrationConflict = err.registrationConflict;
+  if (err?.code) body.code = err.code;
   res.status(status).json(body);
 });
