@@ -89,6 +89,23 @@ export const api = {
     cachedGet("public:tournament", () => request("/public/tournament"), { ttlMs: 20_000, persist: true }),
   getPublicTournamentFresh: () => request("/public/tournament"),
   clearPublicTournamentCache: () => clearCache("public:tournament"),
+  getPublicSeasons: () => request("/public/seasons"),
+  getPublicSeason: (slug) => request(`/public/seasons/${encodeURIComponent(slug)}`),
+  getPublicCommunity: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.q) q.set("q", params.q);
+    if (params.limit) q.set("limit", String(params.limit));
+    const suffix = q.toString() ? `?${q}` : "";
+    return request(`/public/community${suffix}`);
+  },
+  getPublicMatch: (matchId) => request(`/public/match/${encodeURIComponent(matchId)}`),
+  getPublicAnnouncements: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.category) q.set("category", params.category);
+    const suffix = q.toString() ? `?${q}` : "";
+    return request(`/public/announcements${suffix}`);
+  },
+  getPublicPlayer: (slug) => request(`/public/players/${encodeURIComponent(slug)}`),
   getRegistrationSession: (identifier, email, publicCode) => {
     const q = new URLSearchParams({ email: String(email || "").trim() });
     if (publicCode) q.set("code", String(publicCode).trim());
@@ -222,5 +239,35 @@ export const api = {
     request(`/tournaments/${id}/import`, {
       method: "POST",
       body: JSON.stringify({ data }),
+    }),
+  grantPlayerCoins: (accountId, payload) =>
+    request(`/admin/player-accounts/${accountId}/coins`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateAdminPermissions: (userId, permissions) =>
+    request(`/admin/users/${userId}/permissions`, {
+      method: "PATCH",
+      body: JSON.stringify({ permissions }),
+    }),
+  getAuditLog: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.limit) q.set("limit", String(params.limit));
+    const suffix = q.toString() ? `?${q}` : "";
+    return request(`/admin/audit-log${suffix}`);
+  },
+  getFormatPresets: () => request("/admin/format-presets"),
+  getFormatPreset: (id) => request(`/admin/format-presets/${encodeURIComponent(id)}`),
+  getTournamentCommerce: (tournamentId) => request(`/admin/tournaments/${tournamentId}/commerce`),
+  putTournamentCommerce: (tournamentId, payload) =>
+    request(`/admin/tournaments/${tournamentId}/commerce`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  getTournamentCardAssets: (tournamentId) => request(`/admin/tournaments/${tournamentId}/card-assets`),
+  patchCardAsset: (assetId, payload) =>
+    request(`/admin/card-assets/${assetId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
     }),
 };

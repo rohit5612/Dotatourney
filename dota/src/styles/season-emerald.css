@@ -1,0 +1,25 @@
+/* Emerald season theme — applied when html[data-season="emerald"] */
+
+:root[data-season="emerald"] {
+  color-scheme: light;
+}
+
+:root[data-season="emerald"] body {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, color-mix(in srgb, var(--accent) 8%, transparent), transparent),
+    linear-gradient(180deg, var(--background), color-mix(in srgb, var(--background) 96%, var(--accent)));
+}
+
+.hero-band-emerald {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--primary) 92%, #000),
+    color-mix(in srgb, var(--primary) 75%, var(--accent))
+  );
+  color: var(--primary-foreground);
+}
+
+.rune-pattern {
+  background-image: radial-gradient(circle at 20% 30%, color-mix(in srgb, var(--accent) 6%, transparent) 0 1px, transparent 1px);
+  background-size: 24px 24px;
+}

@@ -24,8 +24,24 @@ export function publicPlayerAccount(row) {
     discordAvatarUrl: row.discord_avatar_url || "",
     avatarUrl: row.avatar_url || "",
     bio: row.bio || "",
+    mmr: row.mmr ?? null,
+    preferredRoles: Array.isArray(row.preferred_roles) ? row.preferred_roles : [],
+    location: row.location || "",
+    profileCompletedAt: row.profile_completed_at,
+    hasPassword: Boolean(row.password_hash),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+export function publicSteamOnlyProfile(account) {
+  if (!account) return null;
+  return {
+    displayName: account.display_name || account.slug,
+    bpcId: account.bpc_id,
+    steamPersona: account.steam_persona || "",
+    steamAvatarUrl: account.steam_avatar_url || "",
+    steamProfile: account.steam_profile || "",
   };
 }
 
@@ -57,6 +73,34 @@ export async function findAccountById(id) {
 export async function findAccountBySlug(slug) {
   const { rows } = await pool.query(`SELECT * FROM player_accounts WHERE slug = $1`, [slug]);
   return rows[0] || null;
+}
+
+export async function findAccountByBpcId(bpcId) {
+  const normalized = String(bpcId || "").trim().toUpperCase();
+  if (!normalized) return null;
+  const { rows } = await pool.query(`SELECT * FROM player_accounts WHERE upper(bpc_id) = $1`, [normalized]);
+  return rows[0] || null;
+}
+
+export async function findAccountByDisplayName(displayName) {
+  const name = String(displayName || "").trim();
+  if (!name) return null;
+  const { rows } = await pool.query(
+    `SELECT * FROM player_accounts WHERE lower(display_name) = lower($1)`,
+    [name],
+  );
+  if (rows.length !== 1) return null;
+  return rows[0];
+}
+
+export async function resolveAccountByIdentifier(identifier) {
+  const raw = String(identifier || "").trim();
+  if (!raw) return null;
+  if (raw.includes("@")) return findAccountByEmail(raw);
+  if (/^bpc-/i.test(raw)) return findAccountByBpcId(raw);
+  const bySlug = await findAccountBySlug(raw);
+  if (bySlug) return bySlug;
+  return findAccountByDisplayName(raw);
 }
 
 export async function findAccountByGoogleSub(sub) {
@@ -197,12 +241,20 @@ export async function updatePlayerAccount(id, patch, db = pool) {
     discord_username: "discordUsername",
     discord_avatar_url: "discordAvatarUrl",
     slug: "slug",
+    mmr: "mmr",
+    preferred_roles: "preferredRoles",
+    location: "location",
+    profile_completed_at: "profileCompletedAt",
   };
 
   for (const [col, key] of Object.entries(allowed)) {
     if (patch[key] !== undefined) {
       fields.push(`${col} = $${i++}`);
-      values.push(patch[key]);
+      if (col === "preferred_roles") {
+        values.push(JSON.stringify(Array.isArray(patch[key]) ? patch[key] : []));
+      } else {
+        values.push(patch[key]);
+      }
     }
   }
 
@@ -237,4 +289,49 @@ export async function getCoinBalance(playerAccountId) {
     [playerAccountId],
   );
   return Number(rows[0]?.balance_after ?? 0);
+}
+
+/**
+ * @param {import('pg').Pool | import('pg').PoolClient} db
+ */
+export async function grantCoins(
+  { playerAccountId, delta, reason = "", grantedByAdminId = null, tournamentId = null },
+  db = pool,
+) {
+  const amount = Number(delta);
+  if (!Number.isInteger(amount) || amount === 0) {
+    const err = new Error("Coin delta must be a non-zero integer");
+    err.status = 400;
+    throw err;
+  }
+  const query = db.query.bind(db);
+  const { rows: balRows } = await query(
+    `SELECT balance_after FROM bpc_coin_ledger
+     WHERE player_account_id = $1
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [playerAccountId],
+  );
+  const current = Number(balRows[0]?.balance_after ?? 0);
+  const next = current + amount;
+  if (next < 0) {
+    const err = new Error("Insufficient BPC coin balance");
+    err.status = 400;
+    throw err;
+  }
+  const id = randomUUID();
+  const { rows } = await query(
+    `INSERT INTO bpc_coin_ledger (
+      id, player_account_id, delta, balance_after, reason, granted_by_admin_id, tournament_id
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+    RETURNING *`,
+    [id, playerAccountId, amount, next, reason, grantedByAdminId, tournamentId],
+  );
+  return {
+    id: rows[0].id,
+    delta: rows[0].delta,
+    balanceAfter: rows[0].balance_after,
+    reason: rows[0].reason,
+    createdAt: rows[0].created_at,
+  };
 }

@@ -1,16 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { RiAdminLine } from "react-icons/ri";
+import { Link, useLocation } from "react-router-dom";
 import { SITE_BRAND_FULL, SITE_BRAND_SHORT } from "../../constants/siteMeta.js";
 import { useBodyScrollLock } from "../../hooks/useBodyScrollLock.js";
-
-const NAV_LINKS = [
-  ["/", "Home"],
-  ["/tournament", "Tournament"],
-  ["/schedule", "Bracket & Schedule"],
-  ["/teams", "Teams"],
-  ["/rules", "Rules"],
-];
+import { useSiteNavLinks } from "../../hooks/useSiteNavLinks.js";
+import { getPlayerToken } from "../../lib/playerApi.js";
+import { PlayerUserMenu, usePlayerNavAccount } from "./PlayerUserMenu.jsx";
 
 function MenuIcon({ open }) {
   return (
@@ -41,9 +36,58 @@ function MenuIcon({ open }) {
   );
 }
 
-export function SiteNavbar({ path, navigate }) {
+function isNavActive(path, href) {
+  if (href === "/") return path === "/";
+  return path === href || path.startsWith(`${href}/`);
+}
+
+const HERO_NAV_PATHS = new Set([
+  "/",
+  "/login",
+  "/signup",
+  "/verify-email",
+  "/auth/callback",
+  "/forgot-password",
+  "/reset-password",
+  "/claim-account",
+]);
+
+function isHeroNavPath(path) {
+  return HERO_NAV_PATHS.has(path);
+}
+
+function useSiteNavbarOffset(headerRef) {
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return undefined;
+
+    const update = () => {
+      document.documentElement.style.setProperty("--site-navbar-offset", `${el.offsetHeight}px`);
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    window.addEventListener("resize", update, { passive: true });
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [headerRef]);
+}
+
+export function SiteNavbar() {
+  const headerRef = useRef(null);
+  const location = useLocation();
+  const path = location.pathname;
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useSiteNavbarOffset(headerRef);
+  const { account, coinBalance, clearAccount, isLoggedIn, loading: authLoading } = usePlayerNavAccount(
+    `${path}:${getPlayerToken()}`,
+  );
 
   useBodyScrollLock(mobileMenuOpen);
 
@@ -52,10 +96,14 @@ export function SiteNavbar({ path, navigate }) {
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [path]);
 
   useEffect(() => {
     setMobileMenuOpen(false);
+    if (isHeroNavPath(path)) {
+      window.scrollTo({ top: 0, behavior: "auto" });
+      setScrolled(false);
+    }
   }, [path]);
 
   useEffect(() => {
@@ -76,10 +124,10 @@ export function SiteNavbar({ path, navigate }) {
     return () => window.removeEventListener("resize", onResize);
   }, [mobileMenuOpen]);
 
-  function go(href) {
-    navigate(href);
-    setMobileMenuOpen(false);
-  }
+  const loggedIn = isLoggedIn && Boolean(account);
+  const authPending = isLoggedIn && authLoading && !account;
+  const navLinks = useSiteNavLinks();
+  const heroNav = isHeroNavPath(path);
 
   const mobileMenu =
     mobileMenuOpen &&
@@ -106,32 +154,39 @@ export function SiteNavbar({ path, navigate }) {
           </button>
         </div>
         <nav className="site-navbar-drawer__nav" aria-label="Mobile">
-          {NAV_LINKS.map(([href, label]) => {
-            const active = path === href;
+          {navLinks.map(({ href, label }) => {
+            const active = isNavActive(path, href);
             return (
-              <button
+              <Link
                 key={href}
-                type="button"
-                onClick={() => go(href)}
+                to={href}
                 className={`site-navbar-drawer__link${active ? " site-navbar-drawer__link--active" : ""}`}
                 aria-current={active ? "page" : undefined}
               >
                 {label}
-              </button>
+              </Link>
             );
           })}
-          <button type="button" className="site-navbar-drawer__cta" onClick={() => go("/register")}>
-            Register
-          </button>
+          {loggedIn ? (
+            <PlayerUserMenu account={account} coinBalance={coinBalance} variant="mobile" onSignOut={clearAccount} />
+          ) : (
+            <Link to="/login" className="site-navbar-drawer__cta">
+              Login / Register
+            </Link>
+          )}
         </nav>
       </div>,
       document.body,
     );
 
   return (
-    <header className={`site-navbar${scrolled ? " site-navbar--scrolled" : ""}`}>
+    <header
+      id="site-navbar"
+      ref={headerRef}
+      className={`site-navbar${heroNav ? " site-navbar--over-hero" : ""}${scrolled ? " site-navbar--scrolled" : ""}`}
+    >
       <div className="site-navbar__inner site-navbar__inner--public">
-        <button type="button" className="site-navbar__brand" onClick={() => go("/")}>
+        <Link to="/" className="site-navbar__brand" aria-label={`${SITE_BRAND_SHORT} home`}>
           <span className="site-navbar__logo">
             <img src="/bpcl.png" alt={`${SITE_BRAND_SHORT} logo`} />
           </span>
@@ -139,38 +194,36 @@ export function SiteNavbar({ path, navigate }) {
             <span className="site-navbar__brand-title">{SITE_BRAND_SHORT}</span>
             <span className="site-navbar__brand-sub">{SITE_BRAND_FULL}</span>
           </span>
-        </button>
+        </Link>
 
-        <nav className="site-navbar__nav" aria-label="Main">
-          {NAV_LINKS.map(([href, label]) => {
-            const active = path === href;
+        <nav className="site-navbar__nav site-navbar__nav--public" aria-label="Main">
+          {navLinks.map(({ href, label }) => {
+            const active = isNavActive(path, href);
             return (
-              <button
+              <Link
                 key={href}
-                type="button"
-                onClick={() => navigate(href)}
+                to={href}
                 className={`site-navbar__link${active ? " site-navbar__link--active" : ""}`}
                 aria-current={active ? "page" : undefined}
               >
                 <span className="site-navbar__link-label">{label}</span>
-              </button>
+              </Link>
             );
           })}
         </nav>
 
         <div className="site-navbar__actions">
-          <button type="button" className="site-navbar__cta" onClick={() => navigate("/register")}>
-            Register
-          </button>
-          <button
-            type="button"
-            className="site-navbar__admin-login-btn"
-            onClick={() => navigate("/admin")}
-            aria-label="Admin login"
-            title="Admin login"
-          >
-            <RiAdminLine aria-hidden />
-          </button>
+          {authPending ? (
+            <span className="player-user-menu__trigger player-user-menu__trigger--pending" aria-hidden="true">
+              …
+            </span>
+          ) : loggedIn ? (
+            <PlayerUserMenu account={account} coinBalance={coinBalance} onSignOut={clearAccount} />
+          ) : (
+            <Link to="/login" className="site-navbar__cta">
+              Login / Register
+            </Link>
+          )}
           <button
             type="button"
             className="site-navbar-icon-btn site-navbar__menu-btn"

@@ -5,6 +5,7 @@ import adminRouter from "./routes/admin.js";
 import publicRouter from "./routes/public.js";
 import tournamentsRouter from "./routes/tournaments.js";
 import playerRouter from "./routes/player.js";
+import { handleRazorpayWebhook } from "./services/paymentService.js";
 
 function buildAllowedOrigins() {
   const fromEnv = Array.isArray(env.corsOrigin) ? env.corsOrigin : [env.corsOrigin];
@@ -28,6 +29,22 @@ const corsOptions = {
 export const app = express();
 
 app.use(cors(corsOptions));
+
+app.post(
+  "/api/webhooks/razorpay",
+  express.raw({ type: "application/json" }),
+  async (req, res, next) => {
+    try {
+      const signature = req.get("x-razorpay-signature") || "";
+      const rawBody = req.body instanceof Buffer ? req.body.toString("utf8") : String(req.body || "");
+      const result = await handleRazorpayWebhook(rawBody, signature);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 app.use(express.json({ limit: "25mb" }));
 
 app.get("/health", (_req, res) => {

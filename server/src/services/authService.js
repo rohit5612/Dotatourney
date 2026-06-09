@@ -23,12 +23,22 @@ export function verifyPassword(password, storedHash) {
 
 export function publicAdminUser(user) {
   if (!user) return null;
+  let permissions = user.permissions;
+  if (typeof permissions === "string") {
+    try {
+      permissions = JSON.parse(permissions);
+    } catch {
+      permissions = [];
+    }
+  }
+  if (!Array.isArray(permissions)) permissions = [];
   return {
     id: user.id,
     email: user.email,
     name: user.name,
     role: user.role,
     status: user.status,
+    permissions: user.role === "superadmin" ? ["*"] : permissions,
     createdAt: user.created_at,
     approvedAt: user.approved_at,
   };
@@ -112,4 +122,39 @@ export function requireSuperadmin(req, res, next) {
     return res.status(403).json({ message: "Superadmin access required" });
   }
   return next();
+}
+
+function normalizePermissions(user) {
+  if (!user) return [];
+  if (user.role === "superadmin") return ["*"];
+  let perms = user.permissions;
+  if (typeof perms === "string") {
+    try {
+      perms = JSON.parse(perms);
+    } catch {
+      perms = [];
+    }
+  }
+  return Array.isArray(perms) ? perms : [];
+}
+
+export function adminHasPermission(user, permission) {
+  const perms = normalizePermissions(user);
+  if (perms.includes("*")) return true;
+  if (perms.includes(permission)) return true;
+  const [group] = String(permission).split(".");
+  return perms.includes(`${group}.*`);
+}
+
+/** Express middleware factory — superadmin always passes. */
+export function requirePermission(permission) {
+  return (req, res, next) => {
+    if (!req.adminUser) {
+      return res.status(401).json({ message: "Admin authentication required" });
+    }
+    if (!adminHasPermission(req.adminUser, permission)) {
+      return res.status(403).json({ message: `Permission required: ${permission}` });
+    }
+    return next();
+  };
 }

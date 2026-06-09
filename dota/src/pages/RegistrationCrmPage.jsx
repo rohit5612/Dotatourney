@@ -358,6 +358,26 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
                   ) : (
                     <p className="mt-2 text-sm text-muted-foreground">Payment screenshot: not uploaded or not available</p>
                   )}
+                  {registration.playerAccountId ? (
+                    <button
+                      type="button"
+                      className="mt-2 text-sm text-accent underline hover:no-underline"
+                      onClick={async () => {
+                        const raw = window.prompt("Grant BPC coins (use negative to deduct):", "10");
+                        if (raw == null) return;
+                        const delta = Number(raw);
+                        if (!Number.isFinite(delta) || delta === 0) return;
+                        try {
+                          await api.grantPlayerCoins(registration.playerAccountId, { delta, reason: "CRM grant" });
+                          window.alert(`Granted ${delta} coins.`);
+                        } catch (err) {
+                          window.alert(err.message);
+                        }
+                      }}
+                    >
+                      Grant BPC coins
+                    </button>
+                  ) : null}
                   {registration.notes ? <p className="mt-2 text-sm text-muted-foreground">Player notes: {registration.notes}</p> : null}
                   {registration.archivedAt ? <p className="mt-2 text-sm text-secondary">Archived: {registration.archivedReason || "No reason recorded"}</p> : null}
                 </div>

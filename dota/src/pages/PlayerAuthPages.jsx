@@ -1,17 +1,27 @@
 import { useEffect, useRef, useState } from "react";
-import { SiteNavbar } from "../components/navigation/SiteNavbar";
-import { AppFooter } from "../components/AppFooter";
+import { useNavigate, useParams } from "react-router-dom";
+import { PlayerAreaLayout } from "../components/layout/PlayerAreaLayout.jsx";
+import { GoogleIcon } from "../components/icons/GoogleIcon.jsx";
+import { PlayerAuthShell } from "../components/player/PlayerAuthShell.jsx";
+import { BpclCard } from "../components/cards/BpclCard.jsx";
+import { BpcCoin } from "../components/coins/BpcCoin.jsx";
+import { DashboardCheckout } from "../components/player/DashboardCheckout.jsx";
 import { playerApi, googleAuthStartUrl, getPlayerToken, setPlayerToken } from "../lib/playerApi";
 import "../styles/player-auth.css";
 
-function AuthLayout({ children, navigate }) {
-  const path = typeof window !== "undefined" ? window.location.pathname : "/";
+function AuthLayout({ children, preset = "default", split = true, ...shellProps }) {
+  if (!split) {
+    return (
+      <PlayerAreaLayout mainClassName="player-area-layout__main--centered">{children}</PlayerAreaLayout>
+    );
+  }
+
   return (
-    <div className="min-h-screen flex flex-col bg-background text-foreground">
-      <SiteNavbar path={path} navigate={navigate} />
-      {children}
-      <AppFooter navigate={navigate} mode="public" />
-    </div>
+    <PlayerAreaLayout mainClassName="player-area-layout__main--auth" immersive>
+      <PlayerAuthShell preset={preset} {...shellProps}>
+        {children}
+      </PlayerAuthShell>
+    </PlayerAreaLayout>
   );
 }
 
@@ -21,38 +31,64 @@ function GoogleAuthButton({ label, intent = "login" }) {
       ? `${googleAuthStartUrl()}?intent=signup`
       : googleAuthStartUrl();
   return (
-    <a className="btn btn-secondary w-full text-center" href={href}>
-      {label}
+    <a className="btn btn-google w-full" href={href}>
+      <GoogleIcon className="player-auth__google-icon" />
+      <span>{label}</span>
     </a>
   );
 }
 
 function AuthDivider({ label = "or" }) {
   return (
-    <p className="player-auth__sub player-auth__divider" aria-hidden="true">
-      {label}
-    </p>
+    <div className="player-auth__divider-row" aria-hidden="true">
+      <span className="player-auth__divider-line" />
+      <span className="player-auth__divider-text">{label}</span>
+      <span className="player-auth__divider-line" />
+    </div>
   );
 }
 
-export function PlayerLoginPage({ navigate }) {
-  const [email, setEmail] = useState("");
+function AuthFormHeader({ badge, title, sub }) {
+  return (
+    <header className="player-auth__form-head">
+      <span className="player-auth__form-badge">{badge}</span>
+      <h1 className="player-auth__title">{title}</h1>
+      {sub ? <p className="player-auth__sub player-auth__sub--tight">{sub}</p> : null}
+    </header>
+  );
+}
+
+export function PlayerLoginPage() {
+  const navigate = useNavigate();
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const next = params.get("next");
+    const nextPath = next && next.startsWith("/") ? next : "/dashboard";
+
+    if (getPlayerToken()) {
+      navigate(nextPath, { replace: true });
+      return;
+    }
+
     const err = params.get("error");
-    if (err) setError(decodeURIComponent(err));
-  }, []);
+    if (err) {
+      setError(decodeURIComponent(err));
+      const cleanUrl = next ? `/login?next=${encodeURIComponent(next)}` : "/login";
+      window.history.replaceState({}, "", cleanUrl);
+    }
+  }, [navigate]);
 
   async function onSubmit(e) {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      const data = await playerApi.login({ email, password });
+      const data = await playerApi.login({ identifier, password });
       setPlayerToken(data.token);
       navigate("/dashboard");
     } catch (err) {
@@ -66,52 +102,57 @@ export function PlayerLoginPage({ navigate }) {
   }
 
   return (
-    <AuthLayout navigate={navigate}>
-      <div className="player-auth">
-        <div className="player-auth__card">
-          <h1 className="player-auth__title">Player sign in</h1>
-          <p className="player-auth__sub">Use your BPCL account for Season 2 registration.</p>
-          {error ? <div className="player-auth__message player-auth__message--error">{error}</div> : null}
-          <form onSubmit={onSubmit}>
-            <div className="player-auth__field">
-              <label htmlFor="email">Email</label>
-              <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
-            <div className="player-auth__field">
-              <label htmlFor="password">Password</label>
-              <input
-                id="password"
-                type="password"
-                required
-                minLength={8}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            <div className="player-auth__actions">
-              <button type="submit" className="btn btn-primary w-full" disabled={loading}>
-                {loading ? "Signing in…" : "Sign in"}
-              </button>
-              <AuthDivider />
-              <GoogleAuthButton label="Sign in with Google" intent="login" />
-            </div>
-          </form>
-          <p className="player-auth__sub" style={{ marginTop: "1.5rem" }}>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => navigate("/forgot-password")}>
-              Forgot password
-            </button>
-            {" · "}
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => navigate("/signup")}>
-              Create account
-            </button>
-          </p>
+    <AuthLayout preset="login">
+      <AuthFormHeader badge="Secure sign in" title="Sign in" sub="Email, BPC ID, username, or Google." />
+      {error ? <div className="player-auth__message player-auth__message--error">{error}</div> : null}
+      <form onSubmit={onSubmit}>
+        <div className="player-auth__field">
+          <label htmlFor="identifier">Email, BPC ID, or username</label>
+          <input
+            id="identifier"
+            type="text"
+            required
+            autoComplete="username"
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
+          />
         </div>
-      </div>
+        <div className="player-auth__field">
+          <label htmlFor="password">Password</label>
+          <input
+            id="password"
+            type="password"
+            required
+            minLength={8}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
+        <div className="player-auth__actions">
+          <button type="submit" className="btn btn-primary player-auth__submit w-full" disabled={loading}>
+            {loading ? "Signing in…" : "Sign in"}
+          </button>
+          <AuthDivider />
+          <GoogleAuthButton label="Continue with Google" intent="login" />
+        </div>
+      </form>
+      <nav className="player-auth__footer-links" aria-label="Account options">
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => navigate("/forgot-password")}>
+          Forgot password
+        </button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => navigate("/signup")}>
+          Create account
+        </button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => navigate("/claim-account")}>
+          Claim Season 1 account
+        </button>
+      </nav>
     </AuthLayout>
   );
 }
 
-export function PlayerSignupPage({ navigate }) {
+export function PlayerSignupPage() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -137,55 +178,49 @@ export function PlayerSignupPage({ navigate }) {
   }
 
   return (
-    <AuthLayout navigate={navigate}>
-      <div className="player-auth">
-        <div className="player-auth__card">
-          <h1 className="player-auth__title">Create player account</h1>
-          <p className="player-auth__sub">
-            Sign up with Google for instant access, or use email and verify before signing in.
-          </p>
-          {error ? <div className="player-auth__message player-auth__message--error">{error}</div> : null}
-          {message ? <div className="player-auth__message player-auth__message--ok">{message}</div> : null}
-          <div className="player-auth__actions">
-            <GoogleAuthButton label="Sign up with Google" intent="signup" />
-          </div>
-          <AuthDivider label="or sign up with email" />
-          <form onSubmit={onSubmit}>
-            <div className="player-auth__field">
-              <label htmlFor="displayName">Display name</label>
-              <input id="displayName" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
-            </div>
-            <div className="player-auth__field">
-              <label htmlFor="email">Email</label>
-              <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
-            <div className="player-auth__field">
-              <label htmlFor="password">Password (min 8)</label>
-              <input
-                id="password"
-                type="password"
-                required
-                minLength={8}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            <button type="submit" className="btn btn-primary w-full" disabled={loading}>
-              {loading ? "Creating…" : "Create account"}
-            </button>
-          </form>
-          <p className="player-auth__sub" style={{ marginTop: "1rem" }}>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => navigate("/login")}>
-              Already have an account?
-            </button>
-          </p>
-        </div>
+    <AuthLayout preset="signup">
+      <AuthFormHeader badge="New player" title="Create account" sub="Google for instant access, or email with verification." />
+      {error ? <div className="player-auth__message player-auth__message--error">{error}</div> : null}
+      {message ? <div className="player-auth__message player-auth__message--ok">{message}</div> : null}
+      <div className="player-auth__actions">
+        <GoogleAuthButton label="Sign up with Google" intent="signup" />
       </div>
+      <AuthDivider label="or sign up with email" />
+      <form onSubmit={onSubmit}>
+        <div className="player-auth__field">
+          <label htmlFor="displayName">Display name</label>
+          <input id="displayName" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+        </div>
+        <div className="player-auth__field">
+          <label htmlFor="email">Email</label>
+          <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+        </div>
+        <div className="player-auth__field">
+          <label htmlFor="password">Password (min 8)</label>
+          <input
+            id="password"
+            type="password"
+            required
+            minLength={8}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
+        <button type="submit" className="btn btn-primary player-auth__submit w-full" disabled={loading}>
+          {loading ? "Creating…" : "Create account"}
+        </button>
+      </form>
+      <p className="player-auth__sub player-auth__sub--tight" style={{ marginTop: "1rem", marginBottom: 0 }}>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => navigate("/login")}>
+          Already have an account? Sign in
+        </button>
+      </p>
     </AuthLayout>
   );
 }
 
-export function PlayerVerifyEmailPage({ navigate }) {
+export function PlayerVerifyEmailPage() {
+  const navigate = useNavigate();
   const [status, setStatus] = useState("Verifying…");
   const [error, setError] = useState("");
   const [resendEmail, setResendEmail] = useState("");
@@ -231,62 +266,71 @@ export function PlayerVerifyEmailPage({ navigate }) {
   }
 
   return (
-    <AuthLayout navigate={navigate}>
-      <div className="player-auth">
-        <div className="player-auth__card">
-          <h1 className="player-auth__title">Email verification</h1>
-          {error ? <div className="player-auth__message player-auth__message--error">{error}</div> : null}
-          {status ? <div className="player-auth__message player-auth__message--ok">{status}</div> : null}
-          {error ? (
-            <form onSubmit={onResend} style={{ marginTop: "1rem" }}>
-              <p className="player-auth__sub">Request a new verification link:</p>
-              <div className="player-auth__field">
-                <label htmlFor="resend-email">Email</label>
-                <input
-                  id="resend-email"
-                  type="email"
-                  required
-                  value={resendEmail}
-                  onChange={(e) => setResendEmail(e.target.value)}
-                />
-              </div>
-              <button type="submit" className="btn btn-secondary w-full">
-                Resend verification email
-              </button>
-              {resendMsg ? <p className="player-auth__sub" style={{ marginTop: "0.75rem" }}>{resendMsg}</p> : null}
-            </form>
-          ) : null}
-        </div>
-      </div>
+    <AuthLayout>
+      <h1 className="player-auth__title">Email verification</h1>
+      {error ? <div className="player-auth__message player-auth__message--error">{error}</div> : null}
+      {status ? <div className="player-auth__message player-auth__message--ok">{status}</div> : null}
+      {error ? (
+        <form onSubmit={onResend} style={{ marginTop: "1rem" }}>
+          <p className="player-auth__sub">Request a new verification link:</p>
+          <div className="player-auth__field">
+            <label htmlFor="resend-email">Email</label>
+            <input
+              id="resend-email"
+              type="email"
+              required
+              value={resendEmail}
+              onChange={(e) => setResendEmail(e.target.value)}
+            />
+          </div>
+          <button type="submit" className="btn btn-secondary w-full">
+            Resend verification email
+          </button>
+          {resendMsg ? <p className="player-auth__sub" style={{ marginTop: "0.75rem" }}>{resendMsg}</p> : null}
+        </form>
+      ) : null}
     </AuthLayout>
   );
 }
 
-export function PlayerAuthCallbackPage({ navigate }) {
+export function PlayerAuthCallbackPage() {
+  const navigate = useNavigate();
+  const handled = useRef(false);
+
   useEffect(() => {
+    if (handled.current) return;
+    handled.current = true;
+
     const params = new URLSearchParams(window.location.search);
     const token = params.get("token");
     const error = params.get("error");
+
     if (token) {
       setPlayerToken(token);
-      navigate("/dashboard");
+      window.history.replaceState({}, "", "/auth/callback");
+      navigate("/dashboard", { replace: true });
       return;
     }
-    navigate(`/login?error=${encodeURIComponent(error || "Sign-in failed")}`);
+
+    if (getPlayerToken()) {
+      navigate("/dashboard", { replace: true });
+      return;
+    }
+
+    navigate(`/login?error=${encodeURIComponent(error || "Sign-in failed")}`, { replace: true });
   }, [navigate]);
 
   return (
-    <AuthLayout navigate={navigate}>
-      <div className="player-auth">
-        <div className="player-auth__card">
-          <p className="player-auth__sub">Completing sign-in…</p>
-        </div>
-      </div>
+    <AuthLayout>
+      <p className="player-auth__sub" style={{ marginBottom: 0 }}>
+        Completing sign-in…
+      </p>
     </AuthLayout>
   );
 }
 
-export function PlayerForgotPasswordPage({ navigate }) {
+export function PlayerForgotPasswordPage() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -307,27 +351,25 @@ export function PlayerForgotPasswordPage({ navigate }) {
   }
 
   return (
-    <AuthLayout navigate={navigate}>
-      <div className="player-auth">
-        <div className="player-auth__card">
-          <h1 className="player-auth__title">Forgot password</h1>
-          {message ? <div className="player-auth__message player-auth__message--ok">{message}</div> : null}
-          <form onSubmit={onSubmit}>
-            <div className="player-auth__field">
-              <label htmlFor="email">Email</label>
-              <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
-            <button type="submit" className="btn btn-primary w-full" disabled={loading}>
-              Send reset link
-            </button>
-          </form>
+    <AuthLayout>
+      <h1 className="player-auth__title">Forgot password</h1>
+      <p className="player-auth__sub">We&apos;ll email you a link to reset your password.</p>
+      {message ? <div className="player-auth__message player-auth__message--ok">{message}</div> : null}
+      <form onSubmit={onSubmit}>
+        <div className="player-auth__field">
+          <label htmlFor="email">Email</label>
+          <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
-      </div>
+        <button type="submit" className="btn btn-primary w-full" disabled={loading}>
+          Send reset link
+        </button>
+      </form>
     </AuthLayout>
   );
 }
 
-export function PlayerResetPasswordPage({ navigate }) {
+export function PlayerResetPasswordPage() {
+  const navigate = useNavigate();
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -347,36 +389,170 @@ export function PlayerResetPasswordPage({ navigate }) {
   }
 
   return (
-    <AuthLayout navigate={navigate}>
-      <div className="player-auth">
-        <div className="player-auth__card">
-          <h1 className="player-auth__title">Set new password</h1>
-          {error ? <div className="player-auth__message player-auth__message--error">{error}</div> : null}
-          {message ? <div className="player-auth__message player-auth__message--ok">{message}</div> : null}
-          <form onSubmit={onSubmit}>
-            <div className="player-auth__field">
-              <label htmlFor="password">New password</label>
-              <input
-                id="password"
-                type="password"
-                required
-                minLength={8}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            <button type="submit" className="btn btn-primary w-full">
-              Update password
-            </button>
-          </form>
+    <AuthLayout>
+      <h1 className="player-auth__title">Set new password</h1>
+      {error ? <div className="player-auth__message player-auth__message--error">{error}</div> : null}
+      {message ? <div className="player-auth__message player-auth__message--ok">{message}</div> : null}
+      <form onSubmit={onSubmit}>
+        <div className="player-auth__field">
+          <label htmlFor="password">New password</label>
+          <input
+            id="password"
+            type="password"
+            required
+            minLength={8}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
         </div>
-      </div>
+        <button type="submit" className="btn btn-primary w-full">
+          Update password
+        </button>
+      </form>
     </AuthLayout>
   );
 }
 
-export function PlayerDashboardPage({ navigate }) {
+export function PlayerClaimAccountPage() {
+  const navigate = useNavigate();
+  const [step, setStep] = useState("start");
+  const [bpcId, setBpcId] = useState("");
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [claimToken, setClaimToken] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("step") === "verify") {
+      setBpcId(params.get("bpcId") || "");
+      setEmail(params.get("email") || "");
+      setCode(params.get("token") || "");
+      setStep("verify");
+    }
+  }, []);
+
+  async function onStart(e) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      const data = await playerApi.claimStart({ bpcId, email });
+      let msg = data.message;
+      if (data.devVerifyUrl) msg += ` Dev link: ${data.devVerifyUrl}`;
+      if (data.devVerifyToken) setCode(data.devVerifyToken);
+      setMessage(msg);
+      setStep("verify");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onVerify(e) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const data = await playerApi.claimVerify({ bpcId, email, code });
+      setClaimToken(data.claimToken);
+      setStep("password");
+      setMessage("Verified. Create your password.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onSetPassword(e) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const data = await playerApi.claimSetPassword({ token: claimToken, password });
+      setPlayerToken(data.token);
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <AuthLayout
+      preset="signup"
+      headline="Claim your Season 1 account"
+      description="Already played in Season 1? Verify your BPC ID and email to migrate into the new player portal."
+    >
+      <h1 className="player-auth__title">Claim your account</h1>
+      <p className="player-auth__sub">Enter your BPC ID and registered email.</p>
+      {error ? <div className="player-auth__message player-auth__message--error">{error}</div> : null}
+      {message ? <div className="player-auth__message player-auth__message--ok">{message}</div> : null}
+
+      {step === "start" ? (
+        <form onSubmit={onStart}>
+          <div className="player-auth__field">
+            <label htmlFor="bpcId">BPC ID</label>
+            <input id="bpcId" required value={bpcId} onChange={(e) => setBpcId(e.target.value)} placeholder="BPC-042" />
+          </div>
+          <div className="player-auth__field">
+            <label htmlFor="email">Registered email</label>
+            <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <button type="submit" className="btn btn-primary w-full" disabled={loading}>
+            Send verification
+          </button>
+        </form>
+      ) : null}
+
+      {step === "verify" ? (
+        <form onSubmit={onVerify}>
+          <div className="player-auth__field">
+            <label>Verification code</label>
+            <input required value={code} onChange={(e) => setCode(e.target.value)} />
+          </div>
+          <button type="submit" className="btn btn-primary w-full" disabled={loading}>
+            Verify email
+          </button>
+        </form>
+      ) : null}
+
+      {step === "password" ? (
+        <form onSubmit={onSetPassword}>
+          <div className="player-auth__field">
+            <label>New password (min 8)</label>
+            <input type="password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} />
+          </div>
+          <button type="submit" className="btn btn-primary w-full" disabled={loading}>
+            Set password & sign in
+          </button>
+        </form>
+      ) : null}
+
+      <p className="player-auth__sub" style={{ marginTop: "1rem", marginBottom: 0 }}>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => navigate("/login")}>
+          Back to sign in
+        </button>
+      </p>
+    </AuthLayout>
+  );
+}
+
+export function PlayerDashboardPage() {
+  const navigate = useNavigate();
+  const [tournamentSlug, setTournamentSlug] = useState("bpcl");
   const [me, setMe] = useState(null);
+  const [team, setTeam] = useState(null);
+  const [matches, setMatches] = useState([]);
+  const [cardManifest, setCardManifest] = useState(null);
+  const [registrationsOpen, setRegistrationsOpen] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -392,7 +568,12 @@ export function PlayerDashboardPage({ navigate }) {
     }
     playerApi
       .me()
-      .then((data) => setMe(data))
+      .then((data) => {
+        setMe(data);
+        if (data.account?.slug) {
+          playerApi.publicCard(data.account.slug).then((r) => setCardManifest(r.card || r.manifest)).catch(() => {});
+        }
+      })
       .catch((err) => {
         if (err.status === 401) {
           setPlayerToken("");
@@ -401,6 +582,15 @@ export function PlayerDashboardPage({ navigate }) {
         }
         setError(err.message);
       });
+    playerApi.team().then(setTeam).catch(() => {});
+    playerApi.matches().then((r) => setMatches(r.matches || [])).catch(() => {});
+    fetch(`${import.meta.env.VITE_API_BASE_URL || "/api"}/public/tournament`)
+      .then((r) => r.json())
+      .then((d) => {
+        setRegistrationsOpen(d?.tournament?.registrations_open === true);
+        if (d?.tournament?.slug) setTournamentSlug(d.tournament.slug);
+      })
+      .catch(() => {});
   }, [navigate]);
 
   async function logout() {
@@ -416,7 +606,7 @@ export function PlayerDashboardPage({ navigate }) {
   const account = me?.account;
 
   return (
-    <AuthLayout navigate={navigate}>
+    <AuthLayout split={false}>
       <div className="player-dashboard">
         <h1 className="player-auth__title">Player dashboard</h1>
         {error ? <div className="player-auth__message player-auth__message--error">{error}</div> : null}
@@ -462,7 +652,7 @@ export function PlayerDashboardPage({ navigate }) {
             ) : null}
             {account.eligibleForRegistration ? (
               <p className="player-auth__message player-auth__message--ok" style={{ marginTop: "1.5rem" }}>
-                You are eligible to register when tournament registration opens (checkout in Phase 3).
+                You are eligible to register for the active tournament.
               </p>
             ) : (
               <p className="player-auth__sub" style={{ marginTop: "1rem" }}>
@@ -470,8 +660,47 @@ export function PlayerDashboardPage({ navigate }) {
               </p>
             )}
             <p className="player-auth__sub" style={{ marginTop: "1rem" }}>
-              BPC coins: {me?.coinBalance ?? 0}
+              <BpcCoin amount={me?.coinBalance ?? 0} size="sm" />
             </p>
+
+            <DashboardCheckout
+              tournamentSlug={tournamentSlug}
+              registrationsOpen={registrationsOpen}
+              eligible={account.eligibleForRegistration}
+            />
+
+            {cardManifest ? (
+              <div className="mt-8">
+                <h2 style={{ fontSize: "1.1rem" }}>My card</h2>
+                <div className="mt-3">
+                  <BpclCard manifest={cardManifest} />
+                </div>
+              </div>
+            ) : null}
+
+            {team?.teamName ? (
+              <div className="mt-8">
+                <h2 style={{ fontSize: "1.1rem" }}>My team</h2>
+                <p className="player-auth__sub">{team.teamName}</p>
+              </div>
+            ) : null}
+
+            {matches.length ? (
+              <div className="mt-8">
+                <h2 style={{ fontSize: "1.1rem" }}>My matches</h2>
+                <ul className="eligibility-list">
+                  {matches.map((m) => (
+                    <li key={m.id}>
+                      <span>
+                        {m.team1} vs {m.team2}
+                        {m.scheduledAt ? ` · ${new Date(m.scheduledAt).toLocaleString()}` : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
             <button type="button" className="btn btn-ghost" style={{ marginTop: "2rem" }} onClick={logout}>
               Sign out
             </button>
@@ -484,29 +713,42 @@ export function PlayerDashboardPage({ navigate }) {
   );
 }
 
-export function PlayerPublicProfilePage({ navigate, slug }) {
-  const [data, setData] = useState(null);
+export function PlayerPublicProfilePage() {
+  const { slug } = useParams();
+  const [profile, setProfile] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     playerApi
-      .publicAccount(slug)
-      .then(setData)
+      .publicProfile(slug)
+      .then((data) => setProfile(data.profile))
       .catch((err) => setError(err.message));
   }, [slug]);
 
   return (
-    <AuthLayout navigate={navigate}>
-      <div className="player-dashboard">
+    <AuthLayout split={false}>
+      <div className="player-dashboard max-w-2xl">
         {error ? <div className="player-auth__message player-auth__message--error">{error}</div> : null}
-        {data?.account ? (
-          <>
-            <h1 className="player-auth__title">{data.account.displayName}</h1>
-            <span className="player-dashboard__badge">{data.account.bpcId}</span>
-            <p className="player-auth__sub">Full player profile and card — Phase 4.</p>
-          </>
+        {profile ? (
+          <div className="flex flex-wrap gap-6 items-center">
+            {profile.steamAvatarUrl ? (
+              <img src={profile.steamAvatarUrl} alt="" className="w-24 h-24 rounded-full border border-border" />
+            ) : null}
+            <div>
+              <h1 className="player-auth__title">{profile.displayName}</h1>
+              <span className="player-dashboard__badge">{profile.bpcId}</span>
+              {profile.steamPersona ? (
+                <p className="player-auth__sub mt-3">{profile.steamPersona}</p>
+              ) : null}
+              {profile.steamProfile ? (
+                <a href={profile.steamProfile} className="btn btn-secondary btn-sm mt-4" target="_blank" rel="noreferrer">
+                  View Steam profile
+                </a>
+              ) : null}
+            </div>
+          </div>
         ) : (
-          <p className="player-auth__sub">Loading…</p>
+          !error && <p className="player-auth__sub">Loading…</p>
         )}
       </div>
     </AuthLayout>
@@ -521,6 +763,7 @@ const PLAYER_PATHS = new Set([
   "/dashboard",
   "/forgot-password",
   "/reset-password",
+  "/claim-account",
 ]);
 
 export function isPlayerAuthPath(path) {

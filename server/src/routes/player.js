@@ -13,8 +13,14 @@ import {
   verifyPlayerEmail,
   resendPlayerEmailVerification,
   playerMeWithCoins,
+  getPlayerSessionAccount,
+  changePlayerPassword,
+  startLegacyClaim,
+  verifyLegacyClaim,
+  setPasswordFromClaim,
 } from "../services/playerAuthService.js";
 import {
+  findAccountById,
   findAccountBySteamId,
   findAccountByDiscordId,
   recordAccountLink,
@@ -28,7 +34,22 @@ import {
   sendPlayerEmailVerificationEmail,
   sendPlayerPasswordResetEmail,
 } from "../services/emailService.js";
-import { getPlayerSessionAccount } from "../services/playerAuthService.js";
+import {
+  previewCheckout,
+  confirmCheckout,
+  getCheckoutOrderStatus,
+  simulateManualPayment,
+  createSubstituteSignup,
+  upsertCardAsset,
+  CARD_TIERS,
+} from "../services/paymentService.js";
+import {
+  getPlayerCoinSummary,
+  getPlayerTeamForAccount,
+  getPlayerMatchesForAccount,
+  getPlayerDashboardHistory,
+  getUpcomingTournamentsForPlayer,
+} from "../services/playerProfileService.js";
 
 const router = express.Router();
 
@@ -64,9 +85,10 @@ const registerSchema = z.object({
 });
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  identifier: z.string().min(1).optional(),
+  email: z.string().min(1).optional(),
   password: z.string().min(1),
-});
+}).refine((d) => d.identifier || d.email, { message: "identifier or email required" });
 
 router.post("/auth/register", async (req, res, next) => {
   try {
@@ -168,15 +190,109 @@ router.patch("/me", requirePlayer, async (req, res, next) => {
       displayName: z.string().min(1).max(80).optional(),
       phoneNumber: z.string().max(32).optional(),
       bio: z.string().max(500).optional(),
+      mmr: z.number().int().min(0).max(20000).nullable().optional(),
+      preferredRoles: z.array(z.string().min(1)).optional(),
+      location: z.string().max(120).optional(),
     });
     const payload = schema.parse(req.body);
-    const account = await updatePlayerAccount(req.playerAccount.id, {
+    const patch = {
       displayName: payload.displayName,
       phoneNumber: payload.phoneNumber,
       bio: payload.bio,
-    });
+      mmr: payload.mmr,
+      preferredRoles: payload.preferredRoles,
+      location: payload.location,
+    };
+    if (
+      payload.mmr != null ||
+      payload.preferredRoles?.length ||
+      payload.location ||
+      payload.displayName ||
+      payload.phoneNumber
+    ) {
+      patch.profileCompletedAt = new Date().toISOString();
+    }
+    const account = await updatePlayerAccount(req.playerAccount.id, patch);
     const me = await playerMeWithCoins(account);
     res.json(me);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/me/change-password", requirePlayer, async (req, res, next) => {
+  try {
+    const payload = z
+      .object({
+        currentPassword: z.string().optional(),
+        newPassword: z.string().min(8),
+      })
+      .parse(req.body);
+    const account = await changePlayerPassword(req.playerAccount, payload);
+    res.json({ message: "Password updated", account: { bpcId: account.bpc_id } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/auth/claim/start", async (req, res, next) => {
+  try {
+    const { bpcId, email } = z
+      .object({ bpcId: z.string().min(1), email: z.string().email() })
+      .parse(req.body);
+    const result = await startLegacyClaim({ bpcId, email });
+    const verifyUrl = `${frontendUrl("/claim-account")}?step=verify&bpcId=${encodeURIComponent(bpcId)}&email=${encodeURIComponent(result.account.email)}&token=${encodeURIComponent(result.verifyToken)}`;
+    await sendPlayerEmailVerificationEmail({
+      to: result.account.email,
+      verifyUrl,
+      displayName: result.account.display_name,
+    });
+    res.json({
+      message: "Verification sent. Check your email to continue claiming your account.",
+      ...(env.emailSkipSend ? { devVerifyUrl: verifyUrl, devVerifyToken: result.verifyToken } : {}),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/auth/claim/verify", async (req, res, next) => {
+  try {
+    const payload = z
+      .object({
+        bpcId: z.string().min(1),
+        email: z.string().email(),
+        code: z.string().min(1),
+      })
+      .parse(req.body);
+    const result = await verifyLegacyClaim(payload);
+    res.json({
+      message: "Email verified. Set your password to finish.",
+      claimToken: result.claimToken,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/auth/claim/set-password", async (req, res, next) => {
+  try {
+    const payload = z
+      .object({
+        token: z.string().min(1),
+        password: z.string().min(8),
+      })
+      .parse(req.body);
+    const { account, session } = await setPasswordFromClaim({
+      claimToken: payload.token,
+      password: payload.password,
+    });
+    res.json({
+      message: "Account claimed successfully",
+      token: session.token,
+      expiresAt: session.expiresAt,
+      account: { bpcId: account.bpc_id, slug: account.slug },
+    });
   } catch (error) {
     next(error);
   }
@@ -356,6 +472,146 @@ router.get("/public/accounts/:slug", async (req, res, next) => {
     const account = await findAccountBySlug(req.params.slug);
     if (!account) return res.status(404).json({ message: "Player not found" });
     res.json({ account: publicPlayerAccount(account), phase: "profile-v4" });
+  } catch (error) {
+    next(error);
+  }
+});
+
+const checkoutPreviewSchema = z.object({
+  cardTier: z.enum(CARD_TIERS).optional().default("default"),
+  coinsToApply: z.number().int().min(0).optional(),
+});
+
+const registrationDetailsSchema = z.object({
+  mmr: z.number().int().min(0).max(20000).nullable().optional(),
+  roles: z.array(z.string().min(1)).optional(),
+  location: z.string().max(120).optional(),
+  phoneNumber: z.string().max(32).optional(),
+});
+
+const checkoutConfirmSchema = checkoutPreviewSchema.extend({
+  assetUrl: z.string().optional(),
+  tagline: z.string().max(120).optional(),
+  registrationDetails: registrationDetailsSchema.optional(),
+});
+
+router.post("/tournaments/:slug/checkout/preview", requirePlayer, async (req, res, next) => {
+  try {
+    const body = checkoutPreviewSchema.parse(req.body);
+    const preview = await previewCheckout(req.playerAccount, req.params.slug, body);
+    res.json(preview);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/tournaments/:slug/checkout/confirm", requirePlayer, async (req, res, next) => {
+  try {
+    const body = checkoutConfirmSchema.parse(req.body);
+    if (body.registrationDetails) {
+      const d = body.registrationDetails;
+      await updatePlayerAccount(req.playerAccount.id, {
+        mmr: d.mmr,
+        preferredRoles: d.roles,
+        location: d.location,
+        phoneNumber: d.phoneNumber,
+        profileCompletedAt: new Date().toISOString(),
+      });
+      req.playerAccount = await findAccountById(req.playerAccount.id);
+    }
+    const result = await confirmCheckout(req.playerAccount, req.params.slug, body);
+    if (body.assetUrl || body.tagline) {
+      const tier = body.cardTier === "default" ? "gold" : body.cardTier;
+      if (tier === "gold" || tier === "holo") {
+        await upsertCardAsset(req.playerAccount.id, {
+          tier,
+          assetUrl: body.assetUrl || "",
+          tagline: body.tagline || "",
+        });
+      }
+    }
+    res.status(201).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/checkout/:orderId/status", requirePlayer, async (req, res, next) => {
+  try {
+    const status = await getCheckoutOrderStatus(req.params.orderId, req.playerAccount.id);
+    res.json(status);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/checkout/:orderId/simulate-pay", requirePlayer, async (req, res, next) => {
+  try {
+    const result = await simulateManualPayment(req.params.orderId, req.playerAccount.id);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/tournaments/:slug/substitute", requirePlayer, async (req, res, next) => {
+  try {
+    const body = z
+      .object({
+        roles: z.array(z.string().min(1)).min(1),
+        mmr: z.number().int().min(0).max(20000),
+        availability: z.string().max(500).optional().default(""),
+        notes: z.string().max(1000).optional().default(""),
+      })
+      .parse(req.body);
+    const result = await createSubstituteSignup(req.playerAccount, req.params.slug, body);
+    res.status(201).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/me/coins", requirePlayer, async (req, res, next) => {
+  try {
+    const payload = await getPlayerCoinSummary(req.playerAccount.id);
+    res.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/team", requirePlayer, async (req, res, next) => {
+  try {
+    const payload = await getPlayerTeamForAccount(req.playerAccount.id);
+    res.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/matches", requirePlayer, async (req, res, next) => {
+  try {
+    const payload = await getPlayerMatchesForAccount(req.playerAccount.id);
+    res.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/history", requirePlayer, async (req, res, next) => {
+  try {
+    const payload = await getPlayerDashboardHistory(req.playerAccount.id);
+    if (!payload) return res.status(404).json({ message: "Player not found" });
+    res.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/tournaments/upcoming", requirePlayer, async (req, res, next) => {
+  try {
+    const payload = await getUpcomingTournamentsForPlayer(req.playerAccount.id);
+    res.json(payload);
   } catch (error) {
     next(error);
   }

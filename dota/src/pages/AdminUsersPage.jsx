@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 
+const PERMISSION_TEMPLATES = {
+  tournament_admin: ["bracket.generate", "bracket.result", "schedule.edit", "honors.view"],
+  registration_manager: ["registrations.view", "registrations.edit", "registrations.approve", "coins.grant"],
+  media_manager: ["news.edit", "seasons.edit", "honors.edit"],
+  card_manager: ["cards.approve"],
+};
+
 function statusBadgeClass(status) {
   if (status === "approved") return "border-primary/50 bg-primary/10 text-primary";
   if (status === "pending") return "border-secondary/40 bg-secondary/10 text-secondary";
@@ -51,6 +58,17 @@ export function AdminUsersPage({ currentUser }) {
       } else {
         setMessage("Invite created (email not sent — dev mode). Copy the link below if needed.");
       }
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function applyPermissionTemplate(userId, templateKey) {
+    setMessage("");
+    try {
+      await api.updateAdminPermissions(userId, PERMISSION_TEMPLATES[templateKey] || []);
+      await loadUsers();
+      setMessage(`Permissions updated (${templateKey.replace(/_/g, " ")}).`);
     } catch (error) {
       setMessage(error.message);
     }
@@ -143,10 +161,21 @@ export function AdminUsersPage({ currentUser }) {
                       Manage
                       <span className="ml-1 text-xs text-muted-foreground">▼</span>
                     </summary>
-                    <div className="absolute right-0 z-10 mt-1 w-full min-w-48 rounded-md border border-border bg-card p-1 shadow-xl sm:w-48">
+                    <div className="absolute right-0 z-10 mt-1 w-full min-w-56 rounded-md border border-border bg-card p-2 shadow-xl sm:w-56">
+                      <p className="px-2 py-1 text-xs text-muted-foreground">Role template</p>
+                      {Object.keys(PERMISSION_TEMPLATES).map((key) => (
+                        <button
+                          key={key}
+                          type="button"
+                          className="btn-menu w-full text-left capitalize"
+                          onClick={() => applyPermissionTemplate(user.id, key)}
+                        >
+                          {key.replace(/_/g, " ")}
+                        </button>
+                      ))}
                       <button
                         type="button"
-                        className="btn-menu w-full text-destructive hover:text-destructive"
+                        className="btn-menu mt-1 w-full text-destructive hover:text-destructive"
                         onClick={() => {
                           if (window.confirm(`Revoke admin access for ${user.email}? They will be signed out and emailed if SMTP is configured.`)) {
                             updateStatus(user.id, "revoked");

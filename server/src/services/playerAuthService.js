@@ -6,10 +6,12 @@ import {
   eligibilityFromAccount,
   findAccountByEmail,
   findAccountById,
+  findAccountByBpcId,
   findAccountByDiscordId,
   findAccountByGoogleSub,
   findAccountBySteamId,
   publicPlayerAccount,
+  resolveAccountByIdentifier,
   updatePlayerAccount,
 } from "./playerAccountRepository.js";
 import { hashPassword, verifyPassword } from "./authService.js";
@@ -171,10 +173,11 @@ export async function resendPlayerEmailVerification(email) {
   return { account: await findAccountById(account.id), verifyToken };
 }
 
-export async function loginPlayer({ email, password }) {
-  const account = await findAccountByEmail(email);
+export async function loginPlayer({ identifier, email, password }) {
+  const loginId = identifier || email;
+  const account = await resolveAccountByIdentifier(loginId);
   if (!account || !account.password_hash || !verifyPassword(password, account.password_hash)) {
-    const err = new Error("Invalid email or password");
+    const err = new Error("Invalid credentials");
     err.status = 401;
     throw err;
   }
@@ -199,6 +202,145 @@ export async function requestPasswordReset(email) {
     passwordResetExpiresAt: resetExpires.toISOString(),
   });
   return { account, resetToken };
+}
+
+export async function changePlayerPassword(account, { currentPassword, newPassword }) {
+  if (!newPassword || newPassword.length < 8) {
+    const err = new Error("New password must be at least 8 characters");
+    err.status = 400;
+    throw err;
+  }
+  if (account.password_hash) {
+    if (!currentPassword || !verifyPassword(currentPassword, account.password_hash)) {
+      const err = new Error("Current password is incorrect");
+      err.status = 400;
+      throw err;
+    }
+  } else if (currentPassword) {
+    const err = new Error("No password is set on this account");
+    err.status = 403;
+    throw err;
+  }
+  await updatePlayerAccount(account.id, {
+    passwordHash: hashPassword(newPassword),
+    passwordResetTokenHash: null,
+    passwordResetExpiresAt: null,
+  });
+  return findAccountById(account.id);
+}
+
+const CLAIM_TOKEN_HOURS = 2;
+
+export async function startLegacyClaim({ bpcId, email }) {
+  const account = await findAccountByBpcId(bpcId);
+  if (!account) {
+    const err = new Error("No account found for that BPC ID");
+    err.status = 404;
+    throw err;
+  }
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  if (account.email.toLowerCase() !== normalizedEmail) {
+    const err = new Error("Email does not match this BPC ID");
+    err.status = 400;
+    throw err;
+  }
+  if (account.password_hash) {
+    const err = new Error("This account already has a password. Sign in or use forgot password.");
+    err.status = 409;
+    err.code = "ALREADY_CLAIMED";
+    throw err;
+  }
+
+  const verifyToken = createOpaqueToken();
+  const verifyHash = hashPlayerTokenPurpose("claim-account", verifyToken);
+  const verifyExpires = new Date(Date.now() + EMAIL_VERIFY_HOURS * 60 * 60 * 1000);
+
+  await updatePlayerAccount(account.id, {
+    emailVerifyTokenHash: verifyHash,
+    emailVerifyExpiresAt: verifyExpires.toISOString(),
+  });
+
+  return { account, verifyToken };
+}
+
+export async function verifyLegacyClaim({ bpcId, email, code }) {
+  const account = await findAccountByBpcId(bpcId);
+  if (!account) {
+    const err = new Error("Invalid claim request");
+    err.status = 400;
+    throw err;
+  }
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  if (account.email.toLowerCase() !== normalizedEmail) {
+    const err = new Error("Email does not match");
+    err.status = 400;
+    throw err;
+  }
+
+  const hash = hashPlayerTokenPurpose("claim-account", code);
+  if (account.email_verify_token_hash !== hash || !account.email_verify_expires_at) {
+    const err = new Error("Invalid or expired verification code");
+    err.status = 400;
+    throw err;
+  }
+  if (new Date(account.email_verify_expires_at) < new Date()) {
+    const err = new Error("Verification code expired");
+    err.status = 400;
+    throw err;
+  }
+
+  const claimToken = createOpaqueToken();
+  const claimHash = hashPlayerTokenPurpose("claim-set-password", claimToken);
+  const claimExpires = new Date(Date.now() + CLAIM_TOKEN_HOURS * 60 * 60 * 1000);
+
+  await pool.query(
+    `INSERT INTO player_claim_tokens (id, player_account_id, token_hash, expires_at)
+     VALUES ($1, $2, $3, $4)`,
+    [randomUUID(), account.id, claimHash, claimExpires.toISOString()],
+  );
+
+  await updatePlayerAccount(account.id, {
+    emailVerifiedAt: account.email_verified_at || new Date().toISOString(),
+    emailVerifyTokenHash: null,
+    emailVerifyExpiresAt: null,
+  });
+
+  return { account: await findAccountById(account.id), claimToken };
+}
+
+export async function setPasswordFromClaim({ claimToken, password }) {
+  if (!password || password.length < 8) {
+    const err = new Error("Password must be at least 8 characters");
+    err.status = 400;
+    throw err;
+  }
+  const hash = hashPlayerTokenPurpose("claim-set-password", claimToken);
+  const { rows } = await pool.query(
+    `SELECT t.*, a.*
+     FROM player_claim_tokens t
+     JOIN player_accounts a ON a.id = t.player_account_id
+     WHERE t.token_hash = $1 AND t.used_at IS NULL AND t.expires_at > NOW()`,
+    [hash],
+  );
+  const row = rows[0];
+  if (!row) {
+    const err = new Error("Invalid or expired claim token");
+    err.status = 400;
+    throw err;
+  }
+  if (row.password_hash) {
+    const err = new Error("Account already has a password");
+    err.status = 409;
+    throw err;
+  }
+
+  await pool.query(`UPDATE player_claim_tokens SET used_at = NOW() WHERE id = $1`, [row.id]);
+  await updatePlayerAccount(row.player_account_id, {
+    passwordHash: hashPassword(password),
+  });
+  const account = await findAccountById(row.player_account_id);
+  const session = await createPlayerSession(account.id);
+  return { account, session };
 }
 
 export async function resetPlayerPassword(token, newPassword) {

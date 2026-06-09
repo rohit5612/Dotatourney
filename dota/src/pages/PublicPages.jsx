@@ -91,9 +91,8 @@ import { formatAnnouncementPostedAt, parseAnnouncementEntries } from "../lib/ann
 const tournamentSlug = "bpcl";
 const defaultTournamentStart = "2026-05-22T00:00:00+05:30";
 const discordInviteUrl = "https://discord.gg/sV2PhYc6A3";
-/** Discord brand blurple — used for the registration page CTA only. */
-const REGISTRATION_DISCORD_BTN_CLASS =
-  "btn inline-flex items-center justify-center gap-2 border-transparent bg-[#5865F2] text-white shadow-md hover:bg-[#4752C4] hover:brightness-100 focus-visible:ring-2 focus-visible:ring-[#5865F2] focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+/** Discord brand CTA — uses --discord-brand token from index.css */
+const REGISTRATION_DISCORD_BTN_CLASS = "btn btn-discord";
 const LANDING_JOURNEY_ICONS = {
   hub: HiOutlineChatBubbleLeftRight,
   blast: HiOutlineBolt,
@@ -296,7 +295,8 @@ function CookieConsentBanner({ navigate }) {
   );
 }
 
-function EventShell({ path, navigate, children, registerClosedCentered = false }) {
+/** Page content shell — layout chrome (nav/footer) lives in PublicLayout. */
+export function PageContentShell({ path, children, registerClosedCentered = false }) {
   const isFullBleedBg = path === "/schedule" || path === "/teams" || path === "/register" || path === "/rules";
   const contentClass =
     path === "/schedule" || path === "/teams"
@@ -316,14 +316,13 @@ function EventShell({ path, navigate, children, registerClosedCentered = false }
     path === "/schedule"
       ? "bg-gradient-to-br from-background/88 via-background/80 to-background/72"
       : path === "/teams"
-        ? "bg-gradient-to-b from-black/78 via-neutral-900/72 to-neutral-950/82"
+        ? "bg-gradient-to-b from-background/88 via-background/72 to-background/82"
         : path === "/register"
           ? "bg-gradient-to-b from-background/86 via-background/78 to-background/84"
           : path === "/rules"
-            ? "bg-gradient-to-b from-black/82 via-neutral-950/78 to-black/88"
+            ? "bg-gradient-to-b from-background/82 via-background/78 to-background/88"
             : "bg-gradient-to-br from-background/87 via-background/78 to-background/80";
 
-  const footerFullBleedStyling = isFullBleedBg || registerClosedCentered;
   const sectionClassName = registerClosedCentered
     ? "relative z-10 flex min-h-0 flex-1 flex-col px-4 pt-24 sm:pt-28"
     : path === "/"
@@ -333,16 +332,13 @@ function EventShell({ path, navigate, children, registerClosedCentered = false }
         : `${contentClass} relative z-10`;
 
   return (
-    <main
-      className={`min-h-screen text-foreground ${isFullBleedBg ? "" : "bg-background"} ${registerClosedCentered ? "flex flex-col" : ""}`}
-    >
+    <div className={`relative text-foreground ${isFullBleedBg ? "" : "bg-background"} ${registerClosedCentered ? "flex min-h-[60vh] flex-col" : ""}`}>
       {isFullBleedBg && fullBleedImage ? (
         <div className="pointer-events-none fixed inset-0 z-0" aria-hidden="true">
           <img alt="" className="h-full w-full object-cover" src={fullBleedImage} />
           <div className={`absolute inset-0 ${fullBleedGradientClass}`} />
         </div>
       ) : null}
-      <SiteNavbar path={path} navigate={navigate} />
       <section className={sectionClassName}>
         {registerClosedCentered ? (
           <div className="flex min-h-[calc(100dvh-14rem)] flex-1 flex-col items-center justify-center py-10 sm:min-h-[calc(100dvh-12rem)] sm:py-16 md:py-20">
@@ -352,12 +348,7 @@ function EventShell({ path, navigate, children, registerClosedCentered = false }
           children
         )}
       </section>
-      <div className={`relative z-10 ${footerFullBleedStyling ? "mt-auto border-t border-border/60 bg-background/95 backdrop-blur-sm" : ""}`}>
-        <AppFooter navigate={navigate} />
-      </div>
-      <CookieConsentBanner navigate={navigate} />
-      <ScrollToTopButton />
-    </main>
+    </div>
   );
 }
 
@@ -424,67 +415,67 @@ export function PublicApp({ path, navigate }) {
 
   if (path === "/register") {
     return (
-      <EventShell path={path} navigate={navigate} registerClosedCentered={registerClosedCentered}>
+      <PageContentShell path={path} navigate={navigate} registerClosedCentered={registerClosedCentered}>
         <RegistrationPage event={event} message={message} setMessage={setMessage} />
-      </EventShell>
+      </PageContentShell>
     );
   }
 
   if (path === "/rules") {
     const rulesDiscordUrl = event?.tournament?.discord_url || discordInviteUrl;
     return (
-      <EventShell path={path} navigate={navigate}>
+      <PageContentShell path={path} navigate={navigate}>
         <GeneralRulesPage discordUrl={rulesDiscordUrl} />
-      </EventShell>
+      </PageContentShell>
     );
   }
 
   if (path === "/privacy") {
     return (
-      <EventShell path={path} navigate={navigate}>
+      <PageContentShell path={path} navigate={navigate}>
         <PrivacyPolicyPage />
-      </EventShell>
+      </PageContentShell>
     );
   }
 
   if (path === "/cookies") {
     return (
-      <EventShell path={path} navigate={navigate}>
+      <PageContentShell path={path} navigate={navigate}>
         <CookiePolicyPage />
-      </EventShell>
+      </PageContentShell>
     );
   }
 
   if (path === "/schedule") {
     return (
-      <EventShell path={path} navigate={navigate}>
+      <PageContentShell path={path} navigate={navigate}>
         <PublicSchedule event={displayEvent} message={message} />
-      </EventShell>
+      </PageContentShell>
     );
   }
 
   if (path === "/teams") {
     return (
-      <EventShell path={path} navigate={navigate}>
+      <PageContentShell path={path} navigate={navigate}>
         <Suspense fallback={<PageLoadingSpinner label="Loading teams…" />}>
           <PublicTeamsPage event={event} message={message} navigate={navigate} />
         </Suspense>
-      </EventShell>
+      </PageContentShell>
     );
   }
 
   if (path === "/tournament") {
     return (
-      <EventShell path={path} navigate={navigate}>
+      <PageContentShell path={path} navigate={navigate}>
         <TournamentInfo event={event} message={message} navigate={navigate} />
-      </EventShell>
+      </PageContentShell>
     );
   }
 
   return (
-    <EventShell path={path} navigate={navigate}>
+    <PageContentShell path={path} navigate={navigate}>
       <LandingPage event={event} navigate={navigate} message={message} />
-    </EventShell>
+    </PageContentShell>
   );
 }
 
@@ -531,7 +522,7 @@ function LandingPageHeroVideo() {
   );
 }
 
-function LandingPage({ event, navigate, message }) {
+export function LandingPage({ event, navigate, message }) {
   const tournament = event?.tournament;
   const discordUrl = tournament?.discord_url || discordInviteUrl;
   const coSponsor = getCoSponsor();
@@ -548,7 +539,7 @@ function LandingPage({ event, navigate, message }) {
         <div className="pointer-events-none absolute inset-0 bg-black/50" />
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_100%_75%_at_50%_-10%,rgba(233,168,74,0.2),transparent_55%)]" />
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_55%_70%_at_95%_45%,rgba(94,234,212,0.1),transparent_48%)]" />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#06060a] via-[#06060a]/75 to-[#06060a]/20" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background via-background/75 to-background/20" />
         <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center gap-8 text-center">
           <div className="space-y-5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-secondary sm:text-xs sm:tracking-[0.34em]">
@@ -762,7 +753,7 @@ function ApprovedRegistrationsHero({ count }) {
   const playerLabel = n === 1 ? "player" : "players";
   return (
     <div
-      className="inline-flex max-w-full items-center gap-2.5 rounded-full border border-accent/35 bg-[#06060f]/88 px-4 py-2 text-left text-sm shadow-lg backdrop-blur-md ring-1 ring-white/[0.06]"
+      className="inline-flex max-w-full items-center gap-2.5 rounded-full border border-accent/35 bg-background/88 px-4 py-2 text-left text-sm shadow-lg backdrop-blur-md ring-1 ring-foreground/10"
       role="status"
       aria-live="polite"
       aria-label={`${n} registered ${playerLabel} and counting`}
@@ -937,7 +928,7 @@ function PrizePoolBreakdown({ total, items }) {
   );
 }
 
-function TournamentInfo({ event, message, navigate }) {
+export function TournamentInfo({ event, message, navigate }) {
   const tournament = event?.tournament;
   const teamLookup = useMemo(
     () => buildTeamNameLookup(event?.teams, event?.setupTeams),
@@ -1069,7 +1060,7 @@ function TournamentInfo({ event, message, navigate }) {
 
           <section className="announcement-panel relative overflow-hidden rounded-2xl border-2 border-primary/45 bg-card/90 p-5 shadow-2xl shadow-primary/10 ring-1 ring-primary/15 backdrop-blur-md sm:p-8">
             <div
-              className="announcement-panel-accent pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#c9782e] via-secondary to-[#1a6b5c]"
+              className="announcement-panel-accent pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-primary via-secondary to-accent"
               aria-hidden="true"
             />
             <div className="mb-5">
@@ -1531,7 +1522,7 @@ function PublicSchedulePhaseCompleteNotice({ message }) {
   );
 }
 
-function PublicSchedule({ event, message }) {
+export function PublicSchedule({ event, message }) {
   const [viewMode, setViewMode] = useState(() => parseScheduleViewHash());
   const [phaseTab, setPhaseTab] = useState(SCHEDULE_PHASE_GROUPS);
   const completionSnapshotRef = useRef("");
@@ -1839,7 +1830,7 @@ function PublicSchedule({ event, message }) {
   );
 }
 
-function PrivacyPolicyPage() {
+export function PrivacyPolicyPage() {
   return (
     <article className="mx-auto max-w-3xl space-y-8 text-foreground">
       <header>
@@ -1894,7 +1885,7 @@ function PrivacyPolicyPage() {
   );
 }
 
-function CookiePolicyPage() {
+export function CookiePolicyPage() {
   return (
     <article className="mx-auto max-w-3xl space-y-8 text-foreground">
       <header>
@@ -1931,7 +1922,7 @@ function CookiePolicyPage() {
   );
 }
 
-function GeneralRulesPage({ discordUrl }) {
+export function GeneralRulesPage({ discordUrl }) {
   const invite = (discordUrl || discordInviteUrl).trim();
   return (
     <div className="general-rules-page">
@@ -2178,8 +2169,9 @@ function PaymentQrModal({ open, onClose, src }) {
   );
 }
 
-function RegistrationPage({ event, message, setMessage }) {
+export function RegistrationPage({ event, message, setMessage }) {
   const tournament = event?.tournament;
+  const tournamentSlug = tournament?.slug || "bpcl";
   const discordUrl = tournament?.discord_url || discordInviteUrl;
   const coSponsor = getCoSponsor();
   const registrationDeadline = tournament?.registration_deadline;

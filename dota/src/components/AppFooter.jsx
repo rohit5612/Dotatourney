@@ -1,7 +1,11 @@
+import { Link, useNavigate } from "react-router-dom";
 import { PUBLIC_CONTACT_EMAIL } from "../constants/legal.js";
+import { useSiteNavLinks } from "../hooks/useSiteNavLinks.js";
 import { ValveDisclaimer } from "./ValveDisclaimer.jsx";
 
 export function AppFooter({ navigate, mode = "public" }) {
+  const routerNavigate = useNavigate();
+  const publicNavLinks = useSiteNavLinks();
   const quickLinks =
     mode === "admin"
       ? [
@@ -10,13 +14,7 @@ export function AppFooter({ navigate, mode = "public" }) {
           ["setup", "Setup"],
           ["bracketSchedule", "Bracket & Schedule"],
         ]
-      : [
-          ["/", "Home"],
-          ["/tournament", "Tournament"],
-          ["/schedule", "Bracket & Schedule"],
-          ["/teams", "Teams"],
-          ["/rules", "Rules"],
-        ];
+      : publicNavLinks.map((item) => [item.href, item.label]);
 
   const legalLinks =
     mode === "public"
@@ -27,8 +25,12 @@ export function AppFooter({ navigate, mode = "public" }) {
       : [];
 
   function goTo(target) {
-    if (!navigate) return;
-    navigate(target);
+    if (navigate) {
+      navigate(target);
+      return;
+    }
+    if (mode === "admin") return;
+    routerNavigate(target);
   }
 
   return (
@@ -102,14 +104,28 @@ export function AppFooter({ navigate, mode = "public" }) {
         </div>
       </div>
       <div className="border-t border-border">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-4 text-xs text-muted-foreground">
-          <span>&copy; {new Date().getFullYear()} Bharat Pro Circuit League (BPC League). All rights reserved.</span>
-          <span>
-            Powered by{" "}
-            <a className="font-medium text-primary transition hover:text-foreground" href="https://nuvorn.com/" target="_blank" rel="noreferrer">
-              Nuvorn Technologies
-            </a>
+        <div className="app-footer__bar mx-auto max-w-6xl px-4 py-4 text-xs text-muted-foreground">
+          <span className="app-footer__bar-copy">
+            &copy; {new Date().getFullYear()} Bharat Pro Circuit League (BPC League). All rights reserved.
           </span>
+          <div className="app-footer__bar-utilities">
+            {mode === "public" ? (
+              <Link to="/admin" className="app-footer__staff-link">
+                Staff portal
+              </Link>
+            ) : null}
+            <span className="app-footer__powered">
+              Powered by{" "}
+              <a
+                className="font-medium text-primary transition hover:text-foreground"
+                href="https://nuvorn.com/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Nuvorn Technologies
+              </a>
+            </span>
+          </div>
         </div>
       </div>
     </footer>

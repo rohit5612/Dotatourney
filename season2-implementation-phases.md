@@ -99,20 +99,21 @@ See [Deployment & domain (Hostinger + bpcleague.com)](#deployment--domain-hostin
 ```mermaid
 flowchart LR
   P1[Phase1_Foundation]
-  P2[Phase2_Emerald_UI]
   P3[Phase3_Registration]
   P4[Phase4_Profiles_Cards]
   P5[Phase5_Seasons_Community]
   P6[Phase6_Admin_RBAC_Engine]
   P7[Phase7_Integrations]
-  P1 --> P2
-  P2 --> P3
+  P2[Phase2_Emerald_UI_Final]
+  P1 --> P3
   P3 --> P4
   P4 --> P5
   P5 --> P6
-  P4 --> P7
   P6 --> P7
+  P7 --> P2
 ```
+
+**Build order note:** Functional phases 3–7 ship on the **current dark theme** with CSS tokens unified in `index.css`. Phase 2 (emerald light UI) runs **last** via `VITE_EMERALD_THEME=true`.
 
 | Phase | Name | Est. focus | Blocks |
 |-------|------|------------|--------|
@@ -960,6 +961,47 @@ Razorpay still requires **merchant KYC** (business/sole prop + bank). Complete t
 | 5 | Seasons, trophy, and cards appear across the marketing site. |
 | 6 | Admins are scoped; tournament presets are selectable. |
 | 7 | Discord and overlay consume the same card API. |
+
+---
+
+# Deferred — Match substitution & substitute registration
+
+**Status:** Not in current build. Documented for Phase 4+ follow-up after team assignment and schedule publish.
+
+### Part A — Per-match substitution (logged-in roster players)
+
+**When:** Player is on an approved roster and the tournament schedule is published.
+
+| Surface | Behavior |
+|---------|----------|
+| Player dashboard | **My matches** — team schedule (opponent, datetime, series) from `matches` + `schedule_slots` |
+| Player dashboard | **Apply for substitution** — pick the match they cannot play; submit sub request |
+| Player dashboard | **Cancel request** — allowed until **4 hours before** scheduled match start |
+| Admin CRM | Queue of sub requests: player, match, team, status, timestamps; approve/assign/reject |
+
+**Suggested schema (future migration):** `match_substitution_requests` — `player_account_id`, `match_id`, `status` (`pending` / `cancelled` / `fulfilled` / `rejected`), `requested_at`, `cancelled_at`, optional `assigned_substitute_registration_id`.
+
+**API sketch:** `POST/DELETE /api/player/matches/:matchId/substitution-request`; admin `GET/PATCH /api/admin/substitution-requests`.
+
+**UI note:** Login/auth branding already references schedule + per-match sub flow; implementation lives in dashboard, not auth shell.
+
+### Part B — Substitute registration (registration closed)
+
+**When:** Tournament is within `start_date`–`end_date`, and `registration_limit` is reached (admin-configured). Player dashboard uses cosmetic placeholders in `tournamentDisplay.js` until admin routes expose the cap.
+
+| Difference from full registration | Detail |
+|-------------------------------------|--------|
+| No entrance fee | Same profile fields (roles, MMR, availability, notes); `substitute_flag = true` |
+| Existing partial API | `POST /api/player/tournaments/:slug/substitute` |
+| Legacy UI | `DashboardCheckout.jsx` substitute path — wire into new **Tournaments** dashboard flow |
+
+**Admin CRM:** Filter “Substitutes only” (already planned in Phase 3); pool used when filling roster gaps from Part A requests.
+
+### Build order (recommended)
+
+1. Phase 4 — dashboard **My matches** (read-only schedule) if not already complete.
+2. Part B — substitute signup in new tournaments UI (reuse endpoint).
+3. Part A — per-match sub requests + 4h cancel window + admin CRM tab.
 
 ---
 

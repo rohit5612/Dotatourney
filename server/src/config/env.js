@@ -70,6 +70,10 @@ export const env = {
   discordClientId: process.env.DISCORD_CLIENT_ID?.trim() || "",
   discordClientSecret: process.env.DISCORD_CLIENT_SECRET?.trim() || "",
   steamApiKey: process.env.STEAM_API_KEY?.trim() || "",
+  nodeEnv: process.env.NODE_ENV || "development",
+  razorpayKeyId: process.env.RAZORPAY_KEY_ID?.trim() || "",
+  razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET?.trim() || "",
+  razorpayWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET?.trim() || "",
   /** Service account JSON (minified one-line). Or use GOOGLE_SERVICE_ACCOUNT_JSON_B64 / GOOGLE_APPLICATION_CREDENTIALS. */
   googleServiceAccountJson: process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim() || "",
   googleServiceAccountJsonB64: process.env.GOOGLE_SERVICE_ACCOUNT_JSON_B64?.trim() || "",

@@ -25,6 +25,18 @@ import {
   sendPlayerRegistrationVerifiedEmail,
 } from "../services/emailService.js";
 import { resolvePublicTeamLogo } from "../utils/teamLogoUrl.js";
+import { getPublicPlayerProfile, getCommunityDirectory } from "../services/playerProfileService.js";
+import {
+  listSeasons,
+  getSeasonBySlug,
+  getPublicMatchDetail,
+  listAnnouncements,
+} from "../services/seasonService.js";
+import {
+  buildCardManifestBySlug,
+  buildMatchRosterCards,
+  CARD_PNG_STUB,
+} from "../services/cardManifestService.js";
 
 const router = express.Router();
 
@@ -437,6 +449,111 @@ router.post("/tournaments/:identifier/register", async (_req, res) => {
     message:
       "This registration endpoint is retired. Use POST .../register/request-otp, verify-otp, and complete in order.",
   });
+});
+
+router.get("/players/:slug", async (req, res, next) => {
+  try {
+    const { getPublicPlayerProfileSteamOnly } = await import("../services/playerProfileService.js");
+    const profile = await getPublicPlayerProfileSteamOnly(req.params.slug);
+    if (!profile) return res.status(404).json({ message: "Player not found" });
+    return res.json(profile);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/players/:slug/card", async (req, res, next) => {
+  try {
+    const manifest = await buildCardManifestBySlug(req.params.slug);
+    if (!manifest) return res.status(404).json({ message: "Player not found" });
+    return res.json({ card: manifest });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/players/:slug/card.png", async (req, res, next) => {
+  try {
+    const manifest = await buildCardManifestBySlug(req.params.slug);
+    if (!manifest) return res.status(404).json({ message: "Player not found" });
+    res.set("Content-Type", "image/png");
+    res.set("Cache-Control", "public, max-age=60");
+    res.set("X-Card-Tier", manifest.tier);
+    return res.send(CARD_PNG_STUB);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/matches/:id/roster-cards", async (req, res, next) => {
+  try {
+    const payload = await buildMatchRosterCards(req.params.id);
+    if (!payload) return res.status(404).json({ message: "Match not found" });
+    return res.json(payload);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/match/:id", async (req, res, next) => {
+  try {
+    const payload = await getPublicMatchDetail(req.params.id);
+    if (!payload) return res.status(404).json({ message: "Match not found" });
+    return res.json(payload);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/seasons", async (_req, res, next) => {
+  try {
+    const seasons = await listSeasons();
+    return res.json({ seasons });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/seasons/:slug", async (req, res, next) => {
+  try {
+    const payload = await getSeasonBySlug(req.params.slug);
+    if (!payload) return res.status(404).json({ message: "Season not found" });
+    return res.json(payload);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/community", async (req, res, next) => {
+  try {
+    const query = z
+      .object({
+        search: z.string().optional().default(""),
+        limit: z.coerce.number().int().min(1).max(100).optional().default(48),
+        offset: z.coerce.number().int().min(0).optional().default(0),
+      })
+      .parse(req.query);
+    const payload = await getCommunityDirectory(query);
+    return res.json(payload);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/announcements", async (req, res, next) => {
+  try {
+    const query = z
+      .object({
+        category: z.enum(["registration", "match_day", "general"]).optional(),
+        limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+        offset: z.coerce.number().int().min(0).optional().default(0),
+      })
+      .parse(req.query);
+    const payload = await listAnnouncements(query);
+    return res.json(payload);
+  } catch (error) {
+    return next(error);
+  }
 });
 
 export default router;

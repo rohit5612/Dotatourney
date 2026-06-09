@@ -19,8 +19,19 @@ import {
   publicAdminUser,
   requireAdmin,
   requireSuperadmin,
+  requirePermission,
   verifyPassword,
 } from "../services/authService.js";
+import { adminGrantCoins } from "../services/paymentService.js";
+import {
+  getOrCreateCommerceConfig,
+  publicCommerceConfig,
+  upsertCommerceConfig,
+  listCardAssetsForTournament,
+  updateCardAssetStatus,
+} from "../services/commerceConfigRepository.js";
+import { writeAuditLog, listAuditLog } from "../services/auditLogService.js";
+import { listFormatPresets, resolveFormatPreset } from "../services/formatPresets.js";
 
 const router = express.Router();
 
@@ -240,6 +251,155 @@ router.post("/invites/:token/register", async (req, res, next) => {
     if (error?.code === "23505") {
       return res.status(409).json({ message: "An admin account already exists for this email" });
     }
+    return next(error);
+  }
+});
+
+router.post(
+  "/player-accounts/:id/coins",
+  requireAdmin,
+  requirePermission("coins.grant"),
+  async (req, res, next) => {
+    try {
+      const body = z
+        .object({
+          delta: z.number().int().refine((n) => n !== 0, { message: "delta must be non-zero" }),
+          reason: z.string().max(500).optional().default("Admin grant"),
+        })
+        .parse(req.body);
+      const entry = await adminGrantCoins(req.adminUser.id, req.params.id, body);
+      await writeAuditLog({
+        adminUserId: req.adminUser.id,
+        action: "coins.grant",
+        entityType: "player_account",
+        entityId: req.params.id,
+        payload: body,
+      });
+      return res.status(201).json({ entry });
+    } catch (error) {
+      return next(error);
+    }
+  },
+);
+
+router.get("/audit-log", requireAdmin, requireSuperadmin, async (req, res, next) => {
+  try {
+    const query = z
+      .object({
+        limit: z.coerce.number().int().min(1).max(200).optional().default(50),
+        offset: z.coerce.number().int().min(0).optional().default(0),
+        entityType: z.string().optional(),
+        entityId: z.string().optional(),
+      })
+      .parse(req.query);
+    const entries = await listAuditLog(query);
+    return res.json({ entries });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.patch("/users/:id/permissions", requireAdmin, requireSuperadmin, async (req, res, next) => {
+  try {
+    const body = z.object({ permissions: z.array(z.string().min(1)) }).parse(req.body);
+    const { rows } = await pool.query(
+      `UPDATE admin_users SET permissions = $2::jsonb, updated_at = NOW()
+       WHERE id = $1 AND role <> 'superadmin'
+       RETURNING *`,
+      [req.params.id, JSON.stringify(body.permissions)],
+    );
+    if (!rows[0]) return res.status(404).json({ message: "Admin user not found" });
+    await writeAuditLog({
+      adminUserId: req.adminUser.id,
+      action: "admin.permissions.update",
+      entityType: "admin_user",
+      entityId: req.params.id,
+      payload: body,
+    });
+    return res.json({ user: publicAdminUser(rows[0]) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/format-presets", requireAdmin, async (_req, res, next) => {
+  try {
+    return res.json({ presets: listFormatPresets() });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/format-presets/:id", requireAdmin, async (req, res, next) => {
+  try {
+    const preset = resolveFormatPreset(req.params.id);
+    if (!preset) return res.status(404).json({ message: "Format preset not found" });
+    return res.json({ preset });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/tournaments/:id/commerce", requireAdmin, async (req, res, next) => {
+  try {
+    const row = await getOrCreateCommerceConfig(req.params.id);
+    return res.json({ commerce: publicCommerceConfig(row) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.put("/tournaments/:id/commerce", requireAdmin, async (req, res, next) => {
+  try {
+    const body = z
+      .object({
+        registrationFeeRupees: z.number().int().min(0).optional(),
+        minCashRupees: z.number().int().min(0).optional(),
+        cardTiers: z.record(z.string(), z.object({
+          enabled: z.boolean().optional(),
+          bundledPriceRupees: z.number().int().min(0).optional(),
+          label: z.string().max(80).optional(),
+          description: z.string().max(200).optional(),
+        })).optional(),
+      })
+      .parse(req.body);
+    const row = await upsertCommerceConfig(req.params.id, body);
+    await writeAuditLog({
+      adminUserId: req.adminUser.id,
+      action: "commerce.update",
+      entityType: "tournament",
+      entityId: req.params.id,
+      payload: body,
+    });
+    return res.json({ commerce: publicCommerceConfig(row) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/tournaments/:id/card-assets", requireAdmin, async (req, res, next) => {
+  try {
+    const assets = await listCardAssetsForTournament(req.params.id);
+    return res.json({ assets });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.patch("/card-assets/:id", requireAdmin, async (req, res, next) => {
+  try {
+    const { status } = z.object({ status: z.enum(["approved", "rejected", "pending"]) }).parse(req.body);
+    const asset = await updateCardAssetStatus(req.params.id, status);
+    if (!asset) return res.status(404).json({ message: "Card asset not found" });
+    await writeAuditLog({
+      adminUserId: req.adminUser.id,
+      action: "card_asset.update",
+      entityType: "player_card_asset",
+      entityId: req.params.id,
+      payload: { status },
+    });
+    return res.json({ asset });
+  } catch (error) {
     return next(error);
   }
 });

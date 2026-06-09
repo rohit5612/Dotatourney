@@ -1,0 +1,27 @@
+/* Offset for fixed .site-navbar — live value set by SiteNavbar ResizeObserver */
+.player-area-layout__main {
+  padding-top: var(--site-navbar-offset, 5.5rem);
+  width: 100%;
+}
+
+.player-area-layout__main--centered {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.player-area-layout--immersive {
+  min-height: auto;
+  background: rgb(4 5 10);
+}
+
+.player-area-layout--immersive .player-area-layout__main--auth {
+  padding-top: 0;
+  min-height: 100dvh;
+  flex: none;
+}
+
+.player-area-layout__main--centered > .player-auth,
+.player-area-layout__main--centered > .player-dashboard {
+  flex: 1;
+}

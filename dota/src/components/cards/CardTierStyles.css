@@ -1,0 +1,96 @@
+.bpcl-card {
+  --card-glow: var(--accent);
+  width: 100%;
+  max-width: 280px;
+}
+
+.bpcl-card--sm {
+  max-width: 180px;
+  font-size: 0.8rem;
+}
+
+.bpcl-card__frame {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  padding: 0.75rem;
+  box-shadow: var(--shadow-md);
+}
+
+.bpcl-card--player .bpcl-card__frame {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.bpcl-card--gold .bpcl-card__frame {
+  border-color: color-mix(in srgb, var(--card-tier-gold) 55%, var(--border));
+  box-shadow: 0 0 24px color-mix(in srgb, var(--card-tier-gold) 22%, transparent);
+}
+
+.bpcl-card--holo .bpcl-card__frame {
+  border-color: color-mix(in srgb, var(--card-tier-holo) 55%, var(--border));
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--card) 92%, var(--accent)),
+    var(--card)
+  );
+  box-shadow: 0 0 28px color-mix(in srgb, var(--card-tier-holo) 28%, transparent);
+}
+
+.bpcl-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted-foreground);
+  margin-bottom: 0.5rem;
+}
+
+.bpcl-card__avatar-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.75rem;
+}
+
+.bpcl-card__avatar {
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--border);
+}
+
+.bpcl-card--sm .bpcl-card__avatar {
+  width: 3rem;
+  height: 3rem;
+}
+
+.bpcl-card__avatar--placeholder {
+  background: var(--muted);
+}
+
+.bpcl-card__name {
+  font-weight: 700;
+  color: var(--foreground);
+  margin: 0;
+}
+
+.bpcl-card__id {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent);
+  margin: 0.25rem 0 0;
+}
+
+.bpcl-card__stats,
+.bpcl-card__tagline {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  margin: 0.35rem 0 0;
+}
+
+.bpcl-card__tagline {
+  font-style: italic;
+}
