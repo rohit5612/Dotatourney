@@ -1,0 +1,14 @@
+# Legacy Render URL — static "we've moved" page only.
+# Point dotatourney.onrender.com here before shutting down the old full-stack deploy.
+# Official site: https://bpcleague.in (Netlify) + API on Hostinger — see docs/deploy-bpcleague.md
+
+services:
+  - type: web
+    name: dotatourney-legacy
+    runtime: static
+    buildCommand: cp dota/public/bpcl.png dota/sunset/
+    staticPublishPath: dota/sunset
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
