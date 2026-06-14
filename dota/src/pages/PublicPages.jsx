@@ -1883,7 +1883,7 @@ export function PublicSchedule({ event, message }) {
       {viewMode === "bracket" ? (
         <>
           {(event?.groupedStandings || []).length ? (
-            <section className="schedule-page__block schedule-glass schedule-page__standings-block">
+            <section className="schedule-page__block schedule-page__standings-block">
               <div className="schedule-page__standings-head">
                 <h3 className="schedule-page__block-title">Group standings</h3>
                 <p className="schedule-page__block-copy">Live group-stage records.</p>
