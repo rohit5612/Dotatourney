@@ -38,13 +38,16 @@ export async function getMaxAssignedBpcNumber(db = pool) {
   return Number(rows[0]?.max_n ?? 0);
 }
 
-async function isBpcIdAssigned(client, bpcId) {
+async function isBpcIdAssigned(client, bpcId, { includeRegistrations = true } = {}) {
   const normalized = String(bpcId || "").trim().toUpperCase();
   if (!normalized) return true;
+  const registrationClause = includeRegistrations
+    ? `UNION ALL
+     SELECT 1 FROM player_registrations WHERE upper(public_code) = $1 AND public_code IS NOT NULL`
+    : "";
   const { rows } = await client.query(
     `SELECT 1 AS hit FROM player_accounts WHERE upper(bpc_id) = $1
-     UNION ALL
-     SELECT 1 FROM player_registrations WHERE upper(public_code) = $1 AND public_code IS NOT NULL
+     ${registrationClause}
      LIMIT 1`,
     [normalized],
   );
@@ -232,6 +235,8 @@ export async function createPlayerAccount(
     discordAvatarUrl = "",
     emailVerifyTokenHash = null,
     emailVerifyExpiresAt = null,
+    /** When true, allow assigning a BPC ID that exists only on player_registrations.public_code (S1 migration). */
+    fromRegistrationPublicCode = false,
   },
 ) {
   const id = randomUUID();
@@ -239,7 +244,7 @@ export async function createPlayerAccount(
   let assignedBpcId = bpcId;
   if (assignedBpcId) {
     const normalized = String(assignedBpcId).trim().toUpperCase();
-    if (await isBpcIdAssigned(client, normalized)) {
+    if (await isBpcIdAssigned(client, normalized, { includeRegistrations: !fromRegistrationPublicCode })) {
       const err = new Error(`BPC ID ${normalized} is already assigned`);
       err.status = 409;
       err.code = "BPC_ID_TAKEN";

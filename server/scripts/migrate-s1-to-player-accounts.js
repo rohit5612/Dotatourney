@@ -129,6 +129,7 @@ async function main() {
           displayName,
           phoneNumber: sample.phone_number || "",
           bpcId,
+          fromRegistrationPublicCode: Boolean(bestCode && bpcId === bestCode),
           emailVerifiedAt: verified ? group.find((r) => r.email_verified_at)?.email_verified_at || new Date() : null,
           steamPersona: sample.steam_name || "",
           steamProfile: sample.steam_profile || "",
