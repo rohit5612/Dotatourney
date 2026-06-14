@@ -22,6 +22,25 @@ export default defineConfig(({ mode }) => {
     changeOrigin: true,
   };
 
+  /** LightningCSS (Vite 8 default) drops unprefixed backdrop-filter when -webkit- is present — breaks glass UI in Chrome/Firefox prod builds. */
+  function fixBackdropFilterMinify() {
+    return {
+      name: "fix-backdrop-filter-minify",
+      enforce: "post",
+      generateBundle(_, bundle) {
+        for (const file of Object.values(bundle)) {
+          if (file.type !== "asset" || !file.fileName.endsWith(".css")) continue;
+          const source = String(file.source);
+          if (!source.includes("-webkit-backdrop-filter")) continue;
+          file.source = source.replace(
+            /-webkit-backdrop-filter:([^;]+);/g,
+            "-webkit-backdrop-filter:$1;backdrop-filter:$1;",
+          );
+        }
+      },
+    };
+  }
+
   return {
     build: {
       rollupOptions: {
@@ -37,6 +56,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     plugins: [
+      fixBackdropFilterMinify(),
       {
         name: "inject-sharing-meta",
         transformIndexHtml(html) {
