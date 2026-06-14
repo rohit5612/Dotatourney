@@ -4,14 +4,17 @@
  * @param {object} [props]
  * @param {string} [props.label] — Visually subdued line under the spinner
  * @param {boolean} [props.compact] — Shorter in-page loader (public routes inside layout)
+ * @param {boolean} [props.overlay] — Fixed full-viewport layer (initial home bootstrap)
  */
-export function PageLoadingSpinner({ label = "Loading…", compact = false }) {
+export function PageLoadingSpinner({ label = "Loading…", compact = false, overlay = false }) {
   return (
     <div
       className={
-        compact
-          ? "flex min-h-[min(50vh,24rem)] flex-col items-center justify-center gap-4 px-6 py-12 text-center"
-          : "flex min-h-svh flex-col items-center justify-center gap-5 bg-background px-6 text-center"
+        overlay
+          ? "fixed inset-0 z-[100] flex flex-col items-center justify-center gap-5 bg-background px-6 text-center"
+          : compact
+            ? "flex min-h-[min(50vh,24rem)] flex-col items-center justify-center gap-4 px-6 py-12 text-center"
+            : "flex min-h-svh flex-col items-center justify-center gap-5 bg-background px-6 text-center"
       }
       role="status"
       aria-live="polite"

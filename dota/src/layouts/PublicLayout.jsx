@@ -7,6 +7,7 @@ import { SiteNavbar } from "../components/navigation/SiteNavbar.jsx";
 import { PageLoadingSpinner } from "../components/PageLoadingSpinner";
 import { PublicTournamentProvider } from "../context/PublicTournamentContext.jsx";
 import { usePublicTheme } from "../hooks/usePublicTheme.js";
+import { startHomeAssetsPreload } from "../utils/preloadHomeAssets.js";
 import "../styles/publicPagesStyles.js";
 
 /** Warm route JS chunks after first paint so navigations feel instant. */
@@ -25,6 +26,10 @@ function PublicLayoutInner() {
   const location = useLocation();
   const path = location.pathname;
   usePublicTheme();
+
+  useEffect(() => {
+    startHomeAssetsPreload();
+  }, []);
 
   useEffect(() => {
     const run = () => {

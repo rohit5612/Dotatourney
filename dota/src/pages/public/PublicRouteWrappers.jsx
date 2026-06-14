@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { PageLoadingSpinner } from "../../components/PageLoadingSpinner";
+import { HomeBootstrapGate } from "../../components/public/HomeBootstrapGate.jsx";
 import { PublicEventGate } from "../../components/public/PublicEventGate.jsx";
 import { usePublicTournament } from "../../context/PublicTournamentContext.jsx";
 import { AnnouncementsPublicPage } from "./AnnouncementsPublicPage.jsx";
@@ -29,11 +30,11 @@ export function PublicLandingRoute() {
   const { event, message } = usePublicTournament();
   const navigate = useNavigate();
   return (
-    <PublicEventGate label="Loading home…">
+    <HomeBootstrapGate label="Loading home…">
       <PageContentShell path="/">
         <LandingPage event={event} navigate={navigate} message={message} />
       </PageContentShell>
-    </PublicEventGate>
+    </HomeBootstrapGate>
   );
 }
 
