@@ -22,7 +22,10 @@ export default defineConfig(({ mode }) => {
     changeOrigin: true,
   };
 
-  /** LightningCSS (Vite 8 default) drops unprefixed backdrop-filter when -webkit- is present — breaks glass UI in Chrome/Firefox prod builds. */
+  /**
+   * LightningCSS (Vite 8 default) drops unprefixed backdrop-filter when -webkit- is present.
+   * Minified rules often omit the trailing semicolon before "}", so a naive replace misses them.
+   */
   function fixBackdropFilterMinify() {
     return {
       name: "fix-backdrop-filter-minify",
@@ -30,12 +33,15 @@ export default defineConfig(({ mode }) => {
       generateBundle(_, bundle) {
         for (const file of Object.values(bundle)) {
           if (file.type !== "asset" || !file.fileName.endsWith(".css")) continue;
-          const source = String(file.source);
-          if (!source.includes("-webkit-backdrop-filter")) continue;
-          file.source = source.replace(
-            /-webkit-backdrop-filter:([^;]+);/g,
-            "-webkit-backdrop-filter:$1;backdrop-filter:$1;",
-          );
+          file.source = String(file.source).replace(/\{([^{}]*)\}/g, (rule, body) => {
+            if (!body.includes("-webkit-backdrop-filter")) return `{${body}}`;
+            if (/(?:^|[^-])backdrop-filter:/.test(body)) return `{${body}}`;
+            const fixed = body.replace(
+              /-webkit-backdrop-filter:([^;{}]+)/g,
+              "-webkit-backdrop-filter:$1;backdrop-filter:$1",
+            );
+            return `{${fixed}}`;
+          });
         }
       },
     };

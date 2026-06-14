@@ -342,11 +342,17 @@
   overflow-x: auto;
   border-radius: 1rem;
   border: 1px solid var(--schedule-glass-border-soft);
-  background: rgba(6, 8, 14, 0.72);
-  backdrop-filter: blur(14px) saturate(150%);
+  background: rgba(6, 8, 14, 0.88);
   -webkit-backdrop-filter: blur(14px) saturate(150%);
+  backdrop-filter: blur(14px) saturate(150%);
   padding: clamp(0.85rem, 2.5vw, 1.15rem) clamp(0.85rem, 2.5vw, 1.25rem) clamp(1rem, 2.5vw, 1.35rem);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .schedule-bracket-shell {
+    background: rgba(6, 8, 14, 0.96);
+  }
 }
 
 .schedule-bracket-shell--empty {
@@ -370,11 +376,11 @@
   border-color: rgba(255, 255, 255, 0.14) !important;
   background: linear-gradient(
     160deg,
-    rgba(255, 255, 255, 0.09) 0%,
-    rgba(8, 10, 16, 0.55) 100%
+    rgba(255, 255, 255, 0.12) 0%,
+    rgba(8, 10, 16, 0.82) 100%
   ) !important;
-  backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
   box-shadow:
     0 8px 22px rgba(0, 0, 0, 0.22),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -588,9 +594,9 @@
   padding: clamp(1rem, 2.5vw, 1.25rem) clamp(1rem, 2.8vw, 1.3rem);
   border-radius: 1rem;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  background: linear-gradient(155deg, rgba(255, 255, 255, 0.08) 0%, rgba(8, 10, 16, 0.42) 100%);
-  backdrop-filter: blur(14px) saturate(160%);
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.1) 0%, rgba(8, 10, 16, 0.82) 100%);
   -webkit-backdrop-filter: blur(14px) saturate(160%);
+  backdrop-filter: blur(14px) saturate(160%);
   content-visibility: auto;
   contain-intrinsic-size: auto 9.5rem;
   box-shadow:
@@ -613,7 +619,7 @@
 
 .schedule-match:hover {
   border-color: rgba(255, 255, 255, 0.2);
-  background: linear-gradient(155deg, rgba(255, 255, 255, 0.11) 0%, rgba(10, 12, 18, 0.48) 100%);
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.13) 0%, rgba(10, 12, 18, 0.88) 100%);
   transform: translateY(-1px);
   box-shadow:
     0 10px 28px rgba(0, 0, 0, 0.22),
@@ -1036,11 +1042,21 @@
 .schedule-match__bracket {
   border-radius: 0.85rem;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(6, 8, 14, 0.45);
-  backdrop-filter: blur(10px);
+  background: rgba(6, 8, 14, 0.78);
   -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
   padding: 0.75rem 1rem;
   text-align: left;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .schedule-match {
+    background: linear-gradient(155deg, rgba(255, 255, 255, 0.06) 0%, rgba(8, 10, 16, 0.94) 100%);
+  }
+
+  .schedule-match__bracket {
+    background: rgba(6, 8, 14, 0.92);
+  }
 }
 
 @media (min-width: 768px) {

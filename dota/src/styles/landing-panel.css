@@ -13,6 +13,12 @@
   -webkit-backdrop-filter: blur(18px);
 }
 
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .landing-panel {
+    background: linear-gradient(155deg, rgb(10 12 20 / 0.98) 0%, rgb(4 5 10 / 0.99) 55%, rgb(2 2 6 / 1) 100%);
+  }
+}
+
 .landing-panel::before {
   content: "";
   position: absolute;

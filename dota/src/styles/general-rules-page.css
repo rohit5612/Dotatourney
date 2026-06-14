@@ -45,15 +45,15 @@
 :root:not([data-season="emerald"]) .rules-page-layout {
   --rules-glass-bg: linear-gradient(
     145deg,
-    rgba(12, 16, 28, 0.58) 0%,
-    rgba(8, 10, 18, 0.48) 50%,
-    rgba(6, 8, 14, 0.42) 100%
+    rgba(12, 16, 28, 0.88) 0%,
+    rgba(8, 10, 18, 0.82) 48%,
+    rgba(6, 8, 14, 0.86) 100%
   );
   --rules-glass-bg-strong: linear-gradient(
     145deg,
-    rgba(14, 18, 32, 0.64) 0%,
-    rgba(8, 10, 18, 0.52) 55%,
-    rgba(6, 8, 14, 0.46) 100%
+    rgba(14, 18, 32, 0.92) 0%,
+    rgba(8, 10, 18, 0.88) 55%,
+    rgba(6, 8, 14, 0.9) 100%
   );
   --rules-glass-border: rgba(255, 255, 255, 0.2);
   --rules-glass-border-soft: rgba(255, 255, 255, 0.11);
@@ -94,6 +94,28 @@
   backdrop-filter: var(--rules-glass-blur);
   -webkit-backdrop-filter: var(--rules-glass-blur);
   box-shadow: var(--rules-glass-shadow);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .rules-glass,
+  .rules-page__document.rules-glass {
+    background: linear-gradient(
+      145deg,
+      rgba(12, 16, 28, 0.96) 0%,
+      rgba(8, 10, 18, 0.92) 48%,
+      rgba(6, 8, 14, 0.94) 100%
+    );
+  }
+
+  .rules-glass--strong,
+  .rules-page__document.rules-glass {
+    background: linear-gradient(
+      145deg,
+      rgba(14, 18, 32, 0.98) 0%,
+      rgba(8, 10, 18, 0.94) 55%,
+      rgba(6, 8, 14, 0.96) 100%
+    );
+  }
 }
 
 .rules-glass::before {

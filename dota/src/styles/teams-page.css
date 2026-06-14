@@ -33,6 +33,7 @@
   padding: 0.65rem 0.9rem;
   font-size: 0.875rem;
   color: var(--muted-foreground);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
 }
 
@@ -425,9 +426,10 @@
   border: 1px solid rgb(255 255 255 / 0.1);
   background: linear-gradient(
     168deg,
-    rgb(255 255 255 / 0.09) 0%,
-    rgb(255 255 255 / 0.04) 100%
+    rgb(255 255 255 / 0.14) 0%,
+    rgb(10 14 20 / 0.72) 100%
   );
+  -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
   box-shadow:
     0 8px 24px rgb(0 0 0 / 0.28),
@@ -444,8 +446,8 @@
   border-color: rgb(255 255 255 / 0.16);
   background: linear-gradient(
     168deg,
-    rgb(255 255 255 / 0.12) 0%,
-    rgb(255 255 255 / 0.05) 100%
+    rgb(255 255 255 / 0.18) 0%,
+    rgb(10 14 20 / 0.78) 100%
   );
   box-shadow:
     0 14px 32px rgb(0 0 0 / 0.36),
@@ -580,19 +582,29 @@
 .teams-card--has-logo-bg .teams-card__panel {
   background: linear-gradient(
     168deg,
-    rgb(10 14 20 / 0.58) 0%,
-    rgb(10 14 20 / 0.46) 100%
+    rgb(10 14 20 / 0.78) 0%,
+    rgb(10 14 20 / 0.68) 100%
   );
-  backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
 }
 
 .teams-card--has-logo-bg:hover .teams-card__panel {
   background: linear-gradient(
     168deg,
-    rgb(10 14 20 / 0.64) 0%,
-    rgb(10 14 20 / 0.5) 100%
+    rgb(10 14 20 / 0.84) 0%,
+    rgb(10 14 20 / 0.72) 100%
   );
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .teams-card__panel {
+    background: linear-gradient(168deg, rgb(14 18 24 / 0.96) 0%, rgb(10 14 20 / 0.94) 100%);
+  }
+
+  .teams-card--has-logo-bg .teams-card__panel {
+    background: linear-gradient(168deg, rgb(10 14 20 / 0.94) 0%, rgb(10 14 20 / 0.9) 100%);
+  }
 }
 
 .teams-card--has-logo-bg .teams-card__strip {
@@ -687,7 +699,15 @@
   background: color-mix(in srgb, var(--card) 82%, transparent);
   padding: 3rem 1.5rem;
   text-align: center;
+  -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .teams-page__message,
+  .teams-empty {
+    background: color-mix(in srgb, var(--card) 96%, transparent);
+  }
 }
 
 .teams-empty__eyebrow {
