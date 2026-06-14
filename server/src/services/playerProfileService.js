@@ -193,7 +193,9 @@ function cardTierRankSql(column = "card_tier") {
 
 export async function getCommunityDirectory({ search = "", limit = 48, offset = 0 } = {}) {
   const params = [];
-  let where = `WHERE pa.email_verified_at IS NOT NULL`;
+  let where = `WHERE pa.email_verified_at IS NOT NULL
+    AND pa.steam_id IS NOT NULL
+    AND TRIM(pa.steam_id) <> ''`;
   if (search.trim()) {
     params.push(`%${search.trim().toLowerCase()}%`);
     where += ` AND (lower(pa.display_name) LIKE $${params.length} OR lower(pa.slug) LIKE $${params.length} OR lower(pa.bpc_id) LIKE $${params.length})`;

@@ -91,7 +91,7 @@ export function CommunityPage() {
             Community
           </h1>
           <p className="community-page__hero-lead">
-            Verified BPC League players — collectible cards, public profiles, and league history.
+            Verified BPC League players with linked Steam profiles — collectible cards, public profiles, and league history.
           </p>
           <div className="community-page__hero-meta">
             <span className="community-page__stat">
