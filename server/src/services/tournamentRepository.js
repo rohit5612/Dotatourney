@@ -151,7 +151,7 @@ export async function createTournament(payload) {
       season_card_bg, season_card_badge, engine_template_id
     )
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
-      $25, $26, $27, $28, $29, $30::jsonb, $31, $32, $33)
+      $25, $26, $27, $28, $29, $30, $31::jsonb, $32, $33, $34)
     RETURNING *;
   `;
   const values = [
