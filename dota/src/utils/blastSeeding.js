@@ -1,4 +1,6 @@
-const GROUP_PLACEHOLDER = /^Group [AB] #\d+$/;
+import { groupLabelSortRank, parseGroupLetterFromLabel } from "./teamPage.js";
+
+const GROUP_PLACEHOLDER = /^Group [A-H] #\d+$/i;
 
 /** Mirrors server `blastGroupSlots.js` for display-time resync. */
 const BLAST_N12_GROUP_SLOT_TEMPLATES = [
@@ -83,35 +85,34 @@ function isGroupTableComplete(rows) {
 }
 
 /**
- * Build Group A/B #n → team name map when both BO1 groups are fully decided.
+ * Build Group A–H #n → team name map when all BO1 groups are fully decided.
  * @param {object[]} groupedStandings
  * @param {string} [format]
  * @returns {Record<string, string> | null}
  */
 export function computeBlastPlaceholderMap(groupedStandings, format) {
   if (format !== "blast") return null;
-  const gA = findBlastGroup(groupedStandings, "A");
-  const gB = findBlastGroup(groupedStandings, "B");
-  if (!gA?.rows?.length || !gB?.rows?.length) return null;
-  if (!isGroupTableComplete(gA.rows) || !isGroupTableComplete(gB.rows)) return null;
+  const groups = [...(groupedStandings || [])]
+    .filter((group) => parseGroupLetterFromLabel(group.label))
+    .sort((a, b) => groupLabelSortRank(a.label) - groupLabelSortRank(b.label));
+  if (!groups.length) return null;
+  if (!groups.every((group) => isGroupTableComplete(group.rows))) return null;
 
   /** @type {Record<string, string>} */
   const map = {};
-  gA.rows.forEach((row, index) => {
-    map[`Group A #${index + 1}`] = row.team;
-  });
-  gB.rows.forEach((row, index) => {
-    map[`Group B #${index + 1}`] = row.team;
-  });
+  for (const group of groups) {
+    const letter = parseGroupLetterFromLabel(group.label);
+    group.rows.forEach((row, index) => {
+      map[`Group ${letter} #${index + 1}`] = row.team;
+    });
+  }
   return map;
 }
 
 export function applyBlastPlaceholderMap(matches, placeholderMap, groupedStandings) {
   if (!placeholderMap || !matches?.length) return matches || [];
 
-  const gA = findBlastGroup(groupedStandings, "A");
-  const gB = findBlastGroup(groupedStandings, "B");
-  const teamCount = (gA?.rows?.length || 0) + (gB?.rows?.length || 0);
+  const teamCount = (groupedStandings || []).reduce((sum, group) => sum + (group.rows?.length || 0), 0);
 
   return matches.map((match) => {
     const slots = blastGroupSlotsForMatch(match, teamCount);

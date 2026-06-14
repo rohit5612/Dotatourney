@@ -15,41 +15,65 @@ import { resolveBlastBracketMatches } from "../utils/blastSeeding.js";
 import { createId, getInitialDarkMode } from "../utils/client";
 import { isGroupAssignmentValid } from "../utils/groupAssignment.js";
 import { playerDisplayName } from "../utils/teamPage.js";
+import {
+  buildTournamentFullName,
+  parseSeasonLabelFromName,
+  seasonSlugFromLabel,
+  TOURNAMENT_BRAND,
+} from "../utils/tournamentNaming.js";
 
-const adminPages = ["registrations", "teams", "setup", "cards", "announcements", "honors", "bracketSchedule", "standings", "users"];
+const adminPages = ["setup", "playerCrm", "teams", "cards", "announcements", "honors", "seasons", "bracketSchedule", "standings", "users"];
+
+import { filterAdminPages, adminCanReadResource } from "../lib/adminRbac.js";
+import { AdminAccessProvider, useAdminAccess } from "./context/AdminAccessContext.jsx";
+import { AdminShell } from "./layout/AdminShell.jsx";
+import { AdminTournamentProvider } from "./context/AdminTournamentContext.jsx";
+import { AdminTournamentBanner } from "./components/AdminTournamentBanner.jsx";
+import { AdminGlassPanel } from "./components/AdminGlassPanel.jsx";
+import "../styles/admin-shell.css";
 
 const AdminAuthPage = lazy(() => import("../pages/AdminAuthPage.jsx").then((m) => ({ default: m.AdminAuthPage })));
-const AdminUsersPage = lazy(() => import("../pages/AdminUsersPage.jsx").then((m) => ({ default: m.AdminUsersPage })));
-const AnnouncementsPage = lazy(() => import("../pages/AnnouncementsPage.jsx").then((m) => ({ default: m.AnnouncementsPage })));
-const HonorsPage = lazy(() => import("../pages/HonorsPage.jsx").then((m) => ({ default: m.HonorsPage })));
-const BracketPage = lazy(() => import("../pages/BracketPage.jsx").then((m) => ({ default: m.BracketPage })));
-const RegistrationCrmPage = lazy(() =>
-  import("../pages/RegistrationCrmPage.jsx").then((m) => ({ default: m.RegistrationCrmPage })),
-);
-const SchedulePage = lazy(() => import("../pages/SchedulePage.jsx").then((m) => ({ default: m.SchedulePage })));
-const SetupPage = lazy(() => import("../pages/SetupPage.jsx").then((m) => ({ default: m.SetupPage })));
-const StandingsPage = lazy(() => import("../pages/StandingsPage.jsx").then((m) => ({ default: m.StandingsPage })));
-const TeamsPage = lazy(() => import("../pages/TeamsPage.jsx").then((m) => ({ default: m.TeamsPage })));
+const AdminUsersPage = lazy(() => import("./users/AdminUsersPage.jsx").then((m) => ({ default: m.AdminUsersPage })));
+const AnnouncementsPage = lazy(() => import("./announcements/AnnouncementsPage.jsx").then((m) => ({ default: m.AnnouncementsPage })));
+const HonorsPage = lazy(() => import("./honors/HonorsPage.jsx").then((m) => ({ default: m.HonorsPage })));
+const BracketPage = lazy(() => import("./bracket/BracketPage.jsx").then((m) => ({ default: m.BracketPage })));
+const PlayerCrmPage = lazy(() => import("./playerCrm/PlayerCrmPage.jsx").then((m) => ({ default: m.PlayerCrmPage })));
+const SchedulePage = lazy(() => import("./bracket/BracketPage.jsx").then((m) => ({ default: m.SchedulePage })));
+const SetupPage = lazy(() => import("./setup/SetupPage.jsx").then((m) => ({ default: m.SetupPage })));
+const SeasonsAdminPage = lazy(() => import("./seasons/SeasonsAdminPage.jsx").then((m) => ({ default: m.SeasonsAdminPage })));
+const StandingsPage = lazy(() => import("./standings/StandingsPage.jsx").then((m) => ({ default: m.StandingsPage })));
+const TeamsPage = lazy(() => import("./teams/TeamsPage.jsx").then((m) => ({ default: m.TeamsPage })));
 const CardsCommercePage = lazy(() =>
-  import("../pages/CardsCommercePage.jsx").then((m) => ({ default: m.CardsCommercePage })),
+  import("./cards/CardsCommercePage.jsx").then((m) => ({ default: m.CardsCommercePage })),
 );
+
+function AdminViewOnlyBanner({ pageId }) {
+  const access = useAdminAccess();
+  if (!pageId || pageId === "users" || access.isSuperadmin || access.canWritePage(pageId)) return null;
+  return (
+    <AdminGlassPanel subtle className="text-sm text-muted-foreground">
+      View-only access for this section. Contact superadmin to grant create, update, or delete permissions.
+    </AdminGlassPanel>
+  );
+}
 
 export function AdminConsole() {
   const location = useLocation();
   const routerNavigate = useNavigate();
   const path = location.pathname;
-  const [activePage, setActivePage] = useState("registrations");
+  const [activePage, setActivePage] = useState("setup");
   const [tournamentId, setTournamentId] = useState("");
   const [state, setState] = useState(null);
   const [activeTab, setActiveTab] = useState("upper");
   const [selectedFormat, setSelectedFormat] = useState("dse");
   const [setup, setSetup] = useState({
-    name: "BPC League — Bharat Pro Circuit League",
+    seasonLabel: "",
+    name: TOURNAMENT_BRAND,
     format: "dse",
     seriesType: "bo3",
     teamCount: 8,
     seriesRules: buildDefaultSeriesRules("dse", "bo3"),
-    slug: "bpcl",
+    slug: "season",
     description: "",
     prizePool: "",
     prizePoolBreakdown: [{ placement: 1, label: "1st place", amount: "" }],
@@ -68,8 +92,13 @@ export function AdminConsole() {
     registrationCodePrefix: "BPC",
     paymentQrImage: "",
     paymentUpiId: "",
+    seasonCardBg: "",
+    seasonCardBadge: "",
     registrationCodeSeq: 0,
     registrationsOpen: false,
+    registrationCap: "",
+    engineConfig: null,
+    engineTemplateId: "",
   });
   const [teamDraft, setTeamDraft] = useState([]);
   const [poolDraft, setPoolDraft] = useState([]);
@@ -179,6 +208,7 @@ export function AdminConsole() {
     if (payload.tournament) {
       setSetup((prev) => ({
         ...prev,
+        seasonLabel: parseSeasonLabelFromName(payload.tournament.name ?? prev.name),
         name: payload.tournament.name ?? prev.name,
         slug: payload.tournament.slug ?? prev.slug,
         format: payload.tournament.format ?? prev.format,
@@ -216,13 +246,26 @@ export function AdminConsole() {
         registrationCodePrefix: payload.tournament.registration_code_prefix ?? prev.registrationCodePrefix ?? "BPC",
         paymentQrImage: payload.tournament.payment_qr_image ?? prev.paymentQrImage ?? "",
         paymentUpiId: payload.tournament.payment_upi_id ?? prev.paymentUpiId ?? "",
+        seasonCardBg: payload.tournament.season_card_bg ?? prev.seasonCardBg ?? "",
+        seasonCardBadge: payload.tournament.season_card_badge ?? prev.seasonCardBadge ?? "",
         registrationCodeSeq: payload.tournament.registration_code_seq ?? prev.registrationCodeSeq ?? 0,
         registrationsOpen:
           typeof payload.tournament.registrations_open === "boolean"
             ? payload.tournament.registrations_open
             : prev.registrationsOpen ?? false,
+        registrationCap:
+          payload.tournament.registration_cap != null && payload.tournament.registration_cap !== ""
+            ? String(payload.tournament.registration_cap)
+            : "",
+        engineConfig: payload.tournament.engine_config ?? prev.engineConfig ?? null,
+        engineTemplateId: payload.tournament.engine_template_id ?? prev.engineTemplateId ?? "",
       }));
       setTournamentId(payload.tournament.id);
+      try {
+        window.localStorage.setItem("bpcl-admin-tournament-id", payload.tournament.id);
+      } catch {
+        // ignore
+      }
     }
     setTeamDraft(payload.teams || []);
     const linkedPlayers = (payload.players || []).map((player) => ({
@@ -266,7 +309,7 @@ export function AdminConsole() {
   }
 
   function buildTournamentPayload(overrides = {}) {
-    return {
+    const merged = {
       ...setup,
       ...overrides,
       teamCount: Number(setup.teamCount),
@@ -275,6 +318,22 @@ export function AdminConsole() {
       bannerAnnouncements: bannerAnnouncementsToApiPayload(overrides.bannerAnnouncement ?? setup.bannerAnnouncement),
       tournamentHonors: honorsToApiPayload(overrides.tournamentHonors ?? setup.tournamentHonors),
     };
+    const seasonLabel = String(merged.seasonLabel ?? parseSeasonLabelFromName(merged.name)).trim();
+    merged.seasonLabel = seasonLabel;
+    merged.name = buildTournamentFullName(seasonLabel);
+    merged.slug = seasonSlugFromLabel(seasonLabel);
+    if (merged.engineConfig == null) {
+      delete merged.engineConfig;
+    }
+    if (merged.engineTemplateId === "") {
+      merged.engineTemplateId = null;
+    }
+    if (merged.registrationCap === "" || merged.registrationCap == null) {
+      merged.registrationCap = null;
+    } else {
+      merged.registrationCap = Number(merged.registrationCap);
+    }
+    return merged;
   }
 
   async function saveLiveYoutubeUrl(url) {
@@ -301,10 +360,11 @@ export function AdminConsole() {
       setSelectedFormat(payload.format);
       return;
     }
+    const wasPublished = Boolean(state?.tournament?.is_published);
     await api.updateTournament(tournamentId, payload);
     await refreshTournament(tournamentId);
     await loadTournaments();
-    setMessage("Tournament updated.");
+    setMessage(wasPublished ? "Changes saved to the public site." : "Tournament updated.");
   }
 
   async function updateBracketVisibilityMode(nextMode) {
@@ -366,7 +426,40 @@ export function AdminConsole() {
     await api.publishTournament(id);
     await loadTournaments();
     await refreshTournament(id);
-    setMessage("Tournament approved and published.");
+    setMessage("Tournament published.");
+  }
+
+  async function approveCurrentTournament(id = tournamentId) {
+    if (!id) return;
+    try {
+      await api.approveTournament(id);
+      await loadTournaments();
+      await refreshTournament(id);
+      setMessage("Tournament approved.");
+    } catch (error) {
+      setMessage(error.message || "Could not approve tournament.");
+    }
+  }
+
+  async function completeCurrentTournament(id = tournamentId) {
+    if (!id) return;
+    try {
+      await api.completeTournament(id, { force: false });
+      await loadTournaments();
+      await refreshTournament(id);
+      setMessage("Tournament marked complete.");
+    } catch (error) {
+      if (error.status === 409) {
+        const anyway = window.confirm(`${error.message}\n\nComplete anyway?`);
+        if (!anyway) return;
+        await api.completeTournament(id, { force: true });
+        await loadTournaments();
+        await refreshTournament(id);
+        setMessage("Tournament marked complete.");
+        return;
+      }
+      setMessage(error.message);
+    }
   }
 
   async function unpublishCurrentTournament(id = tournamentId) {
@@ -871,6 +964,17 @@ export function AdminConsole() {
     return augmentGroupedBracketMatches(groups);
   }, [bracketState?.matches]);
 
+  const tournamentContextValue = useMemo(
+    () => ({
+      activeTournamentId: tournamentId,
+      activeTournament: state?.tournament,
+      tournamentList,
+      publishedTournament: tournamentList.find((t) => t.is_published),
+      selectTournament: (id) => refreshTournament(id),
+    }),
+    [tournamentId, state?.tournament, tournamentList],
+  );
+
   async function logout() {
     await api.logoutAdmin().catch(() => {});
     setAuthToken("");
@@ -878,56 +982,82 @@ export function AdminConsole() {
     navigate("/");
   }
 
+  const allowedPages = useMemo(() => filterAdminPages(adminPages, adminUser), [adminUser]);
+
+  const bracketScheduleTabs = useMemo(
+    () =>
+      [
+        { id: "brackets", label: "Brackets", resource: "bracketSchedule.brackets" },
+        { id: "schedule", label: "Schedule", resource: "bracketSchedule.schedule" },
+      ].filter((tab) => adminCanReadResource(adminUser, tab.resource)),
+    [adminUser],
+  );
+
+  useEffect(() => {
+    if (!adminUser || allowedPages.includes(activePage)) return;
+    setActivePage(allowedPages[0] || "setup");
+  }, [adminUser, allowedPages, activePage]);
+
+  useEffect(() => {
+    if (!bracketScheduleTabs.length) return;
+    if (!bracketScheduleTabs.some((tab) => tab.id === bracketScheduleView)) {
+      setBracketScheduleView(bracketScheduleTabs[0].id);
+    }
+  }, [bracketScheduleTabs, bracketScheduleView]);
+
   const inviteToken = path.startsWith("/admin/invite/") ? path.split("/").pop() : "";
 
   if (!adminUser) {
     return (
-      <Suspense fallback={<PageLoadingSpinner label="Loading admin…" />}>
-        <AdminAuthPage inviteToken={inviteToken} onAuthed={setAdminUser} />
-      </Suspense>
+      <AdminShell darkMode={darkMode}>
+        <Suspense fallback={<PageLoadingSpinner label="Loading admin…" />}>
+          <AdminAuthPage inviteToken={inviteToken} onAuthed={setAdminUser} darkMode={darkMode} setDarkMode={setDarkMode} />
+        </Suspense>
+      </AdminShell>
     );
   }
 
+  const showTournamentBanner = !["setup", "playerCrm", "users", "seasons"].includes(activePage);
+
   return (
-    <main className="min-h-screen overflow-x-hidden bg-background text-foreground">
+    <AdminShell darkMode={darkMode}>
       <AppHeader
-        pages={adminPages}
+        pages={allowedPages}
         activePage={activePage}
         setActivePage={navigateAdminPage}
         darkMode={darkMode}
         setDarkMode={setDarkMode}
       />
 
-      <section className="mx-auto max-w-6xl space-y-4 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card p-3 text-sm">
-          <div>
-            Signed in as <span className="font-medium">{adminUser.name}</span> ({adminUser.role})
-          </div>
-          <div className="flex gap-2">
-            <button type="button" className="btn btn-outline btn-sm" onClick={() => navigate("/")}>
-              View public site
-            </button>
-            <button type="button" className="btn btn-outline btn-sm" onClick={logout}>
-              Logout
-            </button>
-          </div>
-        </div>
-        {message ? <p className="rounded-md border border-border bg-card p-2 text-sm text-secondary">{message}</p> : null}
+      <AdminAccessProvider user={adminUser}>
+      <AdminTournamentProvider value={tournamentContextValue}>
+        <section className="admin-console-main mx-auto max-w-[88rem] space-y-4 p-4">
+          <AdminGlassPanel subtle className="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <div>
+              Signed in as <span className="font-medium">{adminUser.name}</span> ({adminUser.role})
+            </div>
+            <div className="flex gap-2">
+              <button type="button" className="btn btn-outline btn-sm" onClick={() => navigate("/")}>
+                View public site
+              </button>
+              <button type="button" className="btn btn-outline btn-sm" onClick={logout}>
+                Logout
+              </button>
+            </div>
+          </AdminGlassPanel>
+          {message ? (
+            <AdminGlassPanel subtle className="text-sm text-secondary">
+              {message}
+            </AdminGlassPanel>
+          ) : null}
+          <AdminViewOnlyBanner pageId={activePage} />
+          {showTournamentBanner ? <AdminTournamentBanner showSelector /> : null}
 
         {activePage === "setup" && (
           <Suspense fallback={<PageLoadingSpinner label="Loading setup…" />}>
           <SetupPage
             setup={setup}
             setSetup={setSetup}
-            selectedFormat={selectedFormat}
-            onFormatChange={(nextFormat) => {
-              setSelectedFormat(nextFormat);
-              setSetup((prev) => ({
-                ...prev,
-                format: nextFormat,
-                seriesRules: buildDefaultSeriesRules(nextFormat, prev.seriesType, nextFormat === "blast" ? prev.teamCount : undefined),
-              }));
-            }}
             bootstrapTournament={bootstrapTournament}
             exportData={exportData}
             importData={importData}
@@ -948,10 +1078,24 @@ export function AdminConsole() {
               setRegistrations([]);
             }}
             publishTournament={publishCurrentTournament}
+            approveTournament={approveCurrentTournament}
+            completeTournament={completeCurrentTournament}
             unpublishTournament={unpublishCurrentTournament}
             deleteTournament={deleteDraftTournament}
             setRegistrationsAccepting={setRegistrationsAccepting}
+            setMessage={setMessage}
           />
+          </Suspense>
+        )}
+
+        {activePage === "playerCrm" && (
+          <Suspense fallback={<PageLoadingSpinner label="Loading player CRM…" />}>
+            <PlayerCrmPage
+              tournamentId={tournamentId}
+              registrations={registrations}
+              refreshRegistrations={() => refreshRegistrations(tournamentId)}
+              setMessage={setMessage}
+            />
           </Suspense>
         )}
 
@@ -964,6 +1108,7 @@ export function AdminConsole() {
         {activePage === "teams" && (
           <Suspense fallback={<PageLoadingSpinner label="Loading teams…" />}>
           <TeamsPage
+            tournamentId={tournamentId}
             teamDraft={teamDraft}
             poolDraft={poolDraft}
             newCaptain={newCaptain}
@@ -993,6 +1138,7 @@ export function AdminConsole() {
             replaceRosterFromCurrent={replaceRosterFromCurrent}
             approveRoster={approveRoster}
             deleteRoster={deleteRoster}
+            tournamentId={tournamentId}
           />
           </Suspense>
         )}
@@ -1015,19 +1161,24 @@ export function AdminConsole() {
           </Suspense>
         )}
 
-        {activePage === "bracketSchedule" && (
+        {activePage === "seasons" && (
+          <Suspense fallback={<PageLoadingSpinner label="Loading seasons…" />}>
+            <SeasonsAdminPage />
+          </Suspense>
+        )}
+
+        {activePage === "bracketSchedule" && bracketScheduleTabs.length > 0 && (
           <div className="space-y-4">
-            <PrimaryViewTabs
-              ariaLabel="Brackets or schedule"
-              value={bracketScheduleView}
-              onChange={setBracketScheduleView}
-              onTabClick={() => window.scrollTo({ top: 0, behavior: "auto" })}
-              tabs={[
-                { id: "brackets", label: "Brackets" },
-                { id: "schedule", label: "Schedule" },
-              ]}
-            />
-            {bracketScheduleView === "brackets" ? (
+            {bracketScheduleTabs.length > 1 ? (
+              <PrimaryViewTabs
+                ariaLabel="Brackets or schedule"
+                value={bracketScheduleView}
+                onChange={setBracketScheduleView}
+                onTabClick={() => window.scrollTo({ top: 0, behavior: "auto" })}
+                tabs={bracketScheduleTabs.map(({ id, label }) => ({ id, label }))}
+              />
+            ) : null}
+            {bracketScheduleView === "brackets" && adminCanReadResource(adminUser, "bracketSchedule.brackets") ? (
               <Suspense fallback={<PageLoadingSpinner label="Loading bracket…" />}>
               <BracketPage
                 state={bracketState}
@@ -1048,7 +1199,7 @@ export function AdminConsole() {
                 refreshBracketProgression={refreshBracketProgression}
               />
               </Suspense>
-            ) : (
+            ) : adminCanReadResource(adminUser, "bracketSchedule.schedule") ? (
               <div className="relative left-1/2 w-[min(100vw-2rem,88rem)] max-w-none -translate-x-1/2">
                 <Suspense fallback={<PageLoadingSpinner label="Loading schedule…" />}>
                 <SchedulePage
@@ -1061,7 +1212,7 @@ export function AdminConsole() {
                 />
                 </Suspense>
               </div>
-            )}
+            ) : null}
           </div>
         )}
 
@@ -1076,25 +1227,18 @@ export function AdminConsole() {
           </Suspense>
         )}
 
-        {activePage === "registrations" && (
-          <Suspense fallback={<PageLoadingSpinner label="Loading registrations…" />}>
-          <RegistrationCrmPage
-            tournamentId={tournamentId}
-            registrations={registrations}
-            refreshRegistrations={() => refreshRegistrations(tournamentId)}
-          />
-          </Suspense>
-        )}
 
         {activePage === "users" && (
-          <Suspense fallback={<PageLoadingSpinner label="Loading users…" />}>
+          <Suspense fallback={<PageLoadingSpinner label="Loading user mgmt…" />}>
             <AdminUsersPage currentUser={adminUser} />
           </Suspense>
         )}
       </section>
+      </AdminTournamentProvider>
+      </AdminAccessProvider>
       <AppFooter navigate={navigateAdminPage} mode="admin" />
       <ScrollToTopButton />
-    </main>
+    </AdminShell>
   );
 }
 

@@ -4,7 +4,9 @@ import { Link, useLocation } from "react-router-dom";
 import { SITE_BRAND_FULL, SITE_BRAND_SHORT } from "../../constants/siteMeta.js";
 import { useBodyScrollLock } from "../../hooks/useBodyScrollLock.js";
 import { useSiteNavLinks } from "../../hooks/useSiteNavLinks.js";
+import "../../styles/player-notifications.css";
 import { getPlayerToken } from "../../lib/playerApi.js";
+import { NotificationMenu } from "./NotificationMenu.jsx";
 import { PlayerUserMenu, usePlayerNavAccount } from "./PlayerUserMenu.jsx";
 
 function MenuIcon({ open }) {
@@ -218,7 +220,10 @@ export function SiteNavbar() {
               …
             </span>
           ) : loggedIn ? (
-            <PlayerUserMenu account={account} coinBalance={coinBalance} onSignOut={clearAccount} />
+            <>
+              <NotificationMenu enabled={loggedIn} />
+              <PlayerUserMenu account={account} coinBalance={coinBalance} onSignOut={clearAccount} />
+            </>
           ) : (
             <Link to="/login" className="site-navbar__cta">
               Login / Register

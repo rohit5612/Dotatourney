@@ -4,7 +4,7 @@ import { resolvePublicNavLinks } from "../constants/publicNav.js";
 import { api } from "../lib/api.js";
 import { peekCache } from "../lib/requestCache.js";
 
-/** Navbar links with conditional Teams (tournament mode + bracket generated). */
+/** Navbar links with conditional Teams (tournament mode + approved roster + bracket generated). */
 export function useSiteNavLinks() {
   const tournamentCtx = useContext(PublicTournamentContext);
   const [fallbackEvent, setFallbackEvent] = useState(() => peekCache("public:tournament") ?? null);

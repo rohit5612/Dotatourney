@@ -3,11 +3,16 @@
  *
  * @param {object} [props]
  * @param {string} [props.label] — Visually subdued line under the spinner
+ * @param {boolean} [props.compact] — Shorter in-page loader (public routes inside layout)
  */
-export function PageLoadingSpinner({ label = "Loading…" }) {
+export function PageLoadingSpinner({ label = "Loading…", compact = false }) {
   return (
     <div
-      className="flex min-h-svh flex-col items-center justify-center gap-5 bg-background px-6 text-center"
+      className={
+        compact
+          ? "flex min-h-[min(50vh,24rem)] flex-col items-center justify-center gap-4 px-6 py-12 text-center"
+          : "flex min-h-svh flex-col items-center justify-center gap-5 bg-background px-6 text-center"
+      }
       role="status"
       aria-live="polite"
       aria-busy="true"

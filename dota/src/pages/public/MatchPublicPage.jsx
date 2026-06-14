@@ -1,20 +1,16 @@
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../lib/api";
 import { BpclCard } from "../../components/cards/BpclCard.jsx";
 import { TeamLogoImg } from "../../components/TeamLogoImg.jsx";
+import { PageLoadingSpinner } from "../../components/PageLoadingSpinner.jsx";
+import { usePublicCachedQuery } from "../../hooks/usePublicCachedQuery.js";
 
 export function MatchPublicPage() {
   const { matchId } = useParams();
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    api
-      .getPublicMatch(matchId)
-      .then(setData)
-      .catch((err) => setError(err.message));
-  }, [matchId]);
+  const cacheKey = `public:match:${String(matchId || "").trim()}`;
+  const fetchMatch = useMemo(() => () => api.getPublicMatch(matchId), [matchId]);
+  const { data, loading, error } = usePublicCachedQuery(cacheKey, fetchMatch);
 
   const match = data?.match;
   const streamUrl = data?.scheduleSlot?.stream_url || data?.scheduleSlot?.streamUrl;
@@ -25,7 +21,12 @@ export function MatchPublicPage() {
         ← Schedule
       </Link>
       {error ? <p className="mt-6 text-destructive">{error}</p> : null}
-      {match ? (
+      {loading ? (
+        <div className="mt-8">
+          <PageLoadingSpinner label="Loading match…" compact />
+        </div>
+      ) : null}
+      {!loading && match ? (
         <>
           <h1 className="mt-4 font-serif text-3xl">
             {match.team1} vs {match.team2}
@@ -57,9 +58,10 @@ export function MatchPublicPage() {
             </div>
           ) : null}
         </>
-      ) : (
-        !error && <p className="mt-6 text-muted-foreground">Loading match…</p>
-      )}
+      ) : null}
+      {!loading && !error && !match ? (
+        <p className="mt-6 text-muted-foreground">Match not found.</p>
+      ) : null}
     </section>
   );
 }

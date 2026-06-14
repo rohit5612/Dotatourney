@@ -1,0 +1,261 @@
+/* Player accounts CRM — list + detail modal */
+
+.player-crm__table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--admin-glass-border-subtle, rgba(15, 23, 42, 0.1));
+  border-radius: 0.85rem;
+}
+
+.player-crm__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.player-crm__table th,
+.player-crm__table td {
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  vertical-align: middle;
+}
+
+.player-crm__table th {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--foreground) 62%, var(--muted-foreground));
+  background: color-mix(in srgb, var(--background) 55%, transparent);
+}
+
+.player-crm__table tbody tr:hover {
+  background: color-mix(in srgb, var(--background) 35%, transparent);
+}
+
+.player-crm__name-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 8rem;
+}
+
+.player-crm__row-avatar {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+}
+
+.player-crm__mini-badges {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.player-crm__mini-badges span {
+  display: inline-grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 0.35rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  border: 1px solid var(--border);
+  color: color-mix(in srgb, var(--foreground) 45%, var(--muted-foreground));
+  background: color-mix(in srgb, var(--background) 50%, transparent);
+}
+
+.player-crm__mini-badges span.is-on {
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.player-crm__modal {
+  background: var(--card);
+}
+
+.player-crm__modal-avatar {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+}
+
+.player-crm__modal-avatar--fallback {
+  display: grid;
+  place-items: center;
+  font-weight: 650;
+  background: color-mix(in srgb, var(--primary) 15%, var(--background));
+}
+
+.player-crm__modal-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.player-crm__modal-section {
+  padding: 1rem;
+  border-radius: 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  background: color-mix(in srgb, var(--background) 40%, transparent);
+}
+
+.player-crm__modal-section--notes {
+  border-color: color-mix(in srgb, var(--primary) 25%, var(--border));
+}
+
+.player-crm__section-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground));
+}
+
+.player-crm__field-grid {
+  display: grid;
+  gap: 0.65rem;
+}
+
+@media (min-width: 640px) {
+  .player-crm__field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.player-crm__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.player-crm__field-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--foreground) 58%, var(--muted-foreground));
+}
+
+.player-crm__field-value {
+  font-size: 0.875rem;
+  word-break: break-word;
+}
+
+.player-crm__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid var(--border);
+  color: color-mix(in srgb, var(--foreground) 55%, var(--muted-foreground));
+}
+
+.player-crm__badge--ok,
+.player-crm__badge--approved {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+  color: var(--primary);
+}
+
+.player-crm__badge--pending {
+  border-color: color-mix(in srgb, #d97706 35%, var(--border));
+  color: #d97706;
+}
+
+.player-crm__badge--waitlisted {
+  border-color: color-mix(in srgb, #6366f1 35%, var(--border));
+  color: #6366f1;
+}
+
+.player-crm__badge--rejected {
+  border-color: color-mix(in srgb, var(--destructive) 35%, var(--border));
+  color: var(--destructive);
+}
+
+.player-crm__inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.player-crm__notes-preview {
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  color: color-mix(in srgb, var(--foreground) 55%, var(--muted-foreground));
+}
+
+.player-crm__request-panel {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.player-crm__request-card {
+  padding: 0.85rem 1rem;
+  border-radius: 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  background: color-mix(in srgb, var(--background) 40%, transparent);
+}
+
+.player-crm__profile-layout {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .player-crm__profile-layout {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.player-crm__card-preview {
+  justify-self: center;
+}
+
+.player-crm__bio {
+  margin-top: 0.85rem;
+}
+
+.player-crm__bio p {
+  margin: 0.35rem 0 0;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.player-crm__list {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+}
+
+.player-crm__list--rows {
+  padding-left: 0;
+  list-style: none;
+}
+
+.player-crm__list--rows li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+}
+
+.player-crm__list--rows li:last-child {
+  border-bottom: none;
+}

@@ -1,0 +1,364 @@
+.player-notification-menu {
+  position: relative;
+  flex: 0 0 var(--player-notification-slot, 2.35rem);
+  width: var(--player-notification-slot, 2.35rem);
+  height: var(--player-notification-slot, 2.35rem);
+  contain: layout style;
+}
+
+.player-notification-bell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(255 255 255 / 0.04);
+  color: rgb(248 250 252);
+  cursor: pointer;
+  overflow: visible;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.player-notification-bell:hover {
+  border-color: rgb(255 255 255 / 0.22);
+  background: rgb(255 255 255 / 0.08);
+}
+
+.player-notification-bell:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.player-notification-menu.is-open .player-notification-bell {
+  border-color: color-mix(in srgb, var(--accent) 35%, rgb(255 255 255 / 0.2));
+  background: color-mix(in srgb, var(--accent) 10%, rgb(255 255 255 / 0.08));
+}
+
+.player-notification-bell__icon,
+.player-notification-bell svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.player-notification-bell__badge {
+  position: absolute;
+  top: -0.18rem;
+  right: -0.18rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.05rem;
+  height: 1.05rem;
+  padding: 0 0.22rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: rgb(4 6 12);
+  font-size: clamp(0.56rem, 2.2vw, 0.62rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 0 0 1.5px rgb(8 10 18 / 0.85);
+}
+
+@media (max-width: 767px) {
+  .player-notification-menu {
+    --player-notification-slot: 2.2rem;
+  }
+
+  .player-notification-bell__badge {
+    top: -0.14rem;
+    right: -0.14rem;
+    min-width: 0.95rem;
+    height: 0.95rem;
+    padding: 0 0.18rem;
+  }
+}
+
+.player-notification-menu__panel {
+  width: min(18.5rem, calc(100vw - 1.5rem));
+}
+
+.player-notification-menu__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem 0.55rem;
+  border-bottom: 1px solid var(--player-nav-dropdown-divider);
+  margin-bottom: 0.35rem;
+  background: transparent;
+}
+
+.player-notification-menu__title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgb(248 250 252);
+}
+
+.player-notification-menu__count {
+  font-size: 0.68rem;
+  font-weight: 650;
+  color: var(--accent);
+}
+
+.player-notification-menu__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: min(18rem, 52dvh);
+  overflow-y: auto;
+}
+
+.player-notification-menu__item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.55rem 0.6rem;
+  border-radius: 0.7rem;
+  border: 1px solid var(--player-nav-dropdown-surface-border);
+  background: var(--player-nav-dropdown-surface);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.player-notification-menu__item:not(.is-read) {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--player-nav-dropdown-surface-border));
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 65%, transparent);
+}
+
+.player-notification-menu__item.is-read {
+  opacity: 0.82;
+}
+
+.player-notification-menu__item-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.player-notification-menu__item-title {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: rgb(248 250 252);
+  line-height: 1.35;
+}
+
+.player-notification-menu__item-body {
+  margin: 0.2rem 0 0;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: color-mix(in srgb, rgb(248 250 252) 68%, transparent);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.player-notification-menu__item-time {
+  margin: 0.25rem 0 0;
+  font-size: 0.66rem;
+  color: color-mix(in srgb, rgb(248 250 252) 48%, transparent);
+}
+
+.player-notification-menu__mark {
+  flex-shrink: 0;
+  padding: 0.22rem 0.45rem;
+  border: 1px solid var(--player-nav-dropdown-surface-border);
+  border-radius: 0.4rem;
+  background: var(--player-nav-dropdown-surface);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: 0.64rem;
+  font-weight: 650;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.player-notification-menu__mark:hover {
+  background: var(--player-nav-dropdown-surface-hover);
+}
+
+.player-notification-menu__empty {
+  margin: 0;
+  padding: 0.75rem 0.55rem;
+  font-size: 0.8rem;
+  color: color-mix(in srgb, rgb(248 250 252) 62%, transparent);
+  text-align: center;
+}
+
+.player-notification-menu__footer {
+  display: block;
+  margin-top: 0.4rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.65rem;
+  border: 1px solid var(--player-nav-dropdown-surface-border);
+  background: var(--player-nav-dropdown-surface);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--accent);
+  text-align: center;
+  text-decoration: none;
+}
+
+.player-notification-menu__footer:hover {
+  background: var(--player-nav-dropdown-surface-hover);
+}
+
+.player-notifications-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.player-notifications-list__item {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.95rem 1.05rem;
+  border-radius: 0.9rem;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  background:
+    linear-gradient(
+      155deg,
+      rgb(255 255 255 / 0.1) 0%,
+      rgb(255 255 255 / 0.05) 48%,
+      rgb(255 255 255 / 0.03) 100%
+    ),
+    rgb(6 8 14 / 0.78);
+  backdrop-filter: blur(24px) saturate(1.45);
+  -webkit-backdrop-filter: blur(24px) saturate(1.45);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.1) inset,
+    0 -1px 0 rgb(0 0 0 / 0.22) inset,
+    0 10px 28px rgb(0 0 0 / 0.22);
+}
+
+.player-notifications-list__item::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 90% 70% at 50% -20%,
+    rgb(255 255 255 / 0.1),
+    transparent 62%
+  );
+}
+
+.player-notifications-list__item > * {
+  position: relative;
+  z-index: 1;
+}
+
+.player-notifications-list__item:not(.is-read) {
+  border-color: color-mix(in srgb, var(--accent) 26%, rgb(255 255 255 / 0.14));
+  box-shadow:
+    inset 3px 0 0 color-mix(in srgb, var(--accent) 70%, transparent),
+    0 1px 0 rgb(255 255 255 / 0.1) inset,
+    0 -1px 0 rgb(0 0 0 / 0.22) inset,
+    0 10px 28px rgb(0 0 0 / 0.24);
+}
+
+.player-notifications-list__item.is-read {
+  background:
+    linear-gradient(
+      155deg,
+      rgb(255 255 255 / 0.06) 0%,
+      rgb(255 255 255 / 0.03) 48%,
+      rgb(255 255 255 / 0.02) 100%
+    ),
+    rgb(5 7 12 / 0.68);
+  border-color: rgb(255 255 255 / 0.1);
+}
+
+.player-notifications-list__title {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 650;
+  color: rgb(248 250 252);
+}
+
+.player-notifications-list__item.is-read .player-notifications-list__title {
+  color: color-mix(in srgb, rgb(248 250 252) 82%, transparent);
+}
+
+.player-notifications-list__body {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: color-mix(in srgb, rgb(248 250 252) 78%, transparent);
+}
+
+.player-notifications-list__item.is-read .player-notifications-list__body {
+  color: color-mix(in srgb, rgb(248 250 252) 58%, transparent);
+}
+
+.player-notifications-list__time {
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  color: color-mix(in srgb, rgb(248 250 252) 52%, transparent);
+}
+
+.player-notifications-list__item.is-read .player-notifications-list__time {
+  color: color-mix(in srgb, rgb(248 250 252) 42%, transparent);
+}
+
+.player-notifications-list__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.player-notifications-list__read {
+  padding: 0.35rem 0.6rem;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  border-radius: 0.45rem;
+  background: rgb(255 255 255 / 0.06);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.player-notifications-list__read:hover {
+  background: rgb(255 255 255 / 0.1);
+  border-color: color-mix(in srgb, var(--accent) 30%, rgb(255 255 255 / 0.14));
+}
+
+.player-dash__notifications-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+}

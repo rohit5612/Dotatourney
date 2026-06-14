@@ -22,7 +22,13 @@ export function BracketDiagram({
   playoffFeedMatches = null,
   /** Full tournament matches (used so Playoffs-only tabs still infer BLAST 10 vs 12 tooltips). */
   blastSeedMatches = null,
+  /** `glass` — frosted public shell on bracket & schedule pages */
+  appearance = "default",
 }) {
+  const shellClass =
+    appearance === "glass"
+      ? "schedule-bracket-shell"
+      : "overflow-x-auto rounded-lg border border-border bg-background p-4 pb-6";
   const columnStructure = useMemo(() => stageRoundStructure(matches), [matches]);
 
   const blastVariant = useMemo(
@@ -53,7 +59,13 @@ export function BracketDiagram({
 
   if (!matches.length) {
     return (
-      <div className="rounded-lg border border-border bg-background p-6 text-center text-sm text-muted-foreground">
+      <div
+        className={
+          appearance === "glass"
+            ? "schedule-bracket-shell schedule-bracket-shell--empty"
+            : "rounded-lg border border-border bg-background p-6 text-center text-sm text-muted-foreground"
+        }
+      >
         No matches generated yet.
       </div>
     );
@@ -61,7 +73,7 @@ export function BracketDiagram({
 
   if (!useRoundRobinListLayout) {
     return (
-      <div className="overflow-x-auto rounded-lg border border-border bg-background p-4 pb-6">
+      <div className={shellClass}>
         <EliminationBracketCanvas
           matches={matches}
           editable={editable}
@@ -77,15 +89,15 @@ export function BracketDiagram({
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-background p-4">
-      <div className="flex min-w-max gap-6 xl:min-w-0">
+    <div className={shellClass}>
+      <div className="schedule-bracket-shell__columns flex min-w-max gap-6 xl:min-w-0">
         {sortedRounds.map(([key, roundMatches]) => {
           const { stageKey, roundIndex } = parseRoundKey(key);
           const header = bracketColumnTitle(stageKey, roundIndex, columnStructure);
 
           return (
-            <div key={key} className="flex w-72 flex-col gap-4 xl:flex-1">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground">{header}</div>
+            <div key={key} className="schedule-bracket-shell__column flex w-72 flex-col gap-4 xl:flex-1">
+              <div className="schedule-bracket-shell__round-label">{header}</div>
               <div className="flex flex-1 flex-col justify-around gap-4">
                 {roundMatches
                   .sort((a, b) => a.matchIndex - b.matchIndex)

@@ -45,3 +45,10 @@
     min-height: 16.5rem;
   }
 }
+
+.landing-livestream--bare .landing-livestream__frame {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+}

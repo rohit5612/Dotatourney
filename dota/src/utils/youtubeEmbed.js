@@ -41,13 +41,13 @@ export function parseYoutubeVideoId(url) {
   return null;
 }
 
-export function buildYoutubeEmbedSrc(videoId) {
+export function buildYoutubeEmbedSrc(videoId, { autoplay = true, mute = true } = {}) {
   const id = String(videoId || "").trim();
   if (!id) return null;
-  const params = new URLSearchParams({
-    rel: "0",
-    autoplay: "1",
-    mute: "1",
-  });
+  const params = new URLSearchParams({ rel: "0" });
+  if (autoplay) {
+    params.set("autoplay", "1");
+    if (mute) params.set("mute", "1");
+  }
   return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?${params.toString()}`;
 }

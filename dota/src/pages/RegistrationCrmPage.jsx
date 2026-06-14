@@ -1,10 +1,28 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
+import { AdminGlassPanel } from "../admin/components/AdminGlassPanel.jsx";
 import { sortRolesByDefault } from "../utils/teamPage.js";
+
+/** Hide in-progress legacy OTP/payment steps — account setup lives in Player accounts CRM. */
+function isRegistrationCrmVisible(registration) {
+  if (registration.substituteFlag) return false;
+  const stage = registration.registrationFlowStage || "submitted";
+  return stage !== "awaiting_otp" && stage !== "awaiting_payment";
+}
+
+function registrationStageLabel(registration) {
+  if (registration.substituteFlag) return "Substitute signup";
+  if (registration.paymentStatus === "paid" && registration.registrationStatus === "pending") {
+    return "Paid · awaiting approval";
+  }
+  if (registration.registrationStatus === "approved") return "Approved";
+  if (registration.registrationStatus === "rejected") return "Rejected";
+  if (registration.registrationStatus === "waitlisted") return "Waitlisted";
+  return "Pending review";
+}
 
 function draftFromRegistration(registration) {
   return {
-    paymentStatus: registration.paymentStatus,
     registrationStatus: registration.registrationStatus,
     adminNotes: registration.adminNotes || "",
     displayName: registration.displayName || registration.steamName || registration.name || "",
@@ -13,16 +31,15 @@ function draftFromRegistration(registration) {
 
 function isDraftDirty(registration, draft) {
   return (
-    draft.paymentStatus !== registration.paymentStatus ||
     draft.registrationStatus !== registration.registrationStatus ||
     (draft.adminNotes || "") !== (registration.adminNotes || "") ||
     (draft.displayName || "").trim() !== (registration.displayName || registration.steamName || registration.name || "").trim()
   );
 }
 
-export function RegistrationCrmPage({ tournamentId, registrations, refreshRegistrations }) {
+export function RegistrationCrmPage({ tournamentId, registrations, refreshRegistrations, canWrite = true, canDelete = canWrite }) {
   const [roleFilter, setRoleFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("pending");
   const [paymentFilter, setPaymentFilter] = useState("");
   const [search, setSearch] = useState("");
   const [minMmr, setMinMmr] = useState("");
@@ -36,12 +53,11 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [savingId, setSavingId] = useState("");
-  const [lightboxSrc, setLightboxSrc] = useState("");
-  const [lightboxName, setLightboxName] = useState("");
   const [crmSheetSyncPending, setCrmSheetSyncPending] = useState(false);
 
   const filtered = useMemo(() => {
     const list = (registrations || [])
+      .filter(isRegistrationCrmVisible)
       .filter((registration) => (showArchived ? Boolean(registration.archivedAt) : !registration.archivedAt))
       .filter((registration) => !roleFilter || registration.roles?.includes(roleFilter))
       .filter((registration) => !statusFilter || registration.registrationStatus === statusFilter)
@@ -126,23 +142,18 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
         delete next[registration.id];
         return next;
       });
+      if (draft.registrationStatus === "approved") {
+        setMessage("Registration approved — confirmation email sent to the player.");
+      } else if (draft.registrationStatus === "rejected") {
+        setMessage("Registration rejected — decision email sent to the player.");
+      } else if (draft.registrationStatus === "waitlisted") {
+        setMessage("Registration waitlisted — decision email sent to the player.");
+      } else {
+        setMessage("Registration saved.");
+      }
     } finally {
       setSavingId("");
     }
-  }
-
-  function openScreenshot(src, playerName) {
-    if (!src?.trim()) {
-      setMessage("No payment proof available for this registration.");
-      return;
-    }
-    const trimmed = src.trim();
-    if (trimmed.startsWith("data:image") || /^https?:\/\//i.test(trimmed)) {
-      setLightboxSrc(trimmed);
-      setLightboxName(playerName || "");
-      return;
-    }
-    setMessage("Unsupported screenshot format — contact support if this persists.");
   }
 
   function getStoredSpreadsheetId() {
@@ -199,15 +210,20 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
   }
 
   return (
-    <div className="space-y-4">
-      {message ? <p className="rounded-md border border-border bg-card p-2 text-sm text-secondary">{message}</p> : null}
-      <section className="rounded-lg border border-border bg-card p-4">
+    <div className="admin-page-stack">
+      {message ? (
+        <AdminGlassPanel subtle className="text-sm text-secondary">
+          {message}
+        </AdminGlassPanel>
+      ) : null}
+      <AdminGlassPanel>
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <h2 className="font-serif text-lg">Registration CRM</h2>
+            <h2 className="admin-section-title">Registration CRM</h2>
             <p className="text-sm text-muted-foreground">
-              Review payment and player details, then click <span className="font-medium text-foreground">Save</span> to apply changes. Status emails (paid /
-              unpaid / refunded and approved / rejected / waitlisted) send when you save and payment or registration status has changed.
+              Tournament registrations only — paid checkout entries land here as <span className="font-medium text-foreground">paid / pending</span>.
+              Approve or reject, then click <span className="font-medium text-foreground">Save</span> to email the player.
+              Account verification and profile setup are in <span className="font-medium text-foreground">Player accounts</span>.
             </p>
           </div>
           <div className="flex min-w-0 flex-col items-stretch gap-2 sm:items-end">
@@ -215,7 +231,7 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
               type="button"
               className="btn btn-outline btn-sm shrink-0"
               onClick={syncCrmToGoogleSheet}
-              disabled={!tournamentId || crmSheetSyncPending}
+              disabled={!canWrite || !tournamentId || crmSheetSyncPending}
             >
               {crmSheetSyncPending ? "Syncing…" : "Sync to Google Sheet"}
             </button>
@@ -268,8 +284,8 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
             </label>
           </div>
         </div>
-      </section>
-      <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-3 text-sm">
+      </AdminGlassPanel>
+      <AdminGlassPanel subtle className="flex flex-wrap items-center justify-between gap-3 text-sm">
         <div className="text-muted-foreground">
           Showing {filtered.length ? pageStart + 1 : 0}-{Math.min(pageStart + pageSize, filtered.length)} of {filtered.length} registrations
         </div>
@@ -300,7 +316,7 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
             Last
           </button>
         </div>
-      </section>
+      </AdminGlassPanel>
       <div className="grid gap-3">
         {paginated.map((registration) => {
           const archived = Boolean(registration.archivedAt);
@@ -319,7 +335,7 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
                   <p className="text-sm text-muted-foreground">
                     Steam: {registration.steamName} ({registration.steamProfile})
                   </p>
-                  <p className="text-sm text-muted-foreground">Discord: {registration.discordHandle || "N/A"} - Submitted: {new Date(registration.createdAt).toLocaleString()}</p>
+                  <p className="text-sm text-muted-foreground">Discord: {registration.discordHandle || "N/A"}</p>
                   <p className="text-sm text-muted-foreground">
                     Email: {registration.email || "N/A"}
                     {registration.playerBpcId || registration.publicCode ? (
@@ -341,43 +357,16 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
                           target="_blank"
                           rel="noreferrer"
                         >
-                          Profile
+                          Public profile
                         </a>
                       </>
                     ) : null}
-                    {registration.registrationFlowStage ? ` — Flow: ${registration.registrationFlowStage}` : null}
                   </p>
-                  {registration.paymentScreenshot ? (
-                    <button
-                      type="button"
-                      className="mt-2 text-sm text-primary underline hover:no-underline"
-                      onClick={() => openScreenshot(registration.paymentScreenshot, registration.name)}
-                    >
-                      View payment screenshot
-                    </button>
-                  ) : (
-                    <p className="mt-2 text-sm text-muted-foreground">Payment screenshot: not uploaded or not available</p>
-                  )}
-                  {registration.playerAccountId ? (
-                    <button
-                      type="button"
-                      className="mt-2 text-sm text-accent underline hover:no-underline"
-                      onClick={async () => {
-                        const raw = window.prompt("Grant BPC coins (use negative to deduct):", "10");
-                        if (raw == null) return;
-                        const delta = Number(raw);
-                        if (!Number.isFinite(delta) || delta === 0) return;
-                        try {
-                          await api.grantPlayerCoins(registration.playerAccountId, { delta, reason: "CRM grant" });
-                          window.alert(`Granted ${delta} coins.`);
-                        } catch (err) {
-                          window.alert(err.message);
-                        }
-                      }}
-                    >
-                      Grant BPC coins
-                    </button>
-                  ) : null}
+                  <p className="text-sm text-muted-foreground">
+                    {registration.cardTier ? <>Card tier: <span className="capitalize text-foreground">{registration.cardTier}</span> · </> : null}
+                    {registration.paymentProvider ? <>Paid via {registration.paymentProvider} · </> : null}
+                    Submitted: {new Date(registration.createdAt).toLocaleString()}
+                  </p>
                   {registration.notes ? <p className="mt-2 text-sm text-muted-foreground">Player notes: {registration.notes}</p> : null}
                   {registration.archivedAt ? <p className="mt-2 text-sm text-secondary">Archived: {registration.archivedReason || "No reason recorded"}</p> : null}
                 </div>
@@ -386,34 +375,25 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
                     Payment: <span className="capitalize text-secondary">{registration.paymentStatus}</span>
                   </div>
                   <div>
-                    Status: <span className="capitalize text-secondary">{registration.registrationStatus}</span>
+                    Registration: <span className="capitalize text-secondary">{registration.registrationStatus}</span>
                   </div>
+                  <div className="mt-1 text-xs text-muted-foreground">{registrationStageLabel(registration)}</div>
                   {dirty ? <div className="mt-1 text-xs text-amber-600 dark:text-amber-500">Unsaved changes</div> : null}
                 </div>
               </div>
               <div className="mt-3 flex flex-col gap-2 lg:flex-row lg:items-end">
-                <div className="grid flex-1 gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_2fr]">
+                <div className="grid flex-1 gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_2fr]">
                   <input
                     className="rounded-md border border-input bg-background p-2 disabled:opacity-60 sm:col-span-2 lg:col-span-1"
                     placeholder="Display name (shown on teams)"
                     value={draft.displayName}
-                    disabled={archived}
+                    disabled={archived || !canWrite}
                     onChange={(event) => updateDraft(registration, { displayName: event.target.value })}
                   />
                   <select
                     className="rounded-md border border-input bg-background p-2 disabled:opacity-60"
-                    value={draft.paymentStatus}
-                    disabled={archived}
-                    onChange={(event) => updateDraft(registration, { paymentStatus: event.target.value })}
-                  >
-                    <option value="unpaid">Unpaid</option>
-                    <option value="paid">Paid</option>
-                    <option value="refunded">Refunded</option>
-                  </select>
-                  <select
-                    className="rounded-md border border-input bg-background p-2 disabled:opacity-60"
                     value={draft.registrationStatus}
-                    disabled={archived}
+                    disabled={archived || !canWrite}
                     onChange={(event) => updateDraft(registration, { registrationStatus: event.target.value })}
                   >
                     <option value="pending">Pending</option>
@@ -425,7 +405,7 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
                     className="rounded-md border border-input bg-background p-2 disabled:opacity-60 sm:col-span-2 lg:col-span-1"
                     placeholder="Admin notes"
                     value={draft.adminNotes}
-                    disabled={archived}
+                    disabled={archived || !canWrite}
                     onChange={(event) => updateDraft(registration, { adminNotes: event.target.value })}
                   />
                 </div>
@@ -433,7 +413,7 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
                   <button
                     type="button"
                     className="btn btn-primary"
-                    disabled={archived || !dirty || savingId === registration.id}
+                    disabled={!canWrite || archived || !dirty || savingId === registration.id}
                     onClick={() => saveRegistration(registration)}
                   >
                     {savingId === registration.id ? "Saving…" : "Save"}
@@ -447,7 +427,7 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
                         <button
                           type="button"
                           className="btn-menu text-destructive hover:text-destructive"
-                          disabled={archived}
+                          disabled={archived || !canDelete}
                           onClick={() => {
                             setArchiveDraft({ registration, confirmName: "", reason: "" });
                             setActionMenuId("");
@@ -467,25 +447,7 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
           <div className="rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground">No registrations match the current filters.</div>
         ) : null}
       </div>
-      {lightboxSrc ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label={lightboxName ? `Payment screenshot — ${lightboxName}` : "Payment screenshot"}
-          onClick={() => setLightboxSrc("")}
-        >
-          <div className="relative max-h-[92vh] max-w-[min(96vw,1100px)] overflow-auto rounded-lg border border-border bg-card p-2 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="truncate text-sm font-medium text-foreground">{lightboxName ? `${lightboxName} — payment proof` : "Payment proof"}</span>
-              <button type="button" className="btn btn-outline btn-sm shrink-0" onClick={() => setLightboxSrc("")}>
-                Close
-              </button>
-            </div>
-            <img src={lightboxSrc} alt="Payment proof" className="mx-auto max-h-[80vh] w-auto object-contain" />
-          </div>
-        </div>
-      ) : null}
+
       {archiveDraft ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="w-full max-w-lg space-y-3 rounded-lg border border-border bg-card p-4 shadow-2xl">

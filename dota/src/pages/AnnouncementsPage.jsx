@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toDatetimeLocalValue } from "../utils/datetime";
+import { AdminGlassPanel } from "../admin/components/AdminGlassPanel.jsx";
 
 function ensureRows(announcements) {
   if (!Array.isArray(announcements)) return [];
@@ -73,8 +74,9 @@ export function AnnouncementsPage({ setup, setSetup, saveTournament }) {
   }
 
   return (
-    <div className="space-y-4">
-      <section className="rounded-lg border border-border bg-card p-4">
+    <div className="admin-page-stack">
+      <AdminGlassPanel className="space-y-4">
+      <section>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-serif text-lg tracking-wide">Tournament announcements</h2>
@@ -165,6 +167,7 @@ export function AnnouncementsPage({ setup, setSetup, saveTournament }) {
           {isSaving ? "Saving..." : "Save announcements"}
         </button>
       </div>
+      </AdminGlassPanel>
     </div>
   );
 }

@@ -1,16 +1,18 @@
 import { memo, useState } from "react";
-import { FaDiscord, FaFacebook, FaInstagram, FaLinkedin, FaSteam } from "react-icons/fa";
+import { FaDiscord, FaFacebook, FaInstagram, FaLinkedin, FaSteam, FaYoutube } from "react-icons/fa";
 import { HiOutlineGlobeAlt } from "react-icons/hi2";
 import { accentCssVars, useLogoAccent } from "../hooks/useLogoAccent.js";
 import { sponsorTierLabel } from "../constants/sponsors.js";
+import "../styles/landing-sponsors.css";
 
 const SOCIAL_CONFIG = [
+  { key: "website", label: "Website", Icon: HiOutlineGlobeAlt },
+  { key: "youtube", label: "YouTube", Icon: FaYoutube },
   { key: "instagram", label: "Instagram", Icon: FaInstagram },
   { key: "discord", label: "Discord", Icon: FaDiscord },
   { key: "steam", label: "Steam", Icon: FaSteam },
   { key: "facebook", label: "Facebook", Icon: FaFacebook },
   { key: "linkedin", label: "LinkedIn", Icon: FaLinkedin },
-  { key: "website", label: "Website", Icon: HiOutlineGlobeAlt },
 ];
 
 function initialsFromName(name) {

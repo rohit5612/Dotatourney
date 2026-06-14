@@ -1,5 +1,6 @@
 import { blastBracketUsesGroupRanksOnly } from "../constants/tournament.js";
 import { StandingsTable } from "../components/StandingsTable.jsx";
+import { AdminGlassPanel } from "../admin/components/AdminGlassPanel.jsx";
 
 export function StandingsPage({ standings = [], groupedStandings = [], format, teamCount = 0 }) {
   const hasGroups = groupedStandings.length > 0;
@@ -35,8 +36,9 @@ export function StandingsPage({ standings = [], groupedStandings = [], format, t
       : summaryRows[0]?.team || "TBD";
 
   return (
-    <div className="space-y-4 rounded-lg border border-border bg-card p-4">
-      <h2 className="mb-3 font-serif text-lg">Standings</h2>
+    <div className="admin-page-stack">
+    <AdminGlassPanel className="space-y-4">
+      <h2 className="admin-section-title">Standings</h2>
       <div className="grid gap-3 md:grid-cols-3">
         <div className="rounded-md border border-border bg-background p-3">
           <div className="text-xs uppercase tracking-wider text-muted-foreground">{leaderLabel}</div>
@@ -107,6 +109,7 @@ export function StandingsPage({ standings = [], groupedStandings = [], format, t
           <>Rankings are ordered by wins, then win percentage, then tiebreak score.</>
         )}
       </div>
+    </AdminGlassPanel>
     </div>
   );
 }

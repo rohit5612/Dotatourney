@@ -6,7 +6,9 @@ export { ROLE_ORDER };
 
 const REGIONS = ["South Asia", "SEA", "Middle East", "Europe", "Oceania"];
 
-const BLAST_GROUP_STAGES = new Set(["blast-group-a", "blast-group-b"]);
+function isBlastGroupStageKey(stageKey) {
+  return /^blast-group-[a-h]$/i.test(stageKey || "");
+}
 
 function hashString(value) {
   const str = String(value || "");
@@ -95,19 +97,42 @@ export function registrationDisplayName(registration) {
 }
 
 export function isBlastGroupMatch(match) {
-  return BLAST_GROUP_STAGES.has(match?.stageKey);
+  return isBlastGroupStageKey(match?.stageKey);
 }
 
 export function blastGroupMatches(matches) {
   return (matches || []).filter(isBlastGroupMatch);
 }
 
+function parseGroupLetterFromLabel(label) {
+  const match = /group\s*([a-h])/i.exec(String(label || ""));
+  return match ? match[1].toUpperCase() : null;
+}
+
+export { parseGroupLetterFromLabel };
+
+export function groupLabelSortRank(label) {
+  const letter = parseGroupLetterFromLabel(label);
+  if (letter) return letter.charCodeAt(0) - 65;
+  return 99;
+}
+
+function formatGroupKeyLabel(groupKey) {
+  const key = String(groupKey || "").trim();
+  if (!key) return null;
+  if (/^group\s+[a-h]$/i.test(key)) {
+    const letter = parseGroupLetterFromLabel(key);
+    return letter ? `Group ${letter}` : key;
+  }
+  if (/^[a-h]$/i.test(key)) return `Group ${key.toUpperCase()}`;
+  return key;
+}
+
 export function getTeamGroupLabel(teamName, groupedStandings) {
   for (const group of groupedStandings || []) {
-    if (!group.rows?.some((row) => row.team === teamName)) continue;
-    if (/group\s*a/i.test(group.label)) return "Group A";
-    if (/group\s*b/i.test(group.label)) return "Group B";
-    return group.label;
+    if (group.rows?.some((row) => row.team === teamName)) {
+      return group.label || null;
+    }
   }
   return null;
 }
@@ -127,14 +152,18 @@ export function getTeamStandingsRow(teamName, standings) {
 }
 
 export function getTeamStandingLabel(teamName, standings, groupedStandings, format) {
+  const groupStanding = (group) => {
+    const groupIdx = group.rows?.findIndex((row) => row.team === teamName);
+    if (groupIdx < 0) return null;
+    const letter = parseGroupLetterFromLabel(group.label);
+    if (letter) return `Group ${letter} · #${groupIdx + 1}`;
+    return `#${groupIdx + 1}`;
+  };
+
   if (format === "blast") {
     for (const group of groupedStandings || []) {
-      const groupIdx = group.rows?.findIndex((row) => row.team === teamName);
-      if (groupIdx >= 0) {
-        const letter = /group\s*([ab])/i.exec(group.label)?.[1]?.toUpperCase();
-        if (letter) return `Group ${letter} · #${groupIdx + 1}`;
-        return `#${groupIdx + 1}`;
-      }
+      const label = groupStanding(group);
+      if (label) return label;
     }
 
     const globalIdx = (standings || []).findIndex((row) => row.team === teamName);
@@ -152,12 +181,8 @@ export function getTeamStandingLabel(teamName, standings, groupedStandings, form
   }
 
   for (const group of groupedStandings || []) {
-    const groupIdx = group.rows?.findIndex((row) => row.team === teamName);
-    if (groupIdx >= 0) {
-      const letter = /group\s*([ab])/i.exec(group.label)?.[1]?.toUpperCase();
-      if (letter) return `Group ${letter} · #${groupIdx + 1}`;
-      return `#${groupIdx + 1}`;
-    }
+    const label = groupStanding(group);
+    if (label) return label;
   }
 
   return "TBD";
@@ -262,13 +287,15 @@ export function enrichTeam(team, context) {
   const played = statsRow?.played ?? 0;
   const wins = statsRow?.wins ?? 0;
   const winRate = played > 0 ? Math.round((wins / played) * 100) : null;
-  const group = getTeamGroupLabel(base.name, groupedStandings);
-  const seed = base.seed ?? null;
+  const group =
+    getTeamGroupLabel(base.name, groupedStandings) ||
+    formatGroupKeyLabel(base.groupKey || base.group_key) ||
+    null;
 
   return {
     ...base,
     players,
-    group: group || (seed != null && seed % 2 === 1 ? "Group A" : seed != null ? "Group B" : null),
+    group,
     region: deriveRegion(base, players),
     stats: {
       winRate,
@@ -319,12 +346,6 @@ export function findTeamByName(lookup, name) {
   const key = String(name || "").trim().toLowerCase();
   if (!key) return null;
   return lookup?.get(key) ?? null;
-}
-
-function groupLabelSortRank(label) {
-  if (/group\s*a/i.test(label)) return 0;
-  if (/group\s*b/i.test(label)) return 1;
-  return 2;
 }
 
 function compareByOverallRank(a, b, overallRank) {

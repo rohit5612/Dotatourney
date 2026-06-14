@@ -1,3 +1,4 @@
+import { buildBlastSeriesRules } from "./blastSeriesRules.js";
 import { buildDefaultSeriesRules } from "./formatPresetsSeriesRules.js";
 
 /**
@@ -60,7 +61,10 @@ export function resolveFormatPreset(presetId) {
   const key = String(presetId || "").trim();
   const preset = FORMAT_PRESETS[key] || FORMAT_PRESETS[key.toUpperCase()];
   if (!preset) return null;
-  const seriesRules = buildDefaultSeriesRules(preset.format, preset.seriesType);
+  const seriesRules =
+    preset.format === "blast"
+      ? buildBlastSeriesRules(preset.teamCount, preset.seriesType)
+      : buildDefaultSeriesRules(preset.format, preset.seriesType);
   return {
     ...preset,
     seriesRules,

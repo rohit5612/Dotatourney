@@ -3,15 +3,16 @@ import { createPortal } from "react-dom";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock.js";
 
 const PAGE_LABELS = {
-  registrations: "Registrations",
-  teams: "Teams",
   setup: "Setup",
+  playerCrm: "Player CRM",
+  teams: "Teams",
   cards: "Cards",
   announcements: "News",
   honors: "Honors",
+  seasons: "Seasons",
   bracketSchedule: "Bracket",
   standings: "Standings",
-  users: "Users",
+  users: "User mgmt",
 };
 
 function MenuIcon({ open }) {
@@ -87,8 +88,8 @@ export function AppHeader({ pages, activePage, setActivePage, darkMode, setDarkM
       >
         <div className="site-navbar-drawer__head">
           <div className="site-navbar-drawer__brand">
-            <span className="site-navbar-drawer__brand-title">Admin panel</span>
-            <span className="site-navbar-drawer__brand-sub">BPC League</span>
+            <span className="site-navbar-drawer__brand-title">Staff portal</span>
+            <span className="site-navbar-drawer__brand-sub">BPC League operations</span>
           </div>
           <button
             type="button"
@@ -138,8 +139,8 @@ export function AppHeader({ pages, activePage, setActivePage, darkMode, setDarkM
             <img src="/bpcl.png" alt="BPC League logo" />
           </span>
           <span className="site-navbar__brand-text">
-            <span className="site-navbar__brand-title">BPC League — Admin</span>
-            <span className="site-navbar__brand-sub">Bharat Pro Circuit League</span>
+            <span className="site-navbar__brand-title">Staff portal</span>
+            <span className="site-navbar__brand-sub">BPC League operations</span>
           </span>
         </div>
 

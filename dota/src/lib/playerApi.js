@@ -34,6 +34,9 @@ export function setPlayerToken(token) {
   }
 }
 
+/** Dedupe concurrent identical auth-link verifications (React StrictMode). */
+const claimVerifyInflight = new Map();
+
 async function playerRequest(path, options = {}) {
   const token = getPlayerToken();
   const response = await fetch(`${API_BASE}${path}`, {
@@ -85,6 +88,22 @@ export const playerApi = {
     playerRequest("/player/auth/claim/start", { method: "POST", body: JSON.stringify(payload) }),
   claimVerify: (payload) =>
     playerRequest("/player/auth/claim/verify", { method: "POST", body: JSON.stringify(payload) }),
+  claimVerifyFromLink: (bpcId, email, token) => {
+    const key = `${bpcId}|${email}|${token}`;
+    if (claimVerifyInflight.has(key)) {
+      return claimVerifyInflight.get(key);
+    }
+    const params = new URLSearchParams({
+      bpcId,
+      email,
+      token,
+    });
+    const request = playerRequest(`/player/auth/claim/verify?${params.toString()}`).finally(() => {
+      claimVerifyInflight.delete(key);
+    });
+    claimVerifyInflight.set(key, request);
+    return request;
+  },
   claimSetPassword: (payload) =>
     playerRequest("/player/auth/claim/set-password", { method: "POST", body: JSON.stringify(payload) }),
   publicAccount: (slug) => playerRequest(`/player/public/accounts/${encodeURIComponent(slug)}`),
@@ -108,7 +127,34 @@ export const playerApi = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  coins: () => playerRequest("/player/me/coins"),
+  coins: (params = {}) => {
+    const qs = new URLSearchParams();
+    if (params.limit != null) qs.set("limit", String(params.limit));
+    if (params.offset != null) qs.set("offset", String(params.offset));
+    const q = qs.toString();
+    return playerRequest(`/player/me/coins${q ? `?${q}` : ""}`);
+  },
+  notifications: (params = {}) => {
+    const qs = new URLSearchParams();
+    if (params.limit != null) qs.set("limit", String(params.limit));
+    if (params.offset != null) qs.set("offset", String(params.offset));
+    if (params.unreadOnly) qs.set("unreadOnly", "1");
+    const q = qs.toString();
+    return playerRequest(`/player/notifications${q ? `?${q}` : ""}`);
+  },
+  notificationUnreadCount: () => playerRequest("/player/notifications/unread-count"),
+  markNotificationRead: (id) =>
+    playerRequest(`/player/notifications/${encodeURIComponent(id)}/read`, { method: "PATCH" }),
+  markAllNotificationsRead: () => playerRequest("/player/notifications/read-all", { method: "POST" }),
+  createSubstitutionRequest: (matchId, reason) =>
+    playerRequest(`/player/matches/${encodeURIComponent(matchId)}/substitution-request`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+  cancelSubstitutionRequest: (matchId) =>
+    playerRequest(`/player/matches/${encodeURIComponent(matchId)}/substitution-request`, {
+      method: "DELETE",
+    }),
   team: () => playerRequest("/player/team"),
   matches: () => playerRequest("/player/matches"),
   history: () => playerRequest("/player/history"),

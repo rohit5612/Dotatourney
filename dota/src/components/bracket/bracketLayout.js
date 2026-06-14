@@ -1,3 +1,11 @@
+import {
+  getSchedulePhaseForStageKey,
+  resolveEngineScheduleSections,
+  SCHEDULE_PHASE_GROUPS,
+  SCHEDULE_PHASE_PLAYOFFS,
+  SCHEDULE_PHASE_QUALIFIERS,
+} from "../../utils/engineStages.js";
+
 /** Order stages left-to-right / top-to-bottom in list and flow layouts */
 export const STAGE_SORT_ORDER = [
   "group-a",
@@ -21,8 +29,13 @@ export const STAGE_SORT_ORDER = [
 ];
 
 export function stageSortIndex(stageKey) {
-  const i = STAGE_SORT_ORDER.indexOf(stageKey || "");
-  return i === -1 ? STAGE_SORT_ORDER.length + String(stageKey || "").localeCompare("z") : i;
+  const sk = stageKey || "";
+  const blastGroup = sk.match(/^blast-group-([a-h])$/i);
+  if (blastGroup) return blastGroup[1].toUpperCase().charCodeAt(0) - 65;
+  const gslGroup = sk.match(/^group-([a-h])$/i);
+  if (gslGroup) return gslGroup[1].toUpperCase().charCodeAt(0) - 65;
+  const i = STAGE_SORT_ORDER.indexOf(sk);
+  return i === -1 ? STAGE_SORT_ORDER.length + String(sk).localeCompare("z") : i;
 }
 
 /** Composite bucket for list columns: stage + round */
@@ -62,12 +75,7 @@ export function isRoundRobinStyleStage(stageKey) {
   );
 }
 
-/** Admin/public schedule: group-stage bucket for tabs and filters */
-export const SCHEDULE_PHASE_GROUPS = "groups";
-/** Last chance, play-ins, merged qualifier UI */
-export const SCHEDULE_PHASE_QUALIFIERS = "qualifiers";
-/** Elimination playoffs and unknown keys (conservative: treat as playoffs) */
-export const SCHEDULE_PHASE_PLAYOFFS = "playoffs";
+export { SCHEDULE_PHASE_GROUPS, SCHEDULE_PHASE_QUALIFIERS, SCHEDULE_PHASE_PLAYOFFS };
 
 /**
  * Bucket by match `stageKey` for schedule rows. LC/PI (and composite play-in) → qualifiers;
@@ -75,7 +83,10 @@ export const SCHEDULE_PHASE_PLAYOFFS = "playoffs";
  * @param {string} [stageKey]
  * @returns {"groups"|"qualifiers"|"playoffs"}
  */
-export function getSchedulePhase(stageKey) {
+export function getSchedulePhase(stageKey, engineConfig = null, format = "") {
+  if (engineConfig) {
+    return getSchedulePhaseForStageKey(stageKey, engineConfig, format);
+  }
   const sk = stageKey || "";
   if (
     sk === "blast-lastchance" ||
@@ -102,9 +113,44 @@ export function summarizeSeriesTypes(matches) {
 }
 
 /** Series summary for a schedule phase tab (Groups / Qualifiers / Playoffs). */
-export function summarizeSeriesTypesForSchedulePhase(matches, phaseId) {
-  const filtered = (matches || []).filter((match) => getSchedulePhase(match.stageKey) === phaseId);
+export function summarizeSeriesTypesForSchedulePhase(matches, phaseId, engineConfig = null, format = "") {
+  const filtered = (matches || []).filter(
+    (match) => getSchedulePhase(match.stageKey, engineConfig, format) === phaseId,
+  );
   return summarizeSeriesTypes(filtered);
+}
+
+/** Schedule phase nav labels from engine_config when available. */
+export function resolveSchedulePhaseNavTabs(engineConfig, format, matches = []) {
+  const sections = resolveEngineScheduleSections(engineConfig, format);
+  if (sections.length) {
+    return sections.map((section) => ({
+      id: section.schedulePhase,
+      label: section.label,
+      shortLabel: section.shortLabel || section.label,
+      seriesSummary: summarizeSeriesTypesForSchedulePhase(matches, section.schedulePhase, engineConfig, format),
+    }));
+  }
+  return [
+    {
+      id: SCHEDULE_PHASE_GROUPS,
+      label: "Groups",
+      shortLabel: "Groups",
+      seriesSummary: summarizeSeriesTypesForSchedulePhase(matches, SCHEDULE_PHASE_GROUPS, null, format),
+    },
+    {
+      id: SCHEDULE_PHASE_QUALIFIERS,
+      label: "Last chance & play-ins",
+      shortLabel: "Last chance",
+      seriesSummary: summarizeSeriesTypesForSchedulePhase(matches, SCHEDULE_PHASE_QUALIFIERS, null, format),
+    },
+    {
+      id: SCHEDULE_PHASE_PLAYOFFS,
+      label: "Playoffs",
+      shortLabel: "Playoffs",
+      seriesSummary: summarizeSeriesTypesForSchedulePhase(matches, SCHEDULE_PHASE_PLAYOFFS, null, format),
+    },
+  ];
 }
 
 export function isScheduleMatchComplete(match) {

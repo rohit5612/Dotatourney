@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { pool } from "../db/pool.js";
+import { syncRegistrationCapState } from "./registrationRepository.js";
 import { env } from "../config/env.js";
 import { eligibilityFromAccount } from "./playerAccountRepository.js";
 import {
@@ -18,6 +19,7 @@ import {
   publicCommerceConfig,
   DEFAULT_CARD_TIERS,
 } from "./commerceConfigRepository.js";
+import { sendPlayerRegistrationSubmittedEmail } from "./emailService.js";
 
 export const CARD_TIERS = ["default", "player", "gold", "holo"];
 
@@ -90,6 +92,16 @@ function assertEligibleForCheckout(account) {
   return eligibility;
 }
 
+function assertProfileReadyForSubstitute(account) {
+  const roles = Array.isArray(account.preferred_roles) ? account.preferred_roles : [];
+  if (roles.length === 0) {
+    const err = new Error("Select at least one preferred role before joining the substitute pool");
+    err.status = 403;
+    err.code = "PROFILE_INCOMPLETE";
+    throw err;
+  }
+}
+
 export async function previewCheckout(account, tournamentSlug, body) {
   const tournament = await findTournamentBySlugOrId(tournamentSlug);
   if (!tournament) {
@@ -145,8 +157,12 @@ export async function confirmCheckout(account, tournamentSlug, body) {
     await client.query("BEGIN");
 
     const existing = await findActiveRegistration(client, tournament.id, account.id);
-    if (existing && existing.payment_status === "paid" && existing.registration_status === "approved") {
-      const err = new Error("You are already registered for this tournament");
+    if (existing?.payment_status === "paid") {
+      const err = new Error(
+        existing.registration_status === "approved"
+          ? "You are already registered for this tournament"
+          : "Payment received — your registration is pending admin approval",
+      );
       err.status = 409;
       throw err;
     }
@@ -310,8 +326,8 @@ export async function fulfillPaidCheckout({
         ) VALUES (
           $1, $2, $3, $4, $5, $6,
           $7, $8::jsonb, $9, $10, $11, $12, $13,
-          'paid', 'approved', 'submitted', NOW(),
-          $14, $15, $16, $17, NOW(),
+          'paid', 'pending', 'submitted', NOW(),
+          $14, $15, $16, $17, NULL,
           $18, FALSE
         )`,
         [
@@ -340,7 +356,7 @@ export async function fulfillPaidCheckout({
       await client.query(
         `UPDATE player_registrations
          SET payment_status = 'paid',
-             registration_status = 'approved',
+             registration_status = 'pending',
              registration_flow_stage = 'submitted',
              card_tier = $2,
              checkout_order_id = $3,
@@ -350,7 +366,7 @@ export async function fulfillPaidCheckout({
              roles = CASE WHEN $7::jsonb <> '[]'::jsonb THEN $7::jsonb ELSE roles END,
              mmr = COALESCE($8, mmr),
              phone_number = COALESCE(NULLIF($9, ''), phone_number),
-             auto_approved_at = NOW(),
+             auto_approved_at = NULL,
              updated_at = NOW()
          WHERE id = $1`,
         [
@@ -387,6 +403,27 @@ export async function fulfillPaidCheckout({
     );
 
     await client.query("COMMIT");
+
+    try {
+      const { rows: tourRows } = await pool.query(`SELECT name FROM tournaments WHERE id = $1`, [order.tournament_id]);
+      const { rows: regRows } = await pool.query(
+        `SELECT email, name, public_code FROM player_registrations WHERE id = $1`,
+        [registrationId],
+      );
+      const reg = regRows[0];
+      const email = reg?.email || account?.email;
+      if (email && !String(email).includes("@migrated.")) {
+        await sendPlayerRegistrationSubmittedEmail({
+          to: email,
+          name: reg?.name || account?.display_name || account?.steam_persona || "",
+          tournamentName: tourRows[0]?.name || "BPC League — Bharat Pro Circuit League",
+          publicCode: reg?.public_code || account?.bpc_id || "",
+        });
+      }
+    } catch (emailErr) {
+      console.error("[email] checkout registration submitted mail failed:", emailErr?.message || emailErr);
+    }
+
     return { ok: true, registrationId, orderId: order.id };
   } catch (error) {
     await client.query("ROLLBACK");
@@ -492,12 +529,23 @@ export async function createSubstituteSignup(account, tournamentSlug, body) {
     err.status = 404;
     throw err;
   }
-  if (tournament.registrations_open === true) {
-    const err = new Error("Substitute signup is only available when registration is closed");
+  const capState = await syncRegistrationCapState(tournament.id);
+  const registrationsOpen = capState.changed ? false : tournament.registrations_open === true;
+  if (registrationsOpen || !capState.reached) {
+    const err = new Error("Substitute signup opens once the player roster cap is full");
     err.status = 403;
     throw err;
   }
   assertEligibleForCheckout(account);
+
+  const { rows: accountRows } = await pool.query(`SELECT * FROM player_accounts WHERE id = $1`, [account.id]);
+  const freshAccount = accountRows[0];
+  if (!freshAccount) {
+    const err = new Error("Player account not found");
+    err.status = 404;
+    throw err;
+  }
+  assertProfileReadyForSubstitute(freshAccount);
 
   const existing = await pool.query(
     `SELECT id FROM player_registrations
@@ -511,7 +559,11 @@ export async function createSubstituteSignup(account, tournamentSlug, body) {
   }
 
   const registrationId = randomUUID();
-  const displayName = account.display_name || account.steam_persona || account.email.split("@")[0];
+  const displayName = freshAccount.display_name || freshAccount.steam_persona || freshAccount.email.split("@")[0];
+  const regLocation = freshAccount.location || "";
+  const regRoles = Array.isArray(freshAccount.preferred_roles) ? freshAccount.preferred_roles : [];
+  const regMmr = freshAccount.mmr ?? null;
+  const regPhone = freshAccount.phone_number || "";
   const notes = [body.notes, body.availability ? `Availability: ${body.availability}` : ""].filter(Boolean).join("\n");
 
   await pool.query(
@@ -522,25 +574,26 @@ export async function createSubstituteSignup(account, tournamentSlug, body) {
       substitute_flag, notes, public_code
     ) VALUES (
       $1, $2, $3, $4, $5, $6,
-      '', $7::jsonb, $8, $9, $10, $11, $12,
+      $7, $8::jsonb, $9, $10, $11, $12, $13,
       'unpaid', 'pending', 'submitted', NOW(),
-      TRUE, $13, $14
+      TRUE, $14, $15
     )`,
     [
       registrationId,
       tournament.id,
-      account.id,
-      account.email,
+      freshAccount.id,
+      freshAccount.email,
       displayName,
       displayName,
-      JSON.stringify(body.roles || []),
-      body.mmr ?? null,
-      account.steam_persona || displayName,
-      account.steam_profile || "",
-      account.discord_username || "",
-      account.phone_number || "",
+      regLocation,
+      JSON.stringify(regRoles),
+      regMmr,
+      freshAccount.steam_persona || displayName,
+      freshAccount.steam_profile || "",
+      freshAccount.discord_username || "",
+      regPhone,
       notes,
-      account.bpc_id,
+      freshAccount.bpc_id,
     ],
   );
 

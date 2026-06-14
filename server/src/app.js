@@ -9,7 +9,8 @@ import { handleRazorpayWebhook } from "./services/paymentService.js";
 
 function buildAllowedOrigins() {
   const fromEnv = Array.isArray(env.corsOrigin) ? env.corsOrigin : [env.corsOrigin];
-  const devDefaults = ["http://localhost:5173", "http://127.0.0.1:5173"];
+  const devDefaults =
+    env.nodeEnv === "production" ? [] : ["http://localhost:5173", "http://127.0.0.1:5173"];
   return [...new Set([...fromEnv, ...devDefaults].filter(Boolean))];
 }
 
@@ -27,6 +28,23 @@ const corsOptions = {
 };
 
 export const app = express();
+
+if (env.nodeEnv === "production") {
+  app.set("trust proxy", 1);
+}
+
+app.disable("x-powered-by");
+
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  if (env.nodeEnv === "production") {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  next();
+});
 
 app.use(cors(corsOptions));
 
@@ -66,9 +84,10 @@ function httpErrorStatus(err) {
 
 app.use((err, _req, res, _next) => {
   const status = httpErrorStatus(err);
+  const exposeMessage = env.nodeEnv !== "production" || status < 500;
   const body = {
-    message: err?.message || "Unexpected server error",
-    issues: err?.issues || null,
+    message: exposeMessage ? err?.message || "Unexpected server error" : "Unexpected server error",
+    issues: exposeMessage && err?.issues ? err.issues : null,
   };
   if (err?.registrationConflict) body.registrationConflict = err.registrationConflict;
   if (err?.code) body.code = err.code;

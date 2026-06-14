@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /login
+Disallow: /signup
+Disallow: /auth/
+Disallow: /verify-email
+Disallow: /claim-account
+Disallow: /forgot-password
+Disallow: /reset-password
+
+Sitemap: https://bpcleague.in/sitemap.xml

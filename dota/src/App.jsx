@@ -1,11 +1,13 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { DocumentMetaManager } from "./components/DocumentMetaManager.jsx";
 import { PageLoadingSpinner } from "./components/PageLoadingSpinner";
 import { PublicLayout } from "./layouts/PublicLayout.jsx";
 import { AdminConsole } from "./admin/AdminConsole.jsx";
 import {
   PublicAnnouncementsRoute,
   PublicCommunityRoute,
+  PublicPlayerProfileRoute,
   PublicCookiesRoute,
   PublicLandingRoute,
   PublicMatchRoute,
@@ -41,9 +43,6 @@ const PlayerForgotPasswordPage = lazy(() =>
 const PlayerResetPasswordPage = lazy(() =>
   import("./pages/PlayerAuthPages.jsx").then((m) => ({ default: m.PlayerResetPasswordPage })),
 );
-const PlayerPublicProfilePage = lazy(() =>
-  import("./pages/PlayerAuthPages.jsx").then((m) => ({ default: m.PlayerPublicProfilePage })),
-);
 
 const PlayerDashboardLayout = lazy(() =>
   import("./pages/player/PlayerDashboardLayout.jsx").then((m) => ({ default: m.PlayerDashboardLayout })),
@@ -63,8 +62,17 @@ const PlayerTournamentsPage = lazy(() =>
 const PlayerRegisterDetailsPage = lazy(() =>
   import("./pages/player/PlayerRegisterDetailsPage.jsx").then((m) => ({ default: m.PlayerRegisterDetailsPage })),
 );
+const PlayerSubstitutePoolPage = lazy(() =>
+  import("./pages/player/PlayerSubstitutePoolPage.jsx").then((m) => ({ default: m.PlayerSubstitutePoolPage })),
+);
 const PlayerCheckoutPage = lazy(() =>
   import("./pages/player/PlayerCheckoutPage.jsx").then((m) => ({ default: m.PlayerCheckoutPage })),
+);
+const PlayerNotificationsPage = lazy(() =>
+  import("./pages/player/PlayerNotificationsPage.jsx").then((m) => ({ default: m.PlayerNotificationsPage })),
+);
+const PlayerWalletPage = lazy(() =>
+  import("./pages/player/PlayerWalletPage.jsx").then((m) => ({ default: m.PlayerWalletPage })),
 );
 
 function PlayerAuthSuspense({ children }) {
@@ -74,6 +82,7 @@ function PlayerAuthSuspense({ children }) {
 export default function App() {
   return (
     <BrowserRouter>
+      <DocumentMetaManager />
       <Routes>
         <Route path="/admin/*" element={<AdminConsole />} />
 
@@ -134,15 +143,6 @@ export default function App() {
           }
         />
         <Route
-          path="/player/:slug"
-          element={
-            <PlayerAuthSuspense>
-              <PlayerPublicProfilePage />
-            </PlayerAuthSuspense>
-          }
-        />
-
-        <Route
           path="/dashboard"
           element={
             <PlayerAuthSuspense>
@@ -154,7 +154,10 @@ export default function App() {
           <Route path="settings" element={<PlayerProfileSettingsPage />} />
           <Route path="history" element={<PlayerHistoryPage />} />
           <Route path="tournaments" element={<PlayerTournamentsPage />} />
+          <Route path="notifications" element={<PlayerNotificationsPage />} />
+          <Route path="wallet" element={<PlayerWalletPage />} />
           <Route path="register/:slug" element={<PlayerRegisterDetailsPage />} />
+          <Route path="substitute/:slug" element={<PlayerSubstitutePoolPage />} />
           <Route path="checkout/:slug" element={<PlayerCheckoutPage />} />
         </Route>
 
@@ -172,6 +175,7 @@ export default function App() {
           <Route path="seasons/:slug" element={<PublicSeasonDetailRoute />} />
           <Route path="announcements" element={<PublicAnnouncementsRoute />} />
           <Route path="community" element={<PublicCommunityRoute />} />
+          <Route path="player/:slug" element={<PublicPlayerProfileRoute />} />
           <Route path="match/:matchId" element={<PublicMatchRoute />} />
         </Route>
 

@@ -69,6 +69,23 @@ export const api = {
     }),
   getAdminMe: () => request("/admin/me"),
   getAdminUsers: () => request("/admin/users"),
+  getAdminSeasons: () => request("/admin/seasons"),
+  getAdminSeasonsContent: () => request("/admin/seasons/content"),
+  updateAdminOrgRoster: (payload) =>
+    request("/admin/site-content/org-roster", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  updateAdminSeasonCardBg: (id, cardBg) =>
+    request(`/admin/seasons/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ cardBg }),
+    }),
+  updateAdminSeasonContent: (id, payload) =>
+    request(`/admin/seasons/${encodeURIComponent(id)}/content`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
   updateAdminStatus: (id, status) =>
     request(`/admin/users/${id}/status`, {
       method: "PATCH",
@@ -89,23 +106,50 @@ export const api = {
     cachedGet("public:tournament", () => request("/public/tournament"), { ttlMs: 20_000, persist: true }),
   getPublicTournamentFresh: () => request("/public/tournament"),
   clearPublicTournamentCache: () => clearCache("public:tournament"),
-  getPublicSeasons: () => request("/public/seasons"),
-  getPublicSeason: (slug) => request(`/public/seasons/${encodeURIComponent(slug)}`),
+  getPublicSiteContent: () =>
+    cachedGet("public:site-content", () => request("/public/site-content"), { ttlMs: 60_000, persist: true }),
+  getPublicSeasons: () =>
+    cachedGet("public:seasons", () => request("/public/seasons"), { ttlMs: 60_000, persist: true }),
+  getPublicSeason: (slug) => {
+    const key = `public:season:${String(slug || "").trim().toLowerCase()}`;
+    return cachedGet(key, () => request(`/public/seasons/${encodeURIComponent(slug)}`), {
+      ttlMs: 90_000,
+      persist: true,
+    });
+  },
   getPublicCommunity: (params = {}) => {
     const q = new URLSearchParams();
-    if (params.q) q.set("q", params.q);
+    const search = params.search ?? params.q;
+    if (search) q.set("search", String(search));
     if (params.limit) q.set("limit", String(params.limit));
+    if (params.offset) q.set("offset", String(params.offset));
     const suffix = q.toString() ? `?${q}` : "";
-    return request(`/public/community${suffix}`);
+    const cacheKey = `public:community:${q.toString() || "default"}`;
+    return cachedGet(cacheKey, () => request(`/public/community${suffix}`), { ttlMs: 30_000, persist: true });
   },
-  getPublicMatch: (matchId) => request(`/public/match/${encodeURIComponent(matchId)}`),
+  getPublicMatch: (matchId) => {
+    const key = `public:match:${String(matchId || "").trim()}`;
+    return cachedGet(key, () => request(`/public/match/${encodeURIComponent(matchId)}`), {
+      ttlMs: 20_000,
+      persist: false,
+    });
+  },
   getPublicAnnouncements: (params = {}) => {
     const q = new URLSearchParams();
     if (params.category) q.set("category", params.category);
+    if (params.limit) q.set("limit", String(params.limit));
+    if (params.offset) q.set("offset", String(params.offset));
     const suffix = q.toString() ? `?${q}` : "";
-    return request(`/public/announcements${suffix}`);
+    const cacheKey = `public:announcements:${q.toString() || "default"}`;
+    return cachedGet(cacheKey, () => request(`/public/announcements${suffix}`), { ttlMs: 45_000, persist: true });
   },
-  getPublicPlayer: (slug) => request(`/public/players/${encodeURIComponent(slug)}`),
+  getPublicPlayer: (slug) => {
+    const key = `public:player:${String(slug || "").trim().toLowerCase()}`;
+    return cachedGet(key, () => request(`/public/players/${encodeURIComponent(slug)}`), {
+      ttlMs: 60_000,
+      persist: true,
+    });
+  },
   getRegistrationSession: (identifier, email, publicCode) => {
     const q = new URLSearchParams({ email: String(email || "").trim() });
     if (publicCode) q.set("code", String(publicCode).trim());
@@ -145,6 +189,15 @@ export const api = {
   publishTournament: (id) =>
     request(`/tournaments/${id}/publish`, {
       method: "POST",
+    }),
+  approveTournament: (id) =>
+    request(`/tournaments/${id}/approve`, {
+      method: "POST",
+    }),
+  completeTournament: (id, payload = {}) =>
+    request(`/tournaments/${id}/complete`, {
+      method: "POST",
+      body: JSON.stringify(payload),
     }),
   unpublishTournament: (id) =>
     request(`/tournaments/${id}/unpublish`, {
@@ -245,6 +298,46 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  listPlayerAccounts: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.search) q.set("search", params.search);
+    if (params.verified) q.set("verified", params.verified);
+    if (params.limit != null) q.set("limit", String(params.limit));
+    if (params.offset != null) q.set("offset", String(params.offset));
+    const suffix = q.toString() ? `?${q}` : "";
+    return request(`/admin/player-accounts${suffix}`);
+  },
+  getPlayerAccount: (id) => request(`/admin/player-accounts/${id}`),
+  patchPlayerAccount: (id, payload) =>
+    request(`/admin/player-accounts/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  getSubstitutes: (tournamentId, params = {}) => {
+    const q = new URLSearchParams();
+    if (params.search) q.set("search", params.search);
+    if (params.limit != null) q.set("limit", String(params.limit));
+    if (params.offset != null) q.set("offset", String(params.offset));
+    if (params.status) q.set("status", params.status);
+    const suffix = q.toString() ? `?${q}` : "";
+    return request(`/tournaments/${tournamentId}/substitutes${suffix}`);
+  },
+  updateSubstitutePoolEntry: (tournamentId, registrationId, payload) =>
+    request(`/tournaments/${tournamentId}/substitutes/${registrationId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  patchSubstitutionRequest: (tournamentId, requestId, payload) =>
+    request(`/tournaments/${tournamentId}/substitution-requests/${requestId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  assignSubstitutionRequest: (tournamentId, requestId, payload) =>
+    request(`/tournaments/${tournamentId}/substitution-requests/${requestId}/assign`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  getTeamHistory: (tournamentId, teamId) => request(`/tournaments/${tournamentId}/teams/${teamId}/history`),
   updateAdminPermissions: (userId, permissions) =>
     request(`/admin/users/${userId}/permissions`, {
       method: "PATCH",
@@ -258,6 +351,14 @@ export const api = {
   },
   getFormatPresets: () => request("/admin/format-presets"),
   getFormatPreset: (id) => request(`/admin/format-presets/${encodeURIComponent(id)}`),
+  getEngineTemplates: () => request("/admin/engine-templates"),
+  getEngineTemplate: (id) => request(`/admin/engine-templates/${encodeURIComponent(id)}`),
+  createEngineTemplate: (payload) =>
+    request("/admin/engine-templates", { method: "POST", body: JSON.stringify(payload) }),
+  updateEngineTemplate: (id, payload) =>
+    request(`/admin/engine-templates/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteEngineTemplate: (id) =>
+    request(`/admin/engine-templates/${encodeURIComponent(id)}`, { method: "DELETE" }),
   getTournamentCommerce: (tournamentId) => request(`/admin/tournaments/${tournamentId}/commerce`),
   putTournamentCommerce: (tournamentId, payload) =>
     request(`/admin/tournaments/${tournamentId}/commerce`, {

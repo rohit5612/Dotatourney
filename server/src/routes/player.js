@@ -31,6 +31,7 @@ import { steamLoginUrl, verifySteamOpenIdCallback, fetchSteamProfile } from "../
 import { discordAuthorizeUrl, exchangeDiscordCode } from "../services/discordOAuthService.js";
 import { googleAuthorizeUrl, exchangeGoogleCode } from "../services/googleOAuthService.js";
 import {
+  sendPlayerClaimAccountEmail,
   sendPlayerEmailVerificationEmail,
   sendPlayerPasswordResetEmail,
 } from "../services/emailService.js";
@@ -50,6 +51,16 @@ import {
   getPlayerDashboardHistory,
   getUpcomingTournamentsForPlayer,
 } from "../services/playerProfileService.js";
+import {
+  createSubstitutionRequest,
+  cancelSubstitutionRequest,
+} from "../services/matchSubstitutionService.js";
+import {
+  getUnreadNotificationCount,
+  listPlayerNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+} from "../services/playerNotificationService.js";
 
 const router = express.Router();
 
@@ -242,14 +253,38 @@ router.post("/auth/claim/start", async (req, res, next) => {
       .parse(req.body);
     const result = await startLegacyClaim({ bpcId, email });
     const verifyUrl = `${frontendUrl("/claim-account")}?step=verify&bpcId=${encodeURIComponent(bpcId)}&email=${encodeURIComponent(result.account.email)}&token=${encodeURIComponent(result.verifyToken)}`;
-    await sendPlayerEmailVerificationEmail({
+    await sendPlayerClaimAccountEmail({
       to: result.account.email,
       verifyUrl,
       displayName: result.account.display_name,
+      bpcId: result.account.bpc_id,
     });
     res.json({
-      message: "Verification sent. Check your email to continue claiming your account.",
-      ...(env.emailSkipSend ? { devVerifyUrl: verifyUrl, devVerifyToken: result.verifyToken } : {}),
+      message: "Check your email for a secure link to verify and claim your account.",
+      ...(env.emailSkipSend ? { devVerifyUrl: verifyUrl } : {}),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/auth/claim/verify", async (req, res, next) => {
+  try {
+    const payload = z
+      .object({
+        bpcId: z.string().min(1),
+        email: z.string().email(),
+        token: z.string().min(1),
+      })
+      .parse(req.query);
+    const result = await verifyLegacyClaim({
+      bpcId: payload.bpcId,
+      email: payload.email,
+      code: payload.token,
+    });
+    res.json({
+      message: "Email verified. Set your password to finish.",
+      claimToken: result.claimToken,
     });
   } catch (error) {
     next(error);
@@ -262,10 +297,16 @@ router.post("/auth/claim/verify", async (req, res, next) => {
       .object({
         bpcId: z.string().min(1),
         email: z.string().email(),
-        code: z.string().min(1),
+        code: z.string().min(1).optional(),
+        token: z.string().min(1).optional(),
       })
+      .refine((d) => d.code || d.token, { message: "token required" })
       .parse(req.body);
-    const result = await verifyLegacyClaim(payload);
+    const result = await verifyLegacyClaim({
+      bpcId: payload.bpcId,
+      email: payload.email,
+      code: payload.code || payload.token,
+    });
     res.json({
       message: "Email verified. Set your password to finish.",
       claimToken: result.claimToken,
@@ -558,8 +599,6 @@ router.post("/tournaments/:slug/substitute", requirePlayer, async (req, res, nex
   try {
     const body = z
       .object({
-        roles: z.array(z.string().min(1)).min(1),
-        mmr: z.number().int().min(0).max(20000),
         availability: z.string().max(500).optional().default(""),
         notes: z.string().max(1000).optional().default(""),
       })
@@ -573,8 +612,50 @@ router.post("/tournaments/:slug/substitute", requirePlayer, async (req, res, nex
 
 router.get("/me/coins", requirePlayer, async (req, res, next) => {
   try {
-    const payload = await getPlayerCoinSummary(req.playerAccount.id);
+    const limit = Number(req.query.limit) || 30;
+    const offset = Number(req.query.offset) || 0;
+    const payload = await getPlayerCoinSummary(req.playerAccount.id, { limit, offset });
     res.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/notifications/unread-count", requirePlayer, async (req, res, next) => {
+  try {
+    const count = await getUnreadNotificationCount(req.playerAccount.id);
+    res.json({ count });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/notifications", requirePlayer, async (req, res, next) => {
+  try {
+    const limit = Number(req.query.limit) || 30;
+    const offset = Number(req.query.offset) || 0;
+    const unreadOnly = req.query.unreadOnly === "1" || req.query.unreadOnly === "true";
+    const payload = await listPlayerNotifications(req.playerAccount.id, { limit, offset, unreadOnly });
+    res.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch("/notifications/:id/read", requirePlayer, async (req, res, next) => {
+  try {
+    const ok = await markNotificationRead(req.playerAccount.id, req.params.id);
+    if (!ok) return res.status(404).json({ message: "Notification not found" });
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/notifications/read-all", requirePlayer, async (req, res, next) => {
+  try {
+    const count = await markAllNotificationsRead(req.playerAccount.id);
+    res.json({ count });
   } catch (error) {
     next(error);
   }
@@ -592,6 +673,25 @@ router.get("/team", requirePlayer, async (req, res, next) => {
 router.get("/matches", requirePlayer, async (req, res, next) => {
   try {
     const payload = await getPlayerMatchesForAccount(req.playerAccount.id);
+    res.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/matches/:matchId/substitution-request", requirePlayer, async (req, res, next) => {
+  try {
+    const body = z.object({ reason: z.string().min(3).max(2000) }).parse(req.body);
+    const payload = await createSubstitutionRequest(req.playerAccount.id, req.params.matchId, body.reason);
+    res.status(201).json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete("/matches/:matchId/substitution-request", requirePlayer, async (req, res, next) => {
+  try {
+    const payload = await cancelSubstitutionRequest(req.playerAccount.id, req.params.matchId);
     res.json(payload);
   } catch (error) {
     next(error);

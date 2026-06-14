@@ -3,13 +3,13 @@ import { PUBLIC_CONTACT_EMAIL } from "../constants/legal.js";
 import { useSiteNavLinks } from "../hooks/useSiteNavLinks.js";
 import { ValveDisclaimer } from "./ValveDisclaimer.jsx";
 
-export function AppFooter({ navigate, mode = "public" }) {
+export function AppFooter({ navigate, mode = "public", className = "" }) {
   const routerNavigate = useNavigate();
   const publicNavLinks = useSiteNavLinks();
   const quickLinks =
     mode === "admin"
       ? [
-          ["registrations", "Registrations"],
+          ["playerCrm", "Player CRM"],
           ["teams", "Teams"],
           ["setup", "Setup"],
           ["bracketSchedule", "Bracket & Schedule"],
@@ -34,77 +34,87 @@ export function AppFooter({ navigate, mode = "public" }) {
   }
 
   return (
-    <footer className="border-t border-border bg-card/80">
-      <div
-        className={`mx-auto grid max-w-6xl gap-6 px-4 py-8 text-sm text-muted-foreground md:grid-cols-2 ${
-          mode === "public" ? "lg:grid-cols-4" : "lg:grid-cols-3"
-        }`}
-      >
-        <div className="lg:col-span-1">
-          <div className="font-serif text-xl font-semibold text-foreground">BPC League</div>
-          <p className="mt-2 max-w-md leading-relaxed">
-            Bharat Pro Circuit League — a Dota 2 tournament hub for registrations, rosters, brackets, schedules, standings, and match-day updates.
-          </p>
-          {mode === "public" ? (
-            <p className="mt-3 text-xs text-muted-foreground">
-              Contact:{" "}
-              <a className="text-secondary underline underline-offset-2 hover:text-foreground" href={`mailto:${PUBLIC_CONTACT_EMAIL}`}>
-                {PUBLIC_CONTACT_EMAIL}
-              </a>
-            </p>
-          ) : null}
-        </div>
+    <footer className={`app-footer app-footer-glass ${className}`.trim()}>
+      <div className="app-footer__inner">
+        <div className="app-footer__main">
+          <div
+            className={`app-footer__grid ${
+              mode === "public" ? "app-footer__grid--public" : "app-footer__grid--admin"
+            }`}
+          >
+            <div>
+              <p className="app-footer__brand">BPC League</p>
+              <p className="app-footer__tagline">
+                Bharat Pro Circuit League — a Dota 2 tournament hub for registrations, rosters, brackets, schedules,
+                standings, and match-day updates.
+              </p>
+              {mode === "public" ? (
+                <p className="app-footer__contact">
+                  Contact:{" "}
+                  <a href={`mailto:${PUBLIC_CONTACT_EMAIL}`}>{PUBLIC_CONTACT_EMAIL}</a>
+                </p>
+              ) : null}
+            </div>
 
-        <div>
-          <div className="text-xs font-medium uppercase tracking-wider text-foreground">Quick links</div>
-          <div className="mt-3 grid gap-2">
-            {quickLinks.map(([target, label]) => (
-              <button
-                key={target}
-                type="button"
-                className="w-fit text-left transition hover:text-primary"
-                onClick={() => goTo(target)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
+            <div>
+              <p className="app-footer__heading">Quick links</p>
+              <div className="app-footer__links">
+                {quickLinks.map(([target, label]) => (
+                  <button
+                    key={target}
+                    type="button"
+                    className="app-footer__link"
+                    onClick={() => goTo(target)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        {mode === "public" ? (
-          <div>
-            <div className="text-xs font-medium uppercase tracking-wider text-foreground">Legal</div>
-            <div className="mt-3 grid gap-2">
-              {legalLinks.map(([target, label]) => (
-                <button
-                  key={target}
-                  type="button"
-                  className="w-fit text-left transition hover:text-primary"
-                  onClick={() => goTo(target)}
+            {mode === "public" ? (
+              <div>
+                <p className="app-footer__heading">Legal</p>
+                <div className="app-footer__links">
+                  {legalLinks.map(([target, label]) => (
+                    <button
+                      key={target}
+                      type="button"
+                      className="app-footer__link"
+                      onClick={() => goTo(target)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div>
+              <p className="app-footer__heading">Community</p>
+              <div className="app-footer__links">
+                <a
+                  className="app-footer__link"
+                  href="https://discord.gg/sV2PhYc6A3"
+                  target="_blank"
+                  rel="noreferrer"
                 >
-                  {label}
-                </button>
-              ))}
+                  Join Discord
+                </a>
+              </div>
             </div>
           </div>
-        ) : null}
+        </div>
 
-        <div>
-          <div className="text-xs font-medium uppercase tracking-wider text-foreground">Community</div>
-          <div className="mt-3 grid gap-2">
-            <a className="w-fit transition hover:text-primary" href="https://discord.gg/sV2PhYc6A3" target="_blank" rel="noreferrer">
-              Join Discord
-            </a>
-          </div>
+        <div className="app-footer__divider" aria-hidden="true" />
+
+        <div className="app-footer__disclaimer">
+          <ValveDisclaimer variant="compact" showTag={false} />
         </div>
-      </div>
-      <div className="border-t border-border bg-background/40">
-        <div className="mx-auto max-w-6xl px-4 py-4">
-          <ValveDisclaimer variant="compact" className="mx-auto max-w-4xl text-center" />
-        </div>
-      </div>
-      <div className="border-t border-border">
-        <div className="app-footer__bar mx-auto max-w-6xl px-4 py-4 text-xs text-muted-foreground">
+
+        <div className="app-footer__divider" aria-hidden="true" />
+
+        <div className="app-footer__bar">
           <span className="app-footer__bar-copy">
             &copy; {new Date().getFullYear()} Bharat Pro Circuit League (BPC League). All rights reserved.
           </span>
@@ -116,12 +126,7 @@ export function AppFooter({ navigate, mode = "public" }) {
             ) : null}
             <span className="app-footer__powered">
               Powered by{" "}
-              <a
-                className="font-medium text-primary transition hover:text-foreground"
-                href="https://nuvorn.com/"
-                target="_blank"
-                rel="noreferrer"
-              >
+              <a href="https://nuvorn.com/" target="_blank" rel="noreferrer">
                 Nuvorn Technologies
               </a>
             </span>

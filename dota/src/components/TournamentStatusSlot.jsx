@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
-import { LandingTournamentStatus } from "./LandingTournamentStatus.jsx";
 import { TournamentLiveStreamEmbed } from "./TournamentLiveStreamEmbed.jsx";
+import { LandingArchiveEmbeds } from "./landing/LandingArchiveEmbeds.jsx";
+import { LandingTournamentStatus } from "./LandingTournamentStatus.jsx";
 import { getTournamentDayPhase } from "../utils/tournamentStatus.js";
 import { parseYoutubeVideoId } from "../utils/youtubeEmbed.js";
 
 export function TournamentStatusSlot({
   placement = "home",
+  variant = "default",
   startDate,
   endDate,
   liveYoutubeUrl,
+  archiveEmbeds = [],
   navigate,
   fallbackStart,
+  showYoutubeEmbeds = true,
 }) {
   const [now, setNow] = useState(() => Date.now());
 
@@ -25,7 +29,15 @@ export function TournamentStatusSlot({
   );
 
   const videoId = useMemo(() => parseYoutubeVideoId(liveYoutubeUrl), [liveYoutubeUrl]);
-  const showEmbed = phase === "live" && Boolean(videoId);
+  const showLiveEmbed = showYoutubeEmbeds && phase === "live" && Boolean(videoId);
+
+  const validArchiveEmbeds = useMemo(
+    () =>
+      (Array.isArray(archiveEmbeds) ? archiveEmbeds : []).filter((embed) =>
+        parseYoutubeVideoId(embed?.youtubeUrl),
+      ),
+    [archiveEmbeds],
+  );
 
   const statusProps = {
     startDate,
@@ -34,18 +46,29 @@ export function TournamentStatusSlot({
     navigate,
   };
 
+  const embedVariant = variant;
+  const liveStreamClass =
+    placement === "tournament" ? "landing-livestream--hero" : "landing-livestream--below-countdown";
+
+  if (showLiveEmbed) {
+    return (
+      <TournamentLiveStreamEmbed videoId={videoId} variant={embedVariant} className={liveStreamClass} />
+    );
+  }
+
   if (placement === "tournament") {
-    if (showEmbed) {
-      return <TournamentLiveStreamEmbed videoId={videoId} className="landing-livestream--hero" />;
-    }
     return <LandingTournamentStatus {...statusProps} />;
   }
 
   return (
     <>
       <LandingTournamentStatus {...statusProps} />
-      {showEmbed ? (
-        <TournamentLiveStreamEmbed videoId={videoId} className="landing-livestream--below-countdown" />
+      {showYoutubeEmbeds && validArchiveEmbeds.length ? (
+        <LandingArchiveEmbeds
+          embeds={validArchiveEmbeds}
+          variant={embedVariant}
+          className="landing-livestream--below-countdown"
+        />
       ) : null}
     </>
   );

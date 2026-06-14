@@ -1,26 +1,35 @@
-export function formatUsesGroupAssignment(format) {
-  return format === "blast";
-}
+import {
+  applySeedingDraft,
+  computeGroupSizes,
+  defaultGroupKeyForIndex,
+  formatUsesGroupAssignment,
+  formatUsesGroupAssignmentFromConfig,
+  groupKeysForCount,
+  isGroupAssignmentValid,
+  previewGroupAssignments,
+  resolveGroupStageConfig,
+  SEEDING_MODES,
+} from "../lib/engineGroupConfig.js";
 
-export function expectedGroupSizes(teamCount) {
-  const groupA = Math.ceil(teamCount / 2);
-  return { groupA, groupB: teamCount - groupA };
-}
+export {
+  applySeedingDraft,
+  computeGroupSizes,
+  defaultGroupKeyForIndex,
+  formatUsesGroupAssignment,
+  formatUsesGroupAssignmentFromConfig,
+  groupKeysForCount,
+  isGroupAssignmentValid,
+  previewGroupAssignments,
+  resolveGroupStageConfig,
+  SEEDING_MODES,
+};
 
-export function isGroupAssignmentValid(teams) {
-  if (!teams?.length) return false;
-  const { groupA, groupB } = expectedGroupSizes(teams.length);
-  let countA = 0;
-  let countB = 0;
-  for (const team of teams) {
-    if (team.groupKey === "A") countA += 1;
-    else if (team.groupKey === "B") countB += 1;
-    else return false;
+export function expectedGroupSizes(teamCount, engineConfig = null) {
+  const plan = resolveGroupStageConfig(
+    engineConfig || { teamCount, format: "blast", groupStage: { enabled: true, groupCount: 2 } },
+  );
+  if (plan.groupKeys.length === 2) {
+    return { groupA: plan.groupSizes[0], groupB: plan.groupSizes[1] };
   }
-  return countA === groupA && countB === groupB;
-}
-
-export function defaultGroupKeyForIndex(index, teamCount) {
-  const { groupA } = expectedGroupSizes(teamCount);
-  return index < groupA ? "A" : "B";
+  return Object.fromEntries(plan.groupKeys.map((key, index) => [key, plan.groupSizes[index]]));
 }

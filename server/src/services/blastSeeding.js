@@ -7,11 +7,21 @@ import {
 } from "./blastGroupSlots.js";
 import { buildGroupedStandings } from "./standingsEngine.js";
 
+function blastGroupStageKeys(matches) {
+  const keys = new Set();
+  for (const match of matches || []) {
+    if (/^blast-group-[a-h]$/i.test(match.stageKey || "")) keys.add(match.stageKey);
+  }
+  return [...keys];
+}
+
 function blastGroupStageFinished(matches) {
-  const ga = matches.filter((m) => m.stageKey === "blast-group-a");
-  const gb = matches.filter((m) => m.stageKey === "blast-group-b");
-  if (!ga.length || !gb.length) return false;
-  return ga.every((m) => m.winner) && gb.every((m) => m.winner);
+  const stageKeys = blastGroupStageKeys(matches);
+  if (!stageKeys.length) return false;
+  return stageKeys.every((stageKey) => {
+    const groupMatches = matches.filter((m) => m.stageKey === stageKey);
+    return groupMatches.length > 0 && groupMatches.every((m) => m.winner);
+  });
 }
 
 /**
@@ -30,26 +40,30 @@ export function computeBlastPlaceholderToTeamMap(teams, matches) {
   if (!blastGroupStageFinished(matches)) return null;
 
   const grouped = buildGroupedStandings(teams, matches, "blast");
+  if (!grouped.length) return null;
+
   const gA = grouped.find((g) => g.label === "Group A");
   const gB = grouped.find((g) => g.label === "Group B");
-  if (!gA || !gB) return null;
-
-  const n = gA.rows.length + gB.rows.length;
+  const n = grouped.reduce((sum, group) => sum + (group.rows?.length || 0), 0);
   const sizes = getBlastPhaseSizes(n);
   if (!sizes) return null;
 
-  const winnerA = gA.rows[0]?.team;
-  const winnerB = gB.rows[0]?.team;
-  if (!winnerA || !winnerB) return null;
-
   /** @type {Record<string, string>} */
   const map = {};
-  for (let i = 0; i < gA.rows.length; i += 1) {
-    map[`Group A #${i + 1}`] = gA.rows[i].team;
+  for (const group of grouped) {
+    const labelMatch = group.label.match(/^Group ([A-H])$/);
+    if (!labelMatch) continue;
+    const key = labelMatch[1];
+    for (let i = 0; i < group.rows.length; i += 1) {
+      map[`Group ${key} #${i + 1}`] = group.rows[i].team;
+    }
   }
-  for (let j = 0; j < gB.rows.length; j += 1) {
-    map[`Group B #${j + 1}`] = gB.rows[j].team;
-  }
+
+  if (!gA || !gB) return map;
+
+  const winnerA = gA.rows[0]?.team;
+  const winnerB = gB.rows[0]?.team;
+  if (!winnerA || !winnerB) return map;
 
   if (sizes.mainPlayoffPath === "ten_qf_seconds") {
     return map;
@@ -59,7 +73,7 @@ export function computeBlastPlaceholderToTeamMap(teams, matches) {
     return map;
   }
 
-  if (sizes.mainPlayoffPath === "tiered_merged_standings") {
+  if (sizes.mainPlayoffPath === "tiered_merged_standings" && grouped.length === 2) {
     const fullRank = mergeBlastFullRanking(gA.rows, gB.rows);
     if (fullRank.length !== n) return null;
     const lc = sizes.lcEntrants;

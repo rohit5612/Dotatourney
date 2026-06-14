@@ -87,6 +87,7 @@ export const TeamCard = memo(function TeamCard({ team, index = 0 }) {
             <span className="teams-card__logo-fallback">{initials}</span>
           )}
           <h3 className="teams-card__name">{team.name}</h3>
+          {team.group ? <p className="teams-card__group">{team.group}</p> : null}
         </div>
       </section>
 

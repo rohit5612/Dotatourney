@@ -63,7 +63,7 @@ export const env = {
     process.env.PLAYER_TOKEN_SECRET?.trim() ||
     process.env.REGISTRATION_OTP_SECRET?.trim() ||
     "dev-player-token-secret-change-me",
-  /** Public API origin for OAuth callbacks (e.g. http://localhost:3000 or https://bpcleague.com) */
+  /** Public API origin for OAuth callbacks (e.g. http://localhost:3000 or https://api.bpcleague.in) */
   apiPublicUrl: (process.env.API_PUBLIC_URL || "").trim().replace(/\/$/, "") || null,
   googleClientId: process.env.GOOGLE_CLIENT_ID?.trim() || "",
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET?.trim() || "",
@@ -77,6 +77,15 @@ export const env = {
   /** Service account JSON (minified one-line). Or use GOOGLE_SERVICE_ACCOUNT_JSON_B64 / GOOGLE_APPLICATION_CREDENTIALS. */
   googleServiceAccountJson: process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim() || "",
   googleServiceAccountJsonB64: process.env.GOOGLE_SERVICE_ACCOUNT_JSON_B64?.trim() || "",
+  /** Local Redis or Upstash Redis URL (redis:// / rediss://). */
+  redisUrl: process.env.REDIS_URL?.trim() || "",
+  /** Upstash REST credentials — used when set (production); overrides REDIS_URL. */
+  upstashRedisRestUrl: process.env.UPSTASH_REDIS_REST_URL?.trim() || "",
+  upstashRedisRestToken: process.env.UPSTASH_REDIS_REST_TOKEN?.trim() || "",
+  /** L1 in-process TTL for public JSON (ms). */
+  publicCacheL1TtlMs: toNumber(process.env.PUBLIC_CACHE_L1_TTL_MS, 8_000),
+  /** L2 Redis TTL for public JSON (ms). */
+  publicCacheRedisTtlMs: toNumber(process.env.PUBLIC_CACHE_REDIS_TTL_MS, 45_000),
 };
 
 if (!env.apiPublicUrl) {
@@ -88,4 +97,25 @@ if (!env.databaseUrl && !hasDiscreteDbCreds) {
   throw new Error(
     "Provide DATABASE_URL or DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD in environment variables",
   );
+}
+
+const DEV_PLAYER_SECRET = "dev-player-token-secret-change-me";
+
+if (env.nodeEnv === "production") {
+  const warnings = [];
+  if (!env.registrationOtpSecret) {
+    warnings.push("REGISTRATION_OTP_SECRET is unset — set a long random value");
+  }
+  if (env.playerTokenSecret === DEV_PLAYER_SECRET) {
+    warnings.push("PLAYER_TOKEN_SECRET is still the dev default — set a strong secret");
+  }
+  if (!env.smtpConfigured) {
+    warnings.push("SMTP is not configured — player/admin emails will not send");
+  }
+  if (!env.upstashRedisRestUrl && !env.redisUrl) {
+    warnings.push("Redis is not configured — public cache will be in-memory only per process");
+  }
+  for (const msg of warnings) {
+    console.warn(`[env] production warning: ${msg}`);
+  }
 }

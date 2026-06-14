@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { createId } from "../utils/client.js";
 import { honorsToApiPayload, normalizeHonorsAdmin } from "../utils/tournamentHonors.js";
 import { playerDisplayName } from "../utils/teamPage.js";
+import { AdminGlassPanel } from "../admin/components/AdminGlassPanel.jsx";
 
 function rosterTeams(approvedRoster) {
   if (!approvedRoster?.teams?.length) return [];
@@ -82,9 +83,10 @@ export function HonorsPage({ setup, setSetup, saveTournament, honorsPreview = nu
   }
 
   return (
-    <div className="space-y-4">
-      <section className="rounded-lg border border-border bg-card p-4">
-        <h2 className="font-serif text-lg tracking-wide">Tournament honors</h2>
+    <div className="admin-page-stack">
+      <AdminGlassPanel className="space-y-4">
+      <section>
+        <h2 className="admin-section-title">Tournament honors</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Control how many auto-detected winning teams appear on the Tournament page, landing page, and Teams page. MVP is a dedicated showcase card.
         </p>
@@ -228,6 +230,7 @@ export function HonorsPage({ setup, setSetup, saveTournament, honorsPreview = nu
           {isSaving ? "Saving…" : "Save honors"}
         </button>
       </div>
+      </AdminGlassPanel>
     </div>
   );
 }

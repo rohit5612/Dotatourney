@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { BpcCoin } from "../coins/BpcCoin.jsx";
+import { BpcCoinSlider } from "../coins/BpcCoinSlider.jsx";
 import { loadRazorpayScript, playerApi } from "../../lib/playerApi";
 
 const CARD_TIERS = [
@@ -16,7 +18,8 @@ export function DashboardCheckout({ tournamentSlug, registrationsOpen, eligible 
   const [step, setStep] = useState("select");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [substitute, setSubstitute] = useState({ roles: ["Support"], mmr: 3000, availability: "", notes: "" });
+
+  const [liveCoins, setLiveCoins] = useState(0);
 
   useEffect(() => {
     if (!eligible || !registrationsOpen || !tournamentSlug) return;
@@ -25,6 +28,16 @@ export function DashboardCheckout({ tournamentSlug, registrationsOpen, eligible 
       .then(setPreview)
       .catch((err) => setError(err.message));
   }, [cardTier, coinsToApply, eligible, registrationsOpen, tournamentSlug]);
+
+  const maxCoins = preview?.maxCoinsApplicable ?? 0;
+  const coinBalance = preview?.coinBalance ?? 0;
+  const coinSliderMax = Math.min(maxCoins, coinBalance);
+
+  useEffect(() => {
+    if (!preview) return;
+    setCoinsToApply((current) => (current > coinSliderMax ? coinSliderMax : current));
+    setLiveCoins((current) => (current > coinSliderMax ? coinSliderMax : current));
+  }, [preview, coinSliderMax]);
 
   async function pay() {
     setBusy(true);
@@ -57,20 +70,6 @@ export function DashboardCheckout({ tournamentSlug, registrationsOpen, eligible 
     }
   }
 
-  async function submitSubstitute(e) {
-    e.preventDefault();
-    setBusy(true);
-    setError("");
-    try {
-      await playerApi.substituteSignup(tournamentSlug, substitute);
-      setStep("substitute-done");
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (!eligible) return null;
 
   if (!registrationsOpen) {
@@ -78,43 +77,12 @@ export function DashboardCheckout({ tournamentSlug, registrationsOpen, eligible 
       <section className="mt-8 rounded-lg border border-border bg-card p-5">
         <h2 className="font-serif text-xl">Substitute pool</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Registration is closed. Join the substitute pool to be considered for open roster spots.
+          Registration is closed. Join the substitute pool to be considered for open roster spots. Your MMR, roles, and
+          contact info are taken from profile settings.
         </p>
-        {step === "substitute-done" ? (
-          <p className="mt-4 text-accent">Substitute signup received. Admins will contact you if a spot opens.</p>
-        ) : (
-          <form className="mt-4 space-y-3" onSubmit={submitSubstitute}>
-            <label className="block text-sm">
-              MMR
-              <input
-                type="number"
-                className="mt-1 w-full rounded-md border border-input bg-background p-2"
-                value={substitute.mmr}
-                onChange={(e) => setSubstitute((s) => ({ ...s, mmr: Number(e.target.value) }))}
-              />
-            </label>
-            <label className="block text-sm">
-              Availability
-              <input
-                className="mt-1 w-full rounded-md border border-input bg-background p-2"
-                value={substitute.availability}
-                onChange={(e) => setSubstitute((s) => ({ ...s, availability: e.target.value }))}
-              />
-            </label>
-            <label className="block text-sm">
-              Notes
-              <textarea
-                className="mt-1 w-full rounded-md border border-input bg-background p-2"
-                value={substitute.notes}
-                onChange={(e) => setSubstitute((s) => ({ ...s, notes: e.target.value }))}
-              />
-            </label>
-            <button type="submit" className="btn btn-primary" disabled={busy}>
-              Join substitute pool
-            </button>
-          </form>
-        )}
-        {error ? <p className="mt-3 text-destructive text-sm">{error}</p> : null}
+        <Link to={`/dashboard/substitute/${tournamentSlug}`} className="btn btn-primary mt-4 inline-flex">
+          Join substitute pool
+        </Link>
       </section>
     );
   }
@@ -156,14 +124,17 @@ export function DashboardCheckout({ tournamentSlug, registrationsOpen, eligible 
             </div>
           ))}
           <label className="mt-3 block">
-            <BpcCoin size="xs">Apply BPC coins (max {preview.maxCoinsApplicable ?? 0})</BpcCoin>
-            <input
-              type="range"
-              min={0}
-              max={preview.maxCoinsApplicable ?? 0}
+            <BpcCoin size="xs">
+              Apply BPC coins
+              {coinBalance > 0 ? ` (balance: ${coinBalance})` : ""}
+            </BpcCoin>
+            <BpcCoinSlider
               value={coinsToApply}
-              onChange={(e) => setCoinsToApply(Number(e.target.value))}
-              className="mt-1 w-full"
+              onChange={setCoinsToApply}
+              onLiveChange={setLiveCoins}
+              max={maxCoins}
+              balance={coinBalance}
+              disabled={!preview}
             />
           </label>
           <div className="flex justify-between border-t border-border pt-2 font-semibold">

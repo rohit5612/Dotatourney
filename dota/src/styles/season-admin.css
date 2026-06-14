@@ -1,0 +1,299 @@
+.season-admin-page__intro {
+  margin-bottom: 1rem;
+}
+
+.season-admin-page__section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.season-admin-page__list {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.season-admin {
+  overflow: hidden;
+  border: 1px solid var(--admin-glass-border, var(--border));
+  border-radius: 0.9rem;
+  background: var(--admin-field-bg, rgba(255, 255, 255, 0.92));
+}
+
+.season-admin__trigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  text-align: left;
+  color: inherit;
+  transition: background 160ms ease;
+}
+
+.season-admin__trigger:hover,
+.season-admin__trigger:focus-visible {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.season-admin__trigger-main {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.season-admin__slug {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.season-admin__title {
+  font-family: var(--font-serif, ui-serif, Georgia, serif);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.season-admin__trigger-meta {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.season-admin__counts {
+  display: none;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+.season-admin__status {
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.season-admin__status--active {
+  color: #047857;
+  background: rgba(16, 185, 129, 0.14);
+}
+
+.season-admin__status--concluded {
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.16);
+}
+
+.season-admin__status--upcoming {
+  color: #475569;
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.season-admin__chevron {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+  transition: transform 220ms ease;
+}
+
+.season-admin--expanded .season-admin__chevron,
+.season-admin__sub--open > .season-admin__sub-trigger .season-admin__chevron {
+  transform: rotate(180deg);
+}
+
+.season-admin__body {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0 0.85rem 0.85rem;
+  border-top: 1px solid var(--admin-glass-border-subtle, var(--border));
+}
+
+.season-admin__sub {
+  overflow: hidden;
+  border: 1px solid var(--admin-glass-border-subtle, var(--border));
+  border-radius: 0.75rem;
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.season-admin__sub-trigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 0.85rem 0.95rem;
+  text-align: left;
+  color: inherit;
+}
+
+.season-admin__sub-trigger--panel {
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.season-admin__sub-trigger:hover,
+.season-admin__sub-trigger:focus-visible {
+  background: rgba(148, 163, 184, 0.1);
+}
+
+.season-admin__sub-trigger--panel:hover,
+.season-admin__sub-trigger--panel:focus-visible {
+  background: transparent;
+}
+
+.season-admin__sub-copy {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.season-admin__sub-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.season-admin__sub-desc {
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--muted-foreground);
+}
+
+.season-admin__panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.season-admin__panel-head .season-admin__sub-trigger--panel {
+  flex: 1;
+  min-width: 0;
+}
+
+.season-admin__sub-actions {
+  flex-shrink: 0;
+}
+
+.season-admin__sub-body {
+  padding: 0 0.95rem 0.95rem;
+}
+
+.season-admin__sub-body--flush {
+  padding-top: 0.25rem;
+}
+
+.season-admin__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+
+.season-admin__file-btn,
+.season-admin__ghost-btn,
+.season-admin__save-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  transition: opacity 160ms ease, background 160ms ease;
+}
+
+.season-admin__file-btn {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--background);
+}
+
+.season-admin__file-btn:hover {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.season-admin__ghost-btn {
+  border: 1px solid var(--border);
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.season-admin__ghost-btn:hover {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.season-admin__save-btn {
+  border: none;
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.season-admin__save-btn:disabled,
+.season-admin__file-btn input:disabled + *,
+.season-admin__ghost-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.season-admin__preview {
+  overflow: hidden;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: rgba(148, 163, 184, 0.12);
+  background-size: cover;
+  background-position: center;
+}
+
+.season-admin__preview-inner {
+  padding: 1.25rem;
+}
+
+.season-admin__preview-inner--bg {
+  color: #fff;
+}
+
+.season-admin__preview-kicker {
+  font-size: 0.65rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.season-admin__preview-title {
+  margin-top: 0.35rem;
+  font-family: var(--font-serif, ui-serif, Georgia, serif);
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.season-admin__preview-empty {
+  margin-top: 0.45rem;
+  font-size: 0.8rem;
+  color: var(--muted-foreground);
+}
+
+.season-admin__preview-inner--bg .season-admin__preview-empty {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.season-admin__footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0.25rem;
+}
+
+@media (min-width: 720px) {
+  .season-admin__counts {
+    display: inline;
+  }
+}

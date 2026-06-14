@@ -1,25 +1,28 @@
 const TEAM_TOKEN_REGEX = /^[A-Z0-9_]+$/;
 
-const STAGE_ORDER = [
-  "blast-group-a",
-  "blast-group-b",
-  "blast-lastchance",
-  "blast-playin",
-  "blast-qualifiers-playin",
-  "blast-playoffs",
-  "upper",
-  "lower",
-  "grand",
-  "playoffs",
-  "groups-open",
-  "groups-decider",
-  "upper-playoff",
-  "lower-playoff",
-];
+const POST_BLAST_GROUP_STAGES = {
+  "blast-lastchance": 20,
+  "blast-playin": 30,
+  "blast-qualifiers-playin": 35,
+  "blast-playoffs": 40,
+  upper: 50,
+  lower: 60,
+  grand: 70,
+  playoffs: 50,
+  "groups-open": 5,
+  "groups-decider": 6,
+  "upper-playoff": 55,
+  "lower-playoff": 65,
+};
 
 function stageRank(stageKey) {
-  const index = STAGE_ORDER.indexOf(stageKey);
-  return index === -1 ? STAGE_ORDER.length + String(stageKey || "").charCodeAt(0) : index;
+  const blastGroup = String(stageKey || "").match(/^blast-group-([a-h])$/i);
+  if (blastGroup) return blastGroup[1].toUpperCase().charCodeAt(0) - 65;
+  const gslGroup = String(stageKey || "").match(/^group-([a-h])$/i);
+  if (gslGroup) return gslGroup[1].toUpperCase().charCodeAt(0) - 65;
+  const fixed = POST_BLAST_GROUP_STAGES[stageKey];
+  if (fixed != null) return fixed;
+  return POST_BLAST_GROUP_STAGES.playoffs + 100 + String(stageKey || "").charCodeAt(0);
 }
 
 export function compareMatchOrder(a, b) {

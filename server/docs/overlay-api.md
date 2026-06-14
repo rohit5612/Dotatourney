@@ -2,7 +2,7 @@
 
 Public endpoints for stream overlays and external GSI apps to consume player card manifests and match roster cards.
 
-Base URL (production): `https://bpcleague.com/api/public`
+Base URL (production): `https://api.bpcleague.in/api/public`
 
 ## Authentication
 

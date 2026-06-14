@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 import { BpcCoin } from "../coins/BpcCoin.jsx";
+import { useFloatingDropdownPosition } from "../../hooks/useFloatingDropdownPosition.js";
 import { getPlayerToken, playerApi, setPlayerToken } from "../../lib/playerApi";
 
 const ICONS = {
@@ -116,14 +118,18 @@ function UserMenuPanel({ account, coinBalance, variant, onNavigate, onSignOut })
       <div className={variant === "mobile" ? "site-navbar-drawer__user-head" : "player-user-menu__panel-head"}>
         <UserAvatar account={account} size={40} />
         <div className="player-user-menu__panel-meta">
-          <p className="player-user-menu__panel-name">{account.displayName}</p>
+          <p className="player-user-menu__panel-name" title={account.displayName || undefined}>
+            {account.displayName}
+          </p>
           <span className="player-user-menu__panel-bpc">{account.bpcId}</span>
         </div>
       </div>
 
       <div className="player-user-menu__wallet">
-        <span className="player-user-menu__wallet-label">Balance</span>
-        <BpcCoin amount={coinBalance} size="sm" />
+        <span className="player-user-menu__wallet-label">BPC coins</span>
+        <BpcCoin size="sm" className="player-user-menu__wallet-coin">
+          <span className="bpc-coin__amount">{coinBalance}</span>
+        </BpcCoin>
       </div>
 
       <div className={variant === "mobile" ? "site-navbar-drawer__user-links" : "player-user-menu__items"}>
@@ -158,15 +164,19 @@ function UserMenuPanel({ account, coinBalance, variant, onNavigate, onSignOut })
 export function PlayerUserMenu({ account, coinBalance = 0, onSignOut, variant = "desktop" }) {
   const navigate = useNavigate();
   const menuId = useId();
-  const rootRef = useRef(null);
+  const triggerRef = useRef(null);
+  const panelRef = useRef(null);
   const [open, setOpen] = useState(false);
+
+  const panelStyle = useFloatingDropdownPosition(triggerRef, open);
 
   useEffect(() => {
     if (!open) return undefined;
     function onPointerDown(event) {
-      if (rootRef.current && !rootRef.current.contains(event.target)) {
-        setOpen(false);
-      }
+      const target = event.target;
+      if (triggerRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      setOpen(false);
     }
     function onKey(event) {
       if (event.key === "Escape") setOpen(false);
@@ -208,32 +218,49 @@ export function PlayerUserMenu({ account, coinBalance = 0, onSignOut, variant = 
   }
 
   return (
-    <div className={`player-user-menu${open ? " is-open" : ""}`} ref={rootRef}>
-      <button
-        type="button"
-        className="player-user-menu__trigger"
-        aria-expanded={open}
-        aria-haspopup="menu"
-        aria-controls={menuId}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <UserAvatar account={account} />
-        <span className="player-user-menu__label">{account.displayName || account.bpcId}</span>
-        <svg className="player-user-menu__chevron" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        </svg>
-      </button>
-      {open ? (
-        <div id={menuId} className="player-user-menu__panel player-user-menu__panel--compact" role="menu">
-          <UserMenuPanel
-            account={account}
-            coinBalance={coinBalance}
-            variant="desktop"
-            onNavigate={() => setOpen(false)}
-            onSignOut={signOut}
-          />
-        </div>
-      ) : null}
-    </div>
+    <>
+      <div className={`player-user-menu${open ? " is-open" : ""}`}>
+        <button
+          ref={triggerRef}
+          type="button"
+          className="player-user-menu__trigger"
+          aria-expanded={open}
+          aria-haspopup="menu"
+          aria-controls={menuId}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <UserAvatar account={account} />
+          <span
+            className="player-user-menu__label"
+            title={account.displayName || account.bpcId || undefined}
+          >
+            {account.displayName || account.bpcId}
+          </span>
+          <svg className="player-user-menu__chevron" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </button>
+      </div>
+      {open
+        ? createPortal(
+            <div
+              ref={panelRef}
+              id={menuId}
+              className="player-user-menu__panel player-nav-dropdown-shell player-nav-dropdown-shell--portal"
+              style={panelStyle || undefined}
+              role="menu"
+            >
+              <UserMenuPanel
+                account={account}
+                coinBalance={coinBalance}
+                variant="desktop"
+                onNavigate={() => setOpen(false)}
+                onSignOut={signOut}
+              />
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }

@@ -18,11 +18,11 @@ import {
   hashPassword,
   publicAdminUser,
   requireAdmin,
-  requireSuperadmin,
   requirePermission,
+  requireSuperadmin,
   verifyPassword,
 } from "../services/authService.js";
-import { adminGrantCoins } from "../services/paymentService.js";
+import { sanitizePermissionsInput } from "../services/adminRbac.js";
 import {
   getOrCreateCommerceConfig,
   publicCommerceConfig,
@@ -31,9 +31,42 @@ import {
   updateCardAssetStatus,
 } from "../services/commerceConfigRepository.js";
 import { writeAuditLog, listAuditLog } from "../services/auditLogService.js";
+import playerAccountsRouter from "./admin/playerAccounts.js";
+import seasonsRouter from "./admin/seasons.js";
+import { orgRosterSchema } from "../services/seasonContentSchema.js";
+import { updateOrgRoster } from "../services/siteContentService.js";
+import { invalidatePublicCache } from "../services/publicCache.js";
 import { listFormatPresets, resolveFormatPreset } from "../services/formatPresets.js";
+import {
+  createEngineTemplate,
+  deleteEngineTemplate,
+  getEngineTemplate,
+  listEngineTemplates,
+  updateEngineTemplate,
+} from "../services/engineTemplateRepository.js";
 
 const router = express.Router();
+
+router.use("/player-accounts", playerAccountsRouter);
+router.use("/seasons", seasonsRouter);
+
+router.put("/site-content/org-roster", requireAdmin, requirePermission("seasons.update"), async (req, res, next) => {
+  try {
+    const payload = orgRosterSchema.parse(req.body);
+    const orgRoster = await updateOrgRoster(payload);
+    invalidatePublicCache();
+    await writeAuditLog({
+      adminUserId: req.adminUser.id,
+      action: "site_content.org_roster.update",
+      entityType: "site_content",
+      entityId: "org_roster",
+      payload: { memberCount: orgRoster.members.length },
+    });
+    return res.json({ orgRoster });
+  } catch (error) {
+    return next(error);
+  }
+});
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -104,7 +137,7 @@ router.get("/me", requireAdmin, (req, res) => {
 router.get("/users", requireAdmin, requireSuperadmin, async (_req, res, next) => {
   try {
     const { rows } = await pool.query(
-      "SELECT id, email, name, role, status, created_at, approved_at FROM admin_users ORDER BY created_at DESC",
+      "SELECT id, email, name, role, status, permissions, created_at, approved_at FROM admin_users ORDER BY created_at DESC",
     );
     res.json({ users: rows.map(publicAdminUser) });
   } catch (error) {
@@ -255,32 +288,6 @@ router.post("/invites/:token/register", async (req, res, next) => {
   }
 });
 
-router.post(
-  "/player-accounts/:id/coins",
-  requireAdmin,
-  requirePermission("coins.grant"),
-  async (req, res, next) => {
-    try {
-      const body = z
-        .object({
-          delta: z.number().int().refine((n) => n !== 0, { message: "delta must be non-zero" }),
-          reason: z.string().max(500).optional().default("Admin grant"),
-        })
-        .parse(req.body);
-      const entry = await adminGrantCoins(req.adminUser.id, req.params.id, body);
-      await writeAuditLog({
-        adminUserId: req.adminUser.id,
-        action: "coins.grant",
-        entityType: "player_account",
-        entityId: req.params.id,
-        payload: body,
-      });
-      return res.status(201).json({ entry });
-    } catch (error) {
-      return next(error);
-    }
-  },
-);
 
 router.get("/audit-log", requireAdmin, requireSuperadmin, async (req, res, next) => {
   try {
@@ -302,11 +309,12 @@ router.get("/audit-log", requireAdmin, requireSuperadmin, async (req, res, next)
 router.patch("/users/:id/permissions", requireAdmin, requireSuperadmin, async (req, res, next) => {
   try {
     const body = z.object({ permissions: z.array(z.string().min(1)) }).parse(req.body);
+    const permissions = sanitizePermissionsInput(body.permissions);
     const { rows } = await pool.query(
       `UPDATE admin_users SET permissions = $2::jsonb, updated_at = NOW()
        WHERE id = $1 AND role <> 'superadmin'
        RETURNING *`,
-      [req.params.id, JSON.stringify(body.permissions)],
+      [req.params.id, JSON.stringify(permissions)],
     );
     if (!rows[0]) return res.status(404).json({ message: "Admin user not found" });
     await writeAuditLog({
@@ -314,7 +322,7 @@ router.patch("/users/:id/permissions", requireAdmin, requireSuperadmin, async (r
       action: "admin.permissions.update",
       entityType: "admin_user",
       entityId: req.params.id,
-      payload: body,
+      payload: { permissions },
     });
     return res.json({ user: publicAdminUser(rows[0]) });
   } catch (error) {
@@ -335,6 +343,108 @@ router.get("/format-presets/:id", requireAdmin, async (req, res, next) => {
     const preset = resolveFormatPreset(req.params.id);
     if (!preset) return res.status(404).json({ message: "Format preset not found" });
     return res.json({ preset });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+const engineGroupStageSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    groupCount: z.number().int().min(2).max(8).optional(),
+    balance: z.enum(["equal", "custom"]).optional(),
+    groupSizes: z.array(z.number().int().min(0)).optional(),
+    seedingMode: z.enum(["manual", "seed_order", "random", "snake"]).optional(),
+  })
+  .optional();
+
+const engineTemplateConfigSchema = z.object({
+  version: z.number().optional(),
+  presetId: z.string().nullable().optional(),
+  teamCount: z.number().int().min(2).max(64),
+  format: z.string().min(1),
+  seriesType: z.enum(["bo1", "bo2", "bo3", "bo5"]),
+  groupStage: engineGroupStageSchema,
+  stages: z.array(z.record(z.string(), z.any())).optional().default([]),
+  seriesRules: z.record(z.string(), z.enum(["bo1", "bo2", "bo3", "bo5"])).optional().default({}),
+});
+
+router.get("/engine-templates", requireAdmin, async (_req, res, next) => {
+  try {
+    const templates = await listEngineTemplates();
+    return res.json({ templates });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/engine-templates/:id", requireAdmin, async (req, res, next) => {
+  try {
+    const template = await getEngineTemplate(req.params.id);
+    if (!template) return res.status(404).json({ message: "Engine template not found" });
+    return res.json({ template });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post("/engine-templates", requireAdmin, async (req, res, next) => {
+  try {
+    const body = z
+      .object({
+        label: z.string().min(1).max(120),
+        description: z.string().max(500).optional().default(""),
+        config: engineTemplateConfigSchema,
+      })
+      .parse(req.body);
+    const template = await createEngineTemplate(body);
+    await writeAuditLog({
+      adminUserId: req.adminUser.id,
+      action: "engine_template.create",
+      entityType: "engine_template",
+      entityId: template.id,
+      payload: { label: template.label },
+    });
+    return res.status(201).json({ template });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.put("/engine-templates/:id", requireAdmin, async (req, res, next) => {
+  try {
+    const body = z
+      .object({
+        label: z.string().min(1).max(120).optional(),
+        description: z.string().max(500).optional(),
+        config: engineTemplateConfigSchema.optional(),
+      })
+      .parse(req.body);
+    const template = await updateEngineTemplate(req.params.id, body);
+    await writeAuditLog({
+      adminUserId: req.adminUser.id,
+      action: "engine_template.update",
+      entityType: "engine_template",
+      entityId: template.id,
+      payload: { label: template.label },
+    });
+    return res.json({ template });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.delete("/engine-templates/:id", requireAdmin, async (req, res, next) => {
+  try {
+    await deleteEngineTemplate(req.params.id);
+    await writeAuditLog({
+      adminUserId: req.adminUser.id,
+      action: "engine_template.delete",
+      entityType: "engine_template",
+      entityId: req.params.id,
+      payload: {},
+    });
+    return res.json({ ok: true });
   } catch (error) {
     return next(error);
   }

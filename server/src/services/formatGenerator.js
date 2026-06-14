@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { compileEngineStageMatches, engineHasCompiledMatches } from "./engineStageSeeding.js";
+import { resolveGroupStageConfig, groupKeysForCount } from "./engineGroupConfig.js";
 import { resolveSeries } from "./seriesRulesEngine.js";
 
 export const formatTeamGuidance = {
@@ -52,8 +54,8 @@ function validateTeamCount(format, teamCount) {
 
 function addMatch(result, teams, stageKey, roundIndex, matchIndex, team1, team2, seriesRules, seriesRuleKey, meta = {}) {
   const slotMeta = { ...meta, seriesRuleKey, seriesType: resolveSeries(seriesRules, seriesRuleKey) };
-  if (typeof team1 === "string" && /^Group [AB] #\d+$/.test(team1)) slotMeta.blastSlot1 = team1;
-  if (typeof team2 === "string" && /^Group [AB] #\d+$/.test(team2)) slotMeta.blastSlot2 = team2;
+  if (typeof team1 === "string" && /^Group [A-H] #\d+$/.test(team1)) slotMeta.blastSlot1 = team1;
+  if (typeof team2 === "string" && /^Group [A-H] #\d+$/.test(team2)) slotMeta.blastSlot2 = team2;
   result.push(match(team1, team2, stageKey, roundIndex, matchIndex, slotMeta));
 }
 
@@ -337,8 +339,53 @@ export function blastSideBracketSizes(teamCount) {
   return { playin: pin, lc: s.lcEntrants };
 }
 
+function resolveBlastGroupIndices(teams, options = {}) {
+  const engineConfig = options.engineConfig;
+  const plan = resolveGroupStageConfig(
+    engineConfig || { teamCount: teams.length, format: "blast", groupStage: { enabled: true, groupCount: 2 } },
+  );
+
+  if (options.groupIndices?.byGroup && Object.keys(options.groupIndices.byGroup).length) {
+    return { plan, byGroup: options.groupIndices.byGroup };
+  }
+
+  const byGroup = {};
+  if (options.groupIndices?.idxA?.length || options.groupIndices?.idxB?.length) {
+    byGroup.A = options.groupIndices.idxA || [];
+    byGroup.B = options.groupIndices.idxB || [];
+  } else {
+    let cursor = 0;
+    for (let i = 0; i < plan.groupKeys.length; i += 1) {
+      const key = plan.groupKeys[i];
+      const size = plan.groupSizes[i] || 0;
+      byGroup[key] = Array.from({ length: size }, (_, j) => cursor + j);
+      cursor += size;
+    }
+  }
+  return { plan, byGroup };
+}
+
+function blastGroupSeriesRuleKey(engineConfig) {
+  const groupStage = (engineConfig?.stages || []).find((stage) => stage.type === "group_round_robin");
+  return groupStage?.seriesRuleKey || "blast-group-bo1";
+}
+
+function generateBlastGroupRoundRobins(teams, seriesRules, plan, byGroup, engineConfig) {
+  const ruleKey = blastGroupSeriesRuleKey(engineConfig);
+  const result = [];
+  for (let i = 0; i < plan.groupKeys.length; i += 1) {
+    const key = plan.groupKeys[i];
+    const indices = byGroup[key] || [];
+    if (!indices.length) continue;
+    result.push(
+      ...generateRoundRobin(teams, seriesRules, `blast-group-${key.toLowerCase()}`, ruleKey, indices, key),
+    );
+  }
+  return result;
+}
+
 /**
- * BLAST-style slam: two BO1 groups → qualifiers → playoffs.
+ * BLAST-style slam: BO1 groups → qualifiers → playoffs.
  *
  * - **n=10**: Group **A/B #1** wait in semis; **#2** in QFs vs Play-In winners; **#3** + Last chance survivors in the 4-team Play-In;
  *   **#4–#5** in each group start Last chance.
@@ -351,19 +398,29 @@ function generateBlast(teams, seriesRules, options = {}) {
     throw new Error(validateTeamCount("blast", n) || "Invalid BLAST team count");
   }
 
-  let idxA;
-  let idxB;
-  if (options.groupIndices) {
-    idxA = options.groupIndices.idxA;
-    idxB = options.groupIndices.idxB;
-  } else {
+  const { plan, byGroup } = resolveBlastGroupIndices(teams, options);
+  const result = generateBlastGroupRoundRobins(teams, seriesRules, plan, byGroup, options.engineConfig);
+
+  if (options.engineConfig && engineHasCompiledMatches(options.engineConfig)) {
+    compileEngineStageMatches(options.engineConfig, (team1, team2, stageKey, roundIndex, matchIndex, seriesRuleKey, meta) => {
+      addMatch(result, teams, stageKey, roundIndex, matchIndex, team1, team2, seriesRules, seriesRuleKey, meta);
+    });
+    return result;
+  }
+
+  if (plan.groupCount !== 2) {
+    throw new Error(
+      `BLAST with ${plan.groupCount} groups requires qualifier and playoff match seeding in the tournament engine. Configure stages after Group Stage, then regenerate the bracket.`,
+    );
+  }
+
+  let idxA = byGroup.A || [];
+  let idxB = byGroup.B || [];
+  if (!idxA.length && !idxB.length) {
     const mid = Math.ceil(n / 2);
     idxA = Array.from({ length: mid }, (_, i) => i);
     idxB = Array.from({ length: n - mid }, (_, i) => mid + i);
   }
-  const result = [];
-  result.push(...generateRoundRobin(teams, seriesRules, "blast-group-a", "blast-group-bo1", idxA, "A"));
-  result.push(...generateRoundRobin(teams, seriesRules, "blast-group-b", "blast-group-bo1", idxB, "B"));
 
   /** Win-token prefixes: Last chance `LCR1M1W`; Play-In `PIR1M1W`; playoffs `QFR` / `SFR`. */
   const lcTok = "LCR";
@@ -457,7 +514,6 @@ function generateBlast(teams, seriesRules, options = {}) {
     const [mw1, mw2] = mpBlock.survivorTokens;
     const px1 = `PIR${crossRi}M1W`;
     const px2 = `PIR${crossRi}M2W`;
-    // Cross seeds: crossover (#2 vs LC finalists) feeds opposite middle-band (#3/#4) survivors — avoids parallel 1–1 / 2–2 lanes.
     addMatch(result, teams, "blast-playoffs", 0, 0, mw1, px2, seriesRules, "blast-po-quarterfinal", {
       winToken: "QFR1M1W",
       team2Feed: px2,
@@ -516,10 +572,9 @@ export function stageTabsForFormat(format, options = {}) {
   if (format === "blast") {
     const n = typeof teamCount === "number" && Number.isFinite(teamCount) ? teamCount : 12;
     const sizes = getBlastPhaseSizes(n);
-    const tabs = [
-      { id: "blast-group-a", label: "Group A (BO1)" },
-      { id: "blast-group-b", label: "Group B (BO1)" },
-    ];
+    const plan = options.engineConfig ? resolveGroupStageConfig(options.engineConfig) : null;
+    const keys = plan?.groupKeys || groupKeysForCount(2);
+    const tabs = keys.map((key) => ({ id: `blast-group-${key.toLowerCase()}`, label: `Group ${key} (BO1)` }));
     if (sizes) {
       tabs.push({ id: "blast-qualifiers", label: "Last Chance & Play-In" });
     }

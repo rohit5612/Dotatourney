@@ -1,5 +1,8 @@
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash } from "node:crypto";
 import { pool } from "../db/pool.js";
+import { adminHasPermission } from "./adminRbac.js";
+
+export { adminHasPermission };
 
 const SESSION_DAYS = 7;
 
@@ -124,29 +127,6 @@ export function requireSuperadmin(req, res, next) {
   return next();
 }
 
-function normalizePermissions(user) {
-  if (!user) return [];
-  if (user.role === "superadmin") return ["*"];
-  let perms = user.permissions;
-  if (typeof perms === "string") {
-    try {
-      perms = JSON.parse(perms);
-    } catch {
-      perms = [];
-    }
-  }
-  return Array.isArray(perms) ? perms : [];
-}
-
-export function adminHasPermission(user, permission) {
-  const perms = normalizePermissions(user);
-  if (perms.includes("*")) return true;
-  if (perms.includes(permission)) return true;
-  const [group] = String(permission).split(".");
-  return perms.includes(`${group}.*`);
-}
-
-/** Express middleware factory — superadmin always passes. */
 export function requirePermission(permission) {
   return (req, res, next) => {
     if (!req.adminUser) {

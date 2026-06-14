@@ -14,6 +14,7 @@ import {
   resolveAccountByIdentifier,
   updatePlayerAccount,
 } from "./playerAccountRepository.js";
+import { ensureDemoAccessAccountReady } from "../utils/demoAccessAccount.js";
 import { hashPassword, verifyPassword } from "./authService.js";
 
 const SESSION_DAYS = 14;
@@ -69,7 +70,7 @@ export async function requirePlayer(req, res, next) {
     if (!account) {
       return res.status(401).json({ message: "Player authentication required" });
     }
-    req.playerAccount = account;
+    req.playerAccount = await ensureDemoAccessAccountReady(account);
     return next();
   } catch (error) {
     return next(error);
@@ -188,7 +189,8 @@ export async function loginPlayer({ identifier, email, password }) {
     throw err;
   }
   const session = await createPlayerSession(account.id);
-  return { account, session };
+  const ready = await ensureDemoAccessAccountReady(account);
+  return { account: ready, session };
 }
 
 export async function requestPasswordReset(email) {
@@ -231,6 +233,37 @@ export async function changePlayerPassword(account, { currentPassword, newPasswo
 
 const CLAIM_TOKEN_HOURS = 2;
 
+/** @type {Map<string, Promise<{ account: object, claimToken: string }>>} */
+const claimVerifyInflight = new Map();
+/** @type {Map<string, { claimToken: string, expiresAt: number }>} */
+const claimVerifyResults = new Map();
+
+function tokenHashesEqual(stored, computed) {
+  if (!stored || !computed || stored.length !== computed.length) return false;
+  try {
+    return timingSafeEqual(Buffer.from(stored, "utf8"), Buffer.from(computed, "utf8"));
+  } catch {
+    return false;
+  }
+}
+
+function recallClaimVerifyResult(verifyHash) {
+  const entry = claimVerifyResults.get(verifyHash);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    claimVerifyResults.delete(verifyHash);
+    return null;
+  }
+  return entry.claimToken;
+}
+
+function rememberClaimVerifyResult(verifyHash, claimToken) {
+  claimVerifyResults.set(verifyHash, {
+    claimToken,
+    expiresAt: Date.now() + CLAIM_TOKEN_HOURS * 60 * 60 * 1000,
+  });
+}
+
 export async function startLegacyClaim({ bpcId, email }) {
   const account = await findAccountByBpcId(bpcId);
   if (!account) {
@@ -264,48 +297,102 @@ export async function startLegacyClaim({ bpcId, email }) {
 }
 
 export async function verifyLegacyClaim({ bpcId, email, code }) {
-  const account = await findAccountByBpcId(bpcId);
-  if (!account) {
-    const err = new Error("Invalid claim request");
-    err.status = 400;
-    throw err;
-  }
-  const normalizedEmail = String(email || "").trim().toLowerCase();
-  if (account.email.toLowerCase() !== normalizedEmail) {
-    const err = new Error("Email does not match");
-    err.status = 400;
-    throw err;
+  const verifyHash = hashPlayerTokenPurpose("claim-account", code);
+  if (claimVerifyInflight.has(verifyHash)) {
+    return claimVerifyInflight.get(verifyHash);
   }
 
-  const hash = hashPlayerTokenPurpose("claim-account", code);
-  if (account.email_verify_token_hash !== hash || !account.email_verify_expires_at) {
-    const err = new Error("Invalid or expired verification code");
-    err.status = 400;
-    throw err;
-  }
-  if (new Date(account.email_verify_expires_at) < new Date()) {
-    const err = new Error("Verification code expired");
-    err.status = 400;
-    throw err;
-  }
-
-  const claimToken = createOpaqueToken();
-  const claimHash = hashPlayerTokenPurpose("claim-set-password", claimToken);
-  const claimExpires = new Date(Date.now() + CLAIM_TOKEN_HOURS * 60 * 60 * 1000);
-
-  await pool.query(
-    `INSERT INTO player_claim_tokens (id, player_account_id, token_hash, expires_at)
-     VALUES ($1, $2, $3, $4)`,
-    [randomUUID(), account.id, claimHash, claimExpires.toISOString()],
-  );
-
-  await updatePlayerAccount(account.id, {
-    emailVerifiedAt: account.email_verified_at || new Date().toISOString(),
-    emailVerifyTokenHash: null,
-    emailVerifyExpiresAt: null,
+  const promise = verifyLegacyClaimOnce({ bpcId, email, verifyHash }).finally(() => {
+    claimVerifyInflight.delete(verifyHash);
   });
+  claimVerifyInflight.set(verifyHash, promise);
+  return promise;
+}
 
-  return { account: await findAccountById(account.id), claimToken };
+async function verifyLegacyClaimOnce({ bpcId, email, verifyHash }) {
+  const remembered = recallClaimVerifyResult(verifyHash);
+  if (remembered) {
+    const account = await findAccountByBpcId(bpcId);
+    if (!account) {
+      const err = new Error("Invalid claim request");
+      err.status = 400;
+      throw err;
+    }
+    return { account, claimToken: remembered };
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const { rows: lockedRows } = await client.query(
+      `SELECT * FROM player_accounts WHERE bpc_id = $1 FOR UPDATE`,
+      [bpcId],
+    );
+    const account = lockedRows[0];
+    if (!account) {
+      const err = new Error("Invalid claim request");
+      err.status = 400;
+      throw err;
+    }
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+    if (account.email.toLowerCase() !== normalizedEmail) {
+      const err = new Error("Email does not match");
+      err.status = 400;
+      throw err;
+    }
+
+    if (
+      !tokenHashesEqual(account.email_verify_token_hash, verifyHash) ||
+      !account.email_verify_expires_at
+    ) {
+      if (!account.email_verify_token_hash && !account.password_hash) {
+        const err = new Error(
+          "This verification link was already used. Request a new claim email to continue.",
+        );
+        err.status = 400;
+        err.code = "CLAIM_LINK_ALREADY_USED";
+        throw err;
+      }
+      const err = new Error("Invalid or expired verification link");
+      err.status = 400;
+      throw err;
+    }
+    if (new Date(account.email_verify_expires_at) < new Date()) {
+      const err = new Error("Verification link expired");
+      err.status = 400;
+      throw err;
+    }
+
+    const claimToken = createOpaqueToken();
+    const claimHash = hashPlayerTokenPurpose("claim-set-password", claimToken);
+    const claimExpires = new Date(Date.now() + CLAIM_TOKEN_HOURS * 60 * 60 * 1000);
+
+    await client.query(
+      `INSERT INTO player_claim_tokens (id, player_account_id, token_hash, expires_at)
+       VALUES ($1, $2, $3, $4)`,
+      [randomUUID(), account.id, claimHash, claimExpires.toISOString()],
+    );
+
+    await updatePlayerAccount(
+      account.id,
+      {
+        emailVerifiedAt: account.email_verified_at || new Date().toISOString(),
+        emailVerifyTokenHash: null,
+        emailVerifyExpiresAt: null,
+      },
+      client,
+    );
+
+    await client.query("COMMIT");
+    rememberClaimVerifyResult(verifyHash, claimToken);
+    return { account: await findAccountById(account.id), claimToken };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function setPasswordFromClaim({ claimToken, password }) {

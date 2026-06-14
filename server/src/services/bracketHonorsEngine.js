@@ -1,12 +1,14 @@
 /** BLAST-only bracket honors: placement badges, podium teams, champion / runner-up. */
 
-const BLAST_GROUP_STAGES = new Set(["blast-group-a", "blast-group-b"]);
+function isBlastGroupStageKey(stageKey) {
+  return /^blast-group-[a-h]$/i.test(stageKey || "");
+}
 
 function matchDepth(match) {
   const stageKey = match?.stageKey || "";
   const round = match?.roundIndex ?? 0;
 
-  if (BLAST_GROUP_STAGES.has(stageKey)) return 10;
+  if (isBlastGroupStageKey(stageKey)) return 10;
   if (stageKey === "blast-lastchance") return 30 + round * 2;
   if (stageKey === "blast-playin" || stageKey === "blast-qualifiers-playin") return 50 + round * 2;
   if (stageKey === "blast-playoffs") return 70 + round * 10;

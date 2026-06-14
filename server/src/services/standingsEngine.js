@@ -1,22 +1,22 @@
 import { compareBlastGroupTiebreak, mergeBlastFullRanking, neustadtlScore } from "./blastStandings.js";
 import { getBlastPhaseSizes } from "./formatGenerator.js";
 
-const BLAST_GROUP_STAGES = new Set(["blast-group-a", "blast-group-b"]);
+function blastGroupKeyFromStageKey(stageKey) {
+  const match = String(stageKey || "").match(/^blast-group-([a-h])$/i);
+  return match ? match[1].toUpperCase() : null;
+}
 
-const BLAST_GROUP_STAGE_LABELS = {
-  "blast-group-a": "Group A",
-  "blast-group-b": "Group B",
-};
-
-/** Display / standings bucket for a league match (Group A/B when BLAST). */
+/** Display / standings bucket for a league match (Group A–H when BLAST). */
 export function blastGroupLabelFromMatch(match) {
   const gk = match.meta?.groupKey;
-  if (gk === "A" || gk === "B") return `Group ${gk}`;
-  return BLAST_GROUP_STAGE_LABELS[match.stageKey] || match.stageKey;
+  if (gk && /^[A-H]$/i.test(String(gk))) return `Group ${String(gk).toUpperCase()}`;
+  const fromStage = blastGroupKeyFromStageKey(match.stageKey);
+  if (fromStage) return `Group ${fromStage}`;
+  return match.stageKey;
 }
 
 export function isBlastGroupMatch(match) {
-  return BLAST_GROUP_STAGES.has(match.stageKey);
+  return Boolean(blastGroupKeyFromStageKey(match?.stageKey));
 }
 
 export function blastGroupMatches(matches) {
@@ -171,10 +171,18 @@ function teamsParticipatingInGroupMatches(teams, groupMatches) {
 
 export function buildGroupedStandings(teams, matches, format) {
   const grouped = {};
-  const leagueStages = new Set(["league", "group-stage", "group-a", "group-b", "swiss", "blast-group-a", "blast-group-b"]);
+  const leagueStages = new Set(["league", "group-stage", "swiss"]);
 
   matches
-    .filter((match) => leagueStages.has(match.stageKey) || match.meta?.groupKey)
+    .filter((match) => {
+      const stageKey = match.stageKey || "";
+      return (
+        leagueStages.has(stageKey) ||
+        /^blast-group-[a-h]$/i.test(stageKey) ||
+        /^group-[a-h]$/i.test(stageKey) ||
+        match.meta?.groupKey
+      );
+    })
     .forEach((match) => {
       const key = blastGroupLabelFromMatch(match);
       if (!grouped[key]) grouped[key] = [];
@@ -183,9 +191,11 @@ export function buildGroupedStandings(teams, matches, format) {
 
   return Object.entries(grouped).map(([label, groupMatches]) => {
     const rosterForGroup =
-      format === "blast" && /^Group [AB]$/.test(label) ? teamsParticipatingInGroupMatches(teams, groupMatches) : teams;
+      format === "blast" && /^Group [A-H]$/.test(label)
+        ? teamsParticipatingInGroupMatches(teams, groupMatches)
+        : teams;
     const rows = buildStandings(rosterForGroup, groupMatches, format, {
-      blastGroupStandings: format === "blast" && /^Group [AB]$/.test(label),
+      blastGroupStandings: format === "blast" && /^Group [A-H]$/.test(label),
     });
     return {
       id: label.toLowerCase().replaceAll(" ", "-"),

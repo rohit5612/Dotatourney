@@ -1,44 +1,43 @@
-const GROUP_FORMATS = new Set(["blast"]);
+import {
+  assignTeamsToGroups,
+  buildGroupIndices,
+  defaultGroupKeysForTeams as engineDefaultGroupKeys,
+  formatUsesGroupAssignmentFromConfig,
+  resolveGroupStageConfig,
+  validateGroupAssignment as validateEngineGroupAssignment,
+} from "./engineGroupConfig.js";
 
-export function formatUsesGroupAssignment(format) {
-  return GROUP_FORMATS.has(format);
+const LEGACY_GROUP_FORMATS = new Set(["blast"]);
+
+export function formatUsesGroupAssignment(format, engineConfig = null) {
+  if (engineConfig) return formatUsesGroupAssignmentFromConfig(engineConfig);
+  return LEGACY_GROUP_FORMATS.has(format);
 }
 
-export function expectedGroupSizes(teamCount) {
-  const groupA = Math.ceil(teamCount / 2);
-  return { groupA, groupB: teamCount - groupA };
-}
-
-export function defaultGroupKeysForTeams(teams) {
-  const { groupA } = expectedGroupSizes(teams.length);
-  return teams.map((team, index) => ({
-    teamId: team.id,
-    groupKey: index < groupA ? "A" : "B",
-  }));
-}
-
-export function validateGroupAssignment(teams) {
-  if (!teams?.length) return "No teams to assign";
-  const { groupA, groupB } = expectedGroupSizes(teams.length);
-  const counts = { A: 0, B: 0 };
-  for (const team of teams) {
-    if (team.groupKey !== "A" && team.groupKey !== "B") {
-      return "Every team must be assigned to Group A or Group B";
-    }
-    counts[team.groupKey] += 1;
+export function expectedGroupSizes(teamCount, engineConfig = null) {
+  const plan = resolveGroupStageConfig(
+    engineConfig || { teamCount, format: "blast", groupStage: { enabled: true, groupCount: 2 } },
+  );
+  if (plan.groupKeys.length === 2) {
+    return { groupA: plan.groupSizes[0], groupB: plan.groupSizes[1] };
   }
-  if (counts.A !== groupA || counts.B !== groupB) {
-    return `Group A must have ${groupA} teams and Group B must have ${groupB} teams`;
-  }
-  return "";
+  return Object.fromEntries(plan.groupKeys.map((key, index) => [`group${key}`, plan.groupSizes[index]]));
 }
 
-export function buildGroupIndices(teams) {
-  const idxA = [];
-  const idxB = [];
-  teams.forEach((team, index) => {
-    if (team.groupKey === "A") idxA.push(index);
-    else if (team.groupKey === "B") idxB.push(index);
+export function defaultGroupKeysForTeams(teams, engineConfig = null) {
+  const config =
+    engineConfig ||
+    { teamCount: teams.length, format: "blast", groupStage: { enabled: true, groupCount: 2, seedingMode: "seed_order" } };
+  return engineDefaultGroupKeys(teams, config);
+}
+
+export function validateGroupAssignment(teams, engineConfig = null) {
+  if (engineConfig) return validateEngineGroupAssignment(teams, engineConfig);
+  return validateEngineGroupAssignment(teams, {
+    teamCount: teams?.length || 0,
+    format: "blast",
+    groupStage: { enabled: true, groupCount: 2 },
   });
-  return { idxA, idxB };
 }
+
+export { buildGroupIndices, resolveGroupStageConfig, assignTeamsToGroups };

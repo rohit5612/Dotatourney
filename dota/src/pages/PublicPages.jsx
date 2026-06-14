@@ -1,5 +1,6 @@
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   HiOutlineArrowDownTray,
   HiOutlineBolt,
@@ -28,8 +29,11 @@ import {
   SCHEDULE_PHASE_QUALIFIERS,
   stageRoundStructure,
   summarizeSeriesTypes,
+  resolveSchedulePhaseNavTabs,
   summarizeSeriesTypesForSchedulePhase,
 } from "../components/bracket/bracketLayout.js";
+import { resolveBracketTabs } from "../utils/engineBracketTabs.js";
+import { resolveBracketViewSections } from "../utils/engineStages.js";
 import { ScrollToTopButton } from "../components/ScrollToTopButton";
 import {
   PLAYER_RULES_DISCORD_SECTION_TITLE,
@@ -43,12 +47,13 @@ import { useBodyScrollLock } from "../hooks/useBodyScrollLock.js";
 import { api } from "../lib/api";
 import { peekCache } from "../lib/requestCache.js";
 import { LandingBannerAnnouncement } from "../components/LandingBannerAnnouncement.jsx";
-import { LandingCoreTeam } from "../components/LandingCoreTeam.jsx";
+import { LandingEssenceSection } from "../components/landing/LandingEssenceSection.jsx";
+import { LandingOrgRoster } from "../components/landing/LandingOrgRoster.jsx";
 import { LandingSponsors } from "../components/LandingSponsors.jsx";
-import { CoSponsorSpotlight } from "../components/CoSponsorSpotlight.jsx";
-import { getCoSponsor } from "../constants/sponsors.js";
-import { LandingLeagueOverview } from "../components/LandingLeagueOverview.jsx";
 import { TournamentStatusSlot } from "../components/TournamentStatusSlot.jsx";
+import { useSiteContent } from "../hooks/useSiteContent.js";
+import "../styles/landing-v2.css";
+import "../styles/registration-page.css";
 import "../styles/team-logo-img.css";
 import { TeamLogoImg } from "../components/TeamLogoImg.jsx";
 import { StandingsTable } from "../components/StandingsTable.jsx";
@@ -66,6 +71,7 @@ const PUBLIC_ROUTE_STYLES = {
   "/tournament": () => Promise.all([import("../styles/tournament-page.css"), import("../styles/tournament-honors.css")]),
   "/teams": () => Promise.all([import("../styles/teams-page.css"), import("../styles/tournament-honors.css")]),
   "/schedule": () => import("../styles/schedule-page.css"),
+  "/register": () => import("../styles/registration-page.css"),
   "/rules": () => import("../styles/general-rules-page.css"),
 };
 import { PrimaryViewTabs, SchedulePhaseTabs } from "../components/navigation/TournamentTabs.jsx";
@@ -160,6 +166,12 @@ const images = {
   tournamentPageBg: "/images/tournamentpage.png",
   /** `/teams` — full-page background */
   teamsBg: "/images/teams.png",
+  /** `/announcements` — News page background */
+  newsBg: "/images/news.jpg",
+  /** `/seasons` — Seasons archive page background */
+  seasonsBg: "/images/seasons.jpg",
+  /** `/community` — Player directory background */
+  communityBg: "/images/community.png",
   /** Landing page — “Registration to victory” journey cards band */
   journeySectionBg: "/images/cards.jpg",
 };
@@ -295,13 +307,39 @@ function CookieConsentBanner({ navigate }) {
   );
 }
 
+function resolvePageShellPath(pathname) {
+  if (pathname.startsWith("/seasons/")) return "/seasons";
+  if (pathname.startsWith("/player/")) return "/player";
+  if (pathname.startsWith("/match/")) return "/match";
+  return pathname;
+}
+
 /** Page content shell — layout chrome (nav/footer) lives in PublicLayout. */
-export function PageContentShell({ path, children, registerClosedCentered = false }) {
-  const isFullBleedBg = path === "/schedule" || path === "/teams" || path === "/register" || path === "/rules";
+export function PageContentShell({ path: _pathProp, children, registerClosedCentered = false }) {
+  const { pathname } = useLocation();
+  const path = resolvePageShellPath(pathname);
+  const isSeasonsPage = path === "/seasons";
+  const isCommunityPage = path === "/community";
+  const isPlayerProfilePage = path === "/player";
+  const isFullBleedBg =
+    path === "/schedule" ||
+    path === "/teams" ||
+    path === "/register" ||
+    path === "/rules" ||
+    path === "/announcements" ||
+    isSeasonsPage ||
+    isCommunityPage ||
+    isPlayerProfilePage;
   const contentClass =
-    path === "/schedule" || path === "/teams"
-      ? "mx-auto max-w-7xl space-y-6 px-4 pb-10 pt-28"
-      : "mx-auto max-w-6xl space-y-6 px-4 pb-10 pt-28";
+    path === "/teams"
+      ? "mx-auto max-w-7xl space-y-7 px-4 pb-12 pt-28 md:space-y-8"
+        : path === "/schedule" || path === "/announcements" || path === "/rules"
+        ? "relative z-10 !space-y-0 !px-0 pb-10 pt-0"
+        : isSeasonsPage
+          ? "relative z-10 !space-y-0 !px-0 pb-10 pt-0 min-h-[100dvh]"
+          : isCommunityPage || isPlayerProfilePage
+            ? "relative z-10 !space-y-0 !px-0 pb-10 pt-0 min-h-[100dvh]"
+            : "mx-auto max-w-6xl space-y-6 px-4 pb-10 pt-28";
   const fullBleedImage =
     path === "/schedule"
       ? images.bracketsBg
@@ -311,17 +349,29 @@ export function PageContentShell({ path, children, registerClosedCentered = fals
           ? images.registerBg
           : path === "/rules"
             ? images.generalRulesBg
-            : null;
+            : path === "/announcements"
+              ? images.newsBg
+              : path === "/seasons"
+                ? images.seasonsBg
+                : path === "/community" || path === "/player"
+                  ? images.communityBg
+                  : null;
   const fullBleedGradientClass =
     path === "/schedule"
-      ? "bg-gradient-to-br from-background/88 via-background/80 to-background/72"
+      ? "bg-gradient-to-b from-background/42 via-background/34 to-background/40"
       : path === "/teams"
-        ? "bg-gradient-to-b from-background/88 via-background/72 to-background/82"
+        ? "bg-gradient-to-b from-background/52 via-background/36 to-background/44"
         : path === "/register"
           ? "bg-gradient-to-b from-background/86 via-background/78 to-background/84"
           : path === "/rules"
-            ? "bg-gradient-to-b from-background/82 via-background/78 to-background/88"
-            : "bg-gradient-to-br from-background/87 via-background/78 to-background/80";
+            ? "bg-gradient-to-b from-background/52 via-background/38 to-background/44"
+            : path === "/announcements"
+              ? "bg-gradient-to-b from-background/52 via-background/38 to-background/44"
+              : path === "/seasons"
+                ? "bg-gradient-to-b from-background/68 via-background/52 to-background/62"
+                : path === "/community" || path === "/player"
+                  ? "bg-gradient-to-b from-background/32 via-background/18 to-background/24"
+                  : "bg-gradient-to-br from-background/87 via-background/78 to-background/80";
 
   const sectionClassName = registerClosedCentered
     ? "relative z-10 flex min-h-0 flex-1 flex-col px-4 pt-24 sm:pt-28"
@@ -332,11 +382,20 @@ export function PageContentShell({ path, children, registerClosedCentered = fals
         : `${contentClass} relative z-10`;
 
   return (
-    <div className={`relative text-foreground ${isFullBleedBg ? "" : "bg-background"} ${registerClosedCentered ? "flex min-h-[60vh] flex-col" : ""}`}>
+    <div
+      className={`relative text-foreground ${isFullBleedBg ? "" : "bg-background"} ${isSeasonsPage || isCommunityPage || isPlayerProfilePage ? "min-h-[100dvh]" : ""} ${registerClosedCentered ? "flex min-h-[60vh] flex-col" : ""}`}
+    >
       {isFullBleedBg && fullBleedImage ? (
         <div className="pointer-events-none fixed inset-0 z-0" aria-hidden="true">
           <img alt="" className="h-full w-full object-cover" src={fullBleedImage} />
           <div className={`absolute inset-0 ${fullBleedGradientClass}`} />
+          {path === "/schedule" ? (
+            <>
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_90%_55%_at_50%_-5%,rgba(94,234,212,0.14),transparent_58%)]" />
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_55%_45%_at_100%_85%,rgba(233,168,74,0.11),transparent_52%)]" />
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_40%_35%_at_0%_60%,rgba(129,140,248,0.08),transparent_50%)]" />
+            </>
+          ) : null}
         </div>
       ) : null}
       <section className={sectionClassName}>
@@ -509,7 +568,7 @@ function LandingPageHeroVideo() {
   return (
     <video
       ref={ref}
-      className="absolute inset-0 h-full w-full object-cover"
+      className="landing-v2-hero__video"
       src="/herobg.mp4"
       autoPlay
       muted
@@ -525,88 +584,92 @@ function LandingPageHeroVideo() {
 export function LandingPage({ event, navigate, message }) {
   const tournament = event?.tournament;
   const discordUrl = tournament?.discord_url || discordInviteUrl;
-  const coSponsor = getCoSponsor();
+  const { orgRoster } = useSiteContent();
+  const rosterFull = registrationCapIsFull(event, tournament);
+  const registrationOpen = tournament?.registrations_open === true && !rosterFull;
+
   function scrollToExplore() {
     document.getElementById("landing-explore")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   return (
-    <>
+    <div className="landing-v2">
       <LandingBannerAnnouncement tournament={tournament} />
-      {message ? <p className="mx-auto mt-4 max-w-6xl rounded-md border border-border bg-card p-2 text-sm text-secondary">{message}</p> : null}
-      <section className="relative flex min-h-[100svh] items-center justify-center overflow-hidden px-4 py-24 md:py-16">
+      {message ? (
+        <p className="mx-auto mt-4 max-w-6xl rounded-md border border-border bg-card p-2 text-sm text-secondary">{message}</p>
+      ) : null}
+
+      <section className="landing-v2-hero">
         <LandingPageHeroVideo />
-        <div className="pointer-events-none absolute inset-0 bg-black/50" />
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_100%_75%_at_50%_-10%,rgba(233,168,74,0.2),transparent_55%)]" />
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_55%_70%_at_95%_45%,rgba(94,234,212,0.1),transparent_48%)]" />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background via-background/75 to-background/20" />
-        <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center gap-8 text-center">
-          <div className="space-y-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-secondary sm:text-xs sm:tracking-[0.34em]">
-              A Dota 2 community tournament
-            </p>
-            <h2 className="wrap-break-word px-1 font-serif text-3xl font-semibold tracking-tight text-foreground sm:text-4xl md:text-5xl lg:text-6xl">
-              {SITE_BRAND_FULL}
-            </h2>
-            <p className="mx-auto max-w-xl text-pretty text-base leading-relaxed text-muted-foreground sm:max-w-2xl sm:text-lg md:text-xl md:leading-relaxed">
-              Assemble your roster, sharpen your strats, and compete in a high-stakes tournament format.
-            </p>
-            {event != null ? (
-              <div className="flex justify-center pt-1">
-                <ApprovedRegistrationsHero count={event.approvedRegistrationCount} />
+        <div className="landing-v2-hero__scrim" aria-hidden="true" />
+        <div className="landing-v2-hero__content">
+          <p className="landing-v2-hero__eyebrow">Dota 2 tournament circuit</p>
+          <h1 className="landing-v2-hero__title">{SITE_BRAND_FULL}</h1>
+          <p className="landing-v2-hero__lead">
+            Assemble your roster, sharpen your strats, and compete in a structured esports format built for the Indian
+            Dota community.
+          </p>
+          <div className="landing-v2-hero__highlight">
+            <div className="landing-v2-hero__highlight-frame" aria-hidden="true">
+              <span className="landing-v2-hero__highlight-corner landing-v2-hero__highlight-corner--tl" />
+              <span className="landing-v2-hero__highlight-corner landing-v2-hero__highlight-corner--tr" />
+              <span className="landing-v2-hero__highlight-corner landing-v2-hero__highlight-corner--bl" />
+              <span className="landing-v2-hero__highlight-corner landing-v2-hero__highlight-corner--br" />
+            </div>
+            <div className="landing-v2-hero__highlight-beam" aria-hidden="true" />
+            <div className="landing-v2-hero__prize landing-hero-prize">
+              <p className="landing-v2-hero__prize-eyebrow">
+                <span className="landing-v2-hero__prize-icon" aria-hidden="true">
+                  ◆
+                </span>
+                Prize pool
+              </p>
+              <div className="landing-v2-hero__prize-ticker">
+                <AnimatedPrizePool value={tournament?.prize_pool} landing />
               </div>
+            </div>
+            {tournament?.is_published ? (
+              <LandingHeroRegistrationLine
+                count={event?.approvedRegistrationCount}
+                cap={tournament?.registration_cap}
+              />
             ) : null}
           </div>
-          <div className="landing-panel landing-hero-prize">
-            <p className="landing-panel__label">Prize pool</p>
-            <AnimatedPrizePool landing value={tournament?.prize_pool || "TBA"} />
-          </div>
-          {coSponsor ? <CoSponsorSpotlight sponsor={coSponsor} variant="hero" /> : null}
-          <div className="landing-hero-ctas">
-            <button
-              type="button"
-              className="landing-hero-cta landing-hero-cta--primary w-full sm:w-auto"
-              onClick={() => navigate("/register")}
-            >
-              Register now
-            </button>
-            <a
-              className="landing-hero-cta landing-hero-cta--ghost w-full sm:w-auto"
-              href={discordUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
+          <div className="landing-v2-hero__actions">
+            {registrationOpen ? (
+              <button type="button" className="landing-v2-hero__cta landing-v2-hero__cta--primary" onClick={() => navigate("/register")}>
+                Register now
+              </button>
+            ) : rosterFull ? (
+              <Link to="/login" className="landing-v2-hero__cta landing-v2-hero__cta--primary">
+                Join substitute pool
+              </Link>
+            ) : (
+              <button type="button" className="landing-v2-hero__cta landing-v2-hero__cta--primary" onClick={() => navigate("/register")} disabled>
+                Registration closed
+              </button>
+            )}
+            <a className="landing-v2-hero__cta landing-v2-hero__cta--ghost" href={discordUrl} target="_blank" rel="noreferrer">
               Join Discord
             </a>
           </div>
         </div>
-        <div className="pointer-events-auto absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 sm:bottom-8">
-          <button
-            type="button"
-            onClick={scrollToExplore}
-            className="group flex flex-col items-center gap-1 rounded-lg px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/75 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-transparent sm:text-[11px] sm:tracking-[0.24em]"
-            aria-label="Scroll to explore tournament details"
-          >
-            <span>Scroll to explore</span>
-            <svg
-              className="size-5 text-secondary motion-safe:animate-bounce group-hover:text-secondary sm:size-6"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={scrollToExplore}
+          className="landing-v2-hero__scroll"
+          aria-label="Scroll to explore tournament details"
+        >
+          <span>Explore</span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
       </section>
 
       {hasPublicHonorsContent(event?.honors) ? (
-        <div className="relative left-1/2 w-screen -translate-x-1/2 border-y border-border/60 bg-background/95">
-          <div className="mx-auto max-w-6xl px-4 py-10">
+        <div className="landing-v2-honors landing-v2-section landing-v2-blue-edges">
+          <div className="landing-v2-section__inner">
             <TournamentWinnersBlock
               honors={event?.honors}
               teams={event?.teams}
@@ -618,114 +681,75 @@ export function LandingPage({ event, navigate, message }) {
         </div>
       ) : null}
 
-      <div className="landing-stats-to-overview">
-        <RevealSection>
-          <section id="landing-explore" className="landing-stats relative mx-auto max-w-6xl scroll-mt-20 px-4">
+      <RevealSection>
+        <section id="landing-explore" className="landing-v2-section landing-v2-media landing-v2-blue-edges landing-v2-blue-edges--no-top scroll-mt-20">
+          <div className="landing-v2-media__bg" aria-hidden="true">
+            <img
+              src="/images/cards.jpg"
+              alt=""
+              className="landing-v2-media__bg-image"
+              loading="lazy"
+              decoding="async"
+            />
+            <div className="landing-v2-media__bg-overlay" />
+            <div className="landing-v2-media__bg-blend-top" />
+          </div>
+          <div className="landing-v2-section__inner landing-v2-media__inner">
             <TournamentStatusSlot
               placement="home"
+              variant="bare"
               startDate={tournament?.start_date}
               endDate={tournament?.end_date}
               liveYoutubeUrl={tournament?.live_youtube_url}
+              archiveEmbeds={event?.archiveEmbeds}
               fallbackStart={defaultTournamentStart}
               navigate={navigate}
             />
-            <div className="landing-stats__waterfall" aria-hidden="true" />
-          </section>
-        </RevealSection>
+          </div>
+        </section>
+      </RevealSection>
 
-        <div className="landing-overview-to-core-team">
-          <LandingLeagueOverview />
-          <LandingCoreTeam />
-          <LandingSponsors />
-        </div>
-      </div>
+      <LandingSponsors sponsorsConfig={event?.sponsorsConfig} />
+
+      <LandingEssenceSection />
+      <LandingOrgRoster orgRoster={orgRoster} />
 
       <RevealSection>
-        <div className="relative">
-          <div className="pointer-events-none absolute inset-0 z-0 min-h-full" aria-hidden="true">
-            <img
-              src={images.journeySectionBg}
-              alt=""
-              className="h-full min-h-[28rem] w-full object-cover sm:min-h-[32rem]"
-            />
-            <div className="absolute inset-0 bg-background/80 dark:bg-background/75" />
-            <div className="absolute inset-0 bg-gradient-to-b from-background via-background/65 to-background dark:from-background dark:via-background/55 dark:to-background" />
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_90%_60%_at_50%_30%,rgba(180,83,9,0.08),transparent_55%)] dark:bg-[radial-gradient(ellipse_90%_60%_at_50%_30%,rgba(233,168,74,0.07),transparent_52%)]" />
-          </div>
-          <section className="relative z-10 mx-auto max-w-6xl px-4 py-10 md:py-16" aria-labelledby="landing-journey-heading">
-            <div className="mb-10 text-center md:mb-14">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-secondary sm:tracking-[0.28em]">The path</p>
-              <h2
-                id="landing-journey-heading"
-                className="mt-2 font-serif text-2xl font-semibold tracking-tight text-foreground sm:text-3xl md:text-4xl"
-              >
-                Registration to victory
-              </h2>
-              <p className="mx-auto mt-3 max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground md:text-base">
-                Three steps — hub, competitive shape, then closing out your series.
-              </p>
-            </div>
-            <div className="mx-auto max-w-5xl space-y-12 md:space-y-16 lg:space-y-20">
-            {getLandingJourneySteps(tournament).map((item, i) => {
-              const JourneyIcon = LANDING_JOURNEY_ICONS[item.icon];
-              return (
-              <div key={item.kicker} className="flex w-full">
-                <article
-                  style={{ animationDelay: `${i * 0.85}s` }}
-                  className={`landing-journey-card w-full max-w-full rounded-3xl border-2 border-primary/20 bg-card/90 p-8 shadow-2xl backdrop-blur-md ring-1 ring-white/[0.05] dark:ring-white/[0.08] md:p-10 lg:max-w-3xl lg:p-12 ${
-                    i % 2 === 0 ? "mr-auto" : "ml-auto"
-                  }`}
-                >
-                  <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:gap-6">
-                    <div
-                      className="flex size-14 shrink-0 items-center justify-center rounded-2xl border border-border/80 bg-background/80 shadow-inner sm:size-16"
-                      aria-hidden
-                    >
-                      {JourneyIcon ? (
-                        <JourneyIcon className={`size-7 sm:size-8 ${item.iconClassName}`} strokeWidth={1.75} />
-                      ) : null}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-mono text-[11px] font-semibold tabular-nums tracking-[0.35em] text-primary md:text-xs">{item.kicker}</p>
-                      <h3 className="mt-2 font-serif text-2xl font-semibold tracking-tight text-foreground md:text-3xl">{item.title}</h3>
-                      <p className="mt-3 text-pretty text-base font-medium leading-snug text-foreground/90 md:text-lg">{item.summary}</p>
-                      <ul className="mt-5 space-y-2.5 border-t border-border/60 pt-5 md:mt-6 md:space-y-3 md:pt-6">
-                        {item.bullets.map((line, bi) => (
-                          <li
-                            key={`${item.kicker}-${bi}`}
-                            className="flex gap-3 text-pretty text-sm leading-relaxed text-muted-foreground md:text-base md:leading-relaxed"
-                          >
-                            <span className="mt-2.5 size-1.5 shrink-0 rounded-full bg-secondary md:mt-3" aria-hidden />
-                            <span>{line}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
+        <section className="landing-v2 landing-v2-section landing-v2-journey landing-v2-blue-edges" aria-labelledby="landing-journey-heading">
+          <div className="landing-v2-section__inner">
+            <p className="landing-v2-section__eyebrow">The path</p>
+            <h2 id="landing-journey-heading" className="landing-v2-section__title">
+              Registration to victory
+            </h2>
+            <p className="landing-v2-section__lead">Three steps from sign-up to closing out your series.</p>
+            <div className="landing-v2-journey__list">
+              {getLandingJourneySteps(tournament).map((item) => (
+                <article key={item.kicker} className="landing-v2-glass landing-v2-journey__step">
+                  <p className="landing-v2-journey__kicker">{item.kicker}</p>
+                  <h3>{item.title}</h3>
+                  <p>{item.summary}</p>
                 </article>
-              </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
         </section>
-        </div>
       </RevealSection>
 
       <RevealSection>
-        <section className="mx-auto max-w-6xl px-4 pb-14">
-          <div className="rounded-2xl border border-border bg-card p-8 text-center">
-            <div className="mb-3 text-3xl">💬</div>
-            <h3 className="font-serif text-3xl font-semibold tracking-tight text-foreground">Join our Discord</h3>
-            <p className="mx-auto mt-2 max-w-2xl leading-relaxed text-muted-foreground">
-              Match-day communication, payment confirmation, announcements, and support happen in our Discord server.
-            </p>
-            <a className="btn btn-primary mt-6 px-6 py-3" href={discordUrl} target="_blank" rel="noreferrer">
-              Join Discord
-            </a>
+        <section className="landing-v2 landing-v2-section landing-v2-discord landing-v2-blue-edges">
+          <div className="landing-v2-section__inner">
+            <div className="landing-v2-glass">
+              <p className="landing-v2-section__eyebrow">Community</p>
+              <h2 className="landing-v2-section__title">Join our Discord</h2>
+              <p>Match-day communication, announcements, and support happen in our Discord server.</p>
+              <a className="btn btn-primary px-6 py-3" href={discordUrl} target="_blank" rel="noreferrer">
+                Join Discord
+              </a>
+            </div>
           </div>
         </section>
       </RevealSection>
-    </>
+    </div>
   );
 }
 
@@ -748,9 +772,16 @@ function TournamentStatCard({ label, value, accent = false }) {
 }
 
 /** Live-ish approved player count from the public tournament payload (`approvedRegistrationCount`). */
-function ApprovedRegistrationsHero({ count }) {
+function ApprovedRegistrationsHero({ count, compact = false }) {
   const n = typeof count === "number" && Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
   const playerLabel = n === 1 ? "player" : "players";
+  if (compact) {
+    return (
+      <>
+        <strong>{n}</strong> {playerLabel} registered
+      </>
+    );
+  }
   return (
     <div
       className="inline-flex max-w-full items-center gap-2.5 rounded-full border border-accent/35 bg-background/88 px-4 py-2 text-left text-sm shadow-lg backdrop-blur-md ring-1 ring-foreground/10"
@@ -760,8 +791,62 @@ function ApprovedRegistrationsHero({ count }) {
     >
       <span className="hero-approved-dot shrink-0" aria-hidden />
       <span className="min-w-0 leading-snug text-muted-foreground">
-        <span className="font-semibold tabular-nums text-accent">{n}</span>  {playerLabel} registered and ready to play!
+        <span className="font-semibold tabular-nums text-accent">{n}</span> {playerLabel} registered and ready to play!
       </span>
+    </div>
+  );
+}
+
+function registrationCapIsFull(event, tournament) {
+  if (event?.substitutePoolOpen) return true;
+  const cap = tournament?.registration_cap;
+  const count = event?.approvedRegistrationCount;
+  const capValue =
+    cap != null && cap !== "" && Number.isFinite(Number(cap)) && Number(cap) > 0 ? Math.floor(Number(cap)) : null;
+  const registered =
+    typeof count === "number" && Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+  return capValue != null && registered >= capValue;
+}
+
+/** Approved players vs cap — compact strip under prize pool when published. */
+function LandingHeroRegistrationLine({ count, cap }) {
+  const registered =
+    typeof count === "number" && Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+  const capValue =
+    cap != null && cap !== "" && Number.isFinite(Number(cap)) && Number(cap) > 0
+      ? Math.floor(Number(cap))
+      : null;
+  const fillPct = capValue != null ? Math.min(100, (registered / capValue) * 100) : null;
+
+  return (
+    <div className="landing-v2-hero__registration" role="status" aria-live="polite">
+      <div className="landing-v2-hero__registration-row">
+        <span className="landing-v2-hero__registration-pip" aria-hidden="true" />
+        <span className="landing-v2-hero__registration-label">Registrations</span>
+        <span className="landing-v2-hero__registration-value">
+          <strong className="landing-v2-hero__registration-num">{registered}</strong>
+          {capValue != null ? (
+            <>
+              <span className="landing-v2-hero__registration-divider" aria-hidden>
+                /
+              </span>
+              <strong className="landing-v2-hero__registration-num landing-v2-hero__registration-num--cap">
+                {capValue}
+              </strong>
+            </>
+          ) : null}
+          <span className="landing-v2-hero__registration-suffix">players</span>
+        </span>
+      </div>
+      {fillPct != null ? (
+        <div
+          className="landing-v2-hero__registration-meter"
+          role="presentation"
+          aria-hidden="true"
+        >
+          <span className="landing-v2-hero__registration-meter-fill" style={{ width: `${fillPct}%` }} />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1016,9 +1101,11 @@ export function TournamentInfo({ event, message, navigate }) {
           <div className="tournament-hero-countdown">
             <TournamentStatusSlot
               placement="tournament"
+              variant="bare"
               startDate={tournament?.start_date}
               endDate={tournament?.end_date}
               liveYoutubeUrl={tournament?.live_youtube_url}
+              archiveEmbeds={event?.archiveEmbeds}
               fallbackStart={defaultTournamentStart}
               navigate={navigate}
             />
@@ -1183,7 +1270,10 @@ function RevealSection({ children }) {
   }, []);
 
   return (
-    <div ref={ref} className={`transition-all duration-700 ${visible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"}`}>
+    <div
+      ref={ref}
+      className={`w-full max-w-none ${visible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"} transition-all duration-700`}
+    >
       {children}
     </div>
   );
@@ -1401,7 +1491,7 @@ function PublicScheduleStatusSection({ title, subtitle, children, show = true, v
   if (!show) return null;
   const variantClass = variant ? ` schedule-section--${variant}` : "";
   return (
-    <section className={`schedule-section landing-panel${variantClass}`}>
+    <section className={`schedule-section schedule-glass${variantClass}`}>
       <header className="schedule-section__head">
         <div>
           <h3 className="schedule-section__title">{title}</h3>
@@ -1456,7 +1546,7 @@ function PublicScheduleMatchListSection({
   if (!show) return null;
 
   return (
-    <section className="schedule-section landing-panel">
+    <section className="schedule-section schedule-glass">
       <header className="schedule-section__head">
         <div>
           <h3 className="schedule-section__title">{title}</h3>
@@ -1516,17 +1606,22 @@ function PublicScheduleMatchListSection({
 function PublicSchedulePhaseCompleteNotice({ message }) {
   if (!message) return null;
   return (
-    <div className="schedule-phase-complete-notice landing-panel" role="status">
+    <div className="schedule-phase-complete-notice schedule-glass" role="status">
       <p className="schedule-phase-complete-notice__text">{message}</p>
     </div>
   );
 }
 
 export function PublicSchedule({ event, message }) {
+  const { hash } = useLocation();
   const [viewMode, setViewMode] = useState(() => parseScheduleViewHash());
   const [phaseTab, setPhaseTab] = useState(SCHEDULE_PHASE_GROUPS);
   const completionSnapshotRef = useRef("");
   const tournamentIdRef = useRef("");
+
+  useEffect(() => {
+    setViewMode(parseScheduleViewHash(hash));
+  }, [hash]);
 
   useEffect(() => {
     const onHash = () => setViewMode(parseScheduleViewHash());
@@ -1546,6 +1641,9 @@ export function PublicSchedule({ event, message }) {
     [event?.teams, event?.setupTeams],
   );
 
+  const engineConfig = event?.tournament?.engine_config ?? null;
+  const tournamentFormat = event?.tournament?.format || "";
+
   const roundStructureAll = useMemo(() => stageRoundStructure(event?.matches || []), [event?.matches]);
   const { groupedMatches, stageTabs, stageLabels } = useMemo(() => {
     const groups = {};
@@ -1554,11 +1652,17 @@ export function PublicSchedule({ event, message }) {
       groups[match.stageKey].push(match);
     });
     const augmented = augmentGroupedBracketMatches(groups);
-    const raw = event?.tabs?.length ? event.tabs : Object.keys(augmented).map((id) => ({ id, label: id }));
-    const tabs = normalizedBlastBracketTabs(event?.tournament?.format || "", raw);
-    const labels = buildStageTabLabels(event?.tournament?.format || "", tabs);
+    const resolved = resolveBracketTabs(tournamentFormat, event?.tabs, engineConfig);
+    const raw = resolved?.length ? resolved : Object.keys(augmented).map((id) => ({ id, label: id }));
+    const tabs = normalizedBlastBracketTabs(tournamentFormat, raw);
+    const labels = buildStageTabLabels(tournamentFormat, tabs);
     return { groupedMatches: augmented, stageTabs: tabs, stageLabels: labels };
-  }, [event]);
+  }, [event, engineConfig, tournamentFormat]);
+
+  const bracketViewSections = useMemo(
+    () => resolveBracketViewSections(engineConfig, tournamentFormat, stageTabs),
+    [engineConfig, tournamentFormat, stageTabs],
+  );
 
   const blastVariant = useMemo(() => inferBlastBracketVariant(event?.matches || []), [event?.matches]);
   const blastBracketDepths = useMemo(
@@ -1604,32 +1708,10 @@ export function PublicSchedule({ event, message }) {
 
   const phaseNavTabs = useMemo(() => {
     const allMatches = event?.matches || [];
-    const tabDefs = {
-      [SCHEDULE_PHASE_GROUPS]: { id: SCHEDULE_PHASE_GROUPS, label: "Groups", shortLabel: "Groups" },
-      [SCHEDULE_PHASE_QUALIFIERS]: {
-        id: SCHEDULE_PHASE_QUALIFIERS,
-        label: "Last chance & play-ins",
-        shortLabel: "Last chance",
-        seriesSummary: summarizeSeriesTypesForSchedulePhase(allMatches, SCHEDULE_PHASE_QUALIFIERS),
-      },
-      [SCHEDULE_PHASE_PLAYOFFS]: {
-        id: SCHEDULE_PHASE_PLAYOFFS,
-        label: "Playoffs",
-        shortLabel: "Playoffs",
-        seriesSummary: summarizeSeriesTypesForSchedulePhase(allMatches, SCHEDULE_PHASE_PLAYOFFS),
-      },
-    };
-    return phaseTabOrder.map((phaseId) => {
-      const base = tabDefs[phaseId];
-      if (phaseId === SCHEDULE_PHASE_GROUPS) {
-        return {
-          ...base,
-          seriesSummary: summarizeSeriesTypesForSchedulePhase(allMatches, SCHEDULE_PHASE_GROUPS),
-        };
-      }
-      return base;
-    });
-  }, [event?.matches, phaseTabOrder]);
+    const defs = resolveSchedulePhaseNavTabs(engineConfig, tournamentFormat, allMatches);
+    const byId = Object.fromEntries(defs.map((tab) => [tab.id, tab]));
+    return phaseTabOrder.map((phaseId) => byId[phaseId]).filter(Boolean);
+  }, [event?.matches, phaseTabOrder, engineConfig, tournamentFormat]);
 
   const phaseCompleteNotice = useMemo(() => {
     const matches = event?.matches || [];
@@ -1643,9 +1725,9 @@ export function PublicSchedule({ event, message }) {
       .filter((slot) => {
         const match = event?.matches?.find((m) => m.id === slot.matchId);
         if (!match) return false;
-        return getSchedulePhase(match.stageKey) === phaseTab;
+        return getSchedulePhase(match.stageKey, engineConfig, tournamentFormat) === phaseTab;
       });
-  }, [event?.schedule, event?.matches, phaseTab]);
+  }, [event?.schedule, event?.matches, phaseTab, engineConfig, tournamentFormat]);
 
   const scheduleByStatus = useMemo(() => {
     const byTime = (a, b) => new Date(a.startAt) - new Date(b.startAt);
@@ -1679,6 +1761,29 @@ export function PublicSchedule({ event, message }) {
     scheduleByStatus.upcomingByDate.length > 0 ||
     scheduleByStatus.finished.length > 0;
 
+  const scheduleHeroStats = useMemo(() => {
+    const matches = event?.matches || [];
+    const slots = (event?.schedule || []).filter((slot) => isValidScheduleInstant(slot.startAt));
+    const statusOf = (slot) => resolveScheduleStatus(slot, matches.find((m) => m.id === slot.matchId));
+    const liveCount = slots.filter((slot) => statusOf(slot) === "live").length;
+    const upcomingCount = slots.filter((slot) => statusOf(slot) === "upcoming").length;
+    const completedMatches = matches.filter((match) => match.winner || match.status === "finished").length;
+    const activePhaseLabel = phaseNavTabs.find((tab) => tab.id === preferredPhaseTab)?.shortLabel || "Groups";
+
+    return {
+      tournamentName: event?.tournament?.name || SITE_BRAND_SHORT,
+      formatLabel: getFormatName(tournamentFormat),
+      teamCount: (event?.teams || []).length,
+      totalMatches: matches.length,
+      completedMatches,
+      liveCount,
+      upcomingCount,
+      activePhaseLabel,
+      isDemo: event?.tournament?.visibility_mode === "demo",
+      bracketActive: Boolean(event?.tournament?.bracket_active),
+    };
+  }, [event, phaseNavTabs, preferredPhaseTab, tournamentFormat]);
+
   useEffect(() => {
     const urls = collectTeamLogoUrls(event?.teams, event?.setupTeams);
     if (urls.length) void preloadTeamLogos(urls);
@@ -1706,17 +1811,65 @@ export function PublicSchedule({ event, message }) {
   );
 
   return (
-    <div className="schedule-page">
-      {message ? <p className="schedule-page__message landing-panel">{message}</p> : null}
-      <section className="schedule-page__intro landing-panel">
-        <p className="landing-panel__label">Tournament hub</p>
-        <h2 className="schedule-page__intro-title">Bracket &amp; Schedule</h2>
-        <p className="schedule-page__intro-copy">
-          {event?.tournament?.visibility_mode === "demo"
-            ? "Demo mode is active. Brackets are previews and real team names unlock when tournament mode begins."
-            : "Live tournament mode is active. Match names, scores, and standings reflect the current tournament state."}
-        </p>
+    <div className="schedule-page-layout">
+      <section className="schedule-page__hero-band" aria-labelledby="schedule-page-title">
+        <div className="schedule-page__hero-band-overlay" aria-hidden="true" />
+        <div className="schedule-page__hero-inner">
+          <p className="schedule-page__eyebrow">{scheduleHeroStats.tournamentName}</p>
+          <h1 id="schedule-page-title" className="schedule-page__hero-title">
+            Bracket &amp; Schedule
+          </h1>
+          <p className="schedule-page__hero-lead">
+            {scheduleHeroStats.isDemo
+              ? "Demo preview — bracket trees and match times update when the tournament goes live."
+              : "Stage brackets, group standings, and match times for every phase of the circuit."}
+          </p>
+          <div className="schedule-page__hero-meta">
+            <div className="schedule-page__hero-chips" aria-label="Tournament overview">
+              <span className="schedule-page__chip">{scheduleHeroStats.formatLabel}</span>
+              {scheduleHeroStats.teamCount > 0 ? (
+                <span className="schedule-page__chip">
+                  {scheduleHeroStats.teamCount} team{scheduleHeroStats.teamCount === 1 ? "" : "s"}
+                </span>
+              ) : null}
+              {scheduleHeroStats.totalMatches > 0 ? (
+                <span className="schedule-page__chip">
+                  {scheduleHeroStats.completedMatches}/{scheduleHeroStats.totalMatches} matches played
+                </span>
+              ) : (
+                <span className="schedule-page__chip">Bracket building</span>
+              )}
+              {scheduleHeroStats.liveCount > 0 ? (
+                <span className="schedule-page__chip schedule-page__chip--live">
+                  {scheduleHeroStats.liveCount} live now
+                </span>
+              ) : null}
+              {scheduleHeroStats.upcomingCount > 0 ? (
+                <span className="schedule-page__chip">{scheduleHeroStats.upcomingCount} upcoming</span>
+              ) : null}
+              <span className="schedule-page__chip">Focus: {scheduleHeroStats.activePhaseLabel}</span>
+              {scheduleHeroStats.isDemo ? (
+                <span className="schedule-page__chip schedule-page__chip--demo">Demo mode</span>
+              ) : scheduleHeroStats.bracketActive ? (
+                <span className="schedule-page__chip schedule-page__chip--active">Bracket live</span>
+              ) : (
+                <span className="schedule-page__chip">Bracket pending</span>
+              )}
+            </div>
+            <div className="schedule-page__hero-actions" aria-label="Related pages">
+              <Link to="/tournament" className="schedule-page__hero-link">
+                Tournament hub
+              </Link>
+              <Link to="/announcements" className="schedule-page__hero-link schedule-page__hero-link--secondary">
+                News
+              </Link>
+            </div>
+          </div>
+        </div>
       </section>
+
+      <div className="schedule-page">
+      {message ? <p className="schedule-page__message schedule-glass">{message}</p> : null}
       <PrimaryViewTabs
         ariaLabel="Bracket or schedule view"
         value={viewMode}
@@ -1730,7 +1883,7 @@ export function PublicSchedule({ event, message }) {
       {viewMode === "bracket" ? (
         <>
           {(event?.groupedStandings || []).length ? (
-            <section className="schedule-page__block landing-panel schedule-page__standings-block">
+            <section className="schedule-page__block schedule-glass schedule-page__standings-block">
               <div className="schedule-page__standings-head">
                 <h3 className="schedule-page__block-title">Group standings</h3>
                 <p className="schedule-page__block-copy">Live group-stage records.</p>
@@ -1743,40 +1896,46 @@ export function PublicSchedule({ event, message }) {
             </section>
           ) : null}
           <div className="schedule-page__sections">
-          {stageTabs.map((tab) => {
-            const matches = groupedMatches[tab.id] || [];
-            if (!matches.length) return null;
-            const phase = getBracketPhaseForTab(tab.id);
-            const seriesSummary =
-              phase === SCHEDULE_PHASE_QUALIFIERS || phase === SCHEDULE_PHASE_PLAYOFFS
-                ? summarizeSeriesTypes(matches)
-                : null;
-            return (
-              <section key={tab.id} className="schedule-page__block landing-panel space-y-3">
-                <div>
-                  <h3 className="schedule-page__block-title">
-                    {tab.label}
-                    {seriesSummary ? (
-                      <span className="schedule-page__series-badge" title={`Series: ${seriesSummary}`}>
-                        {seriesSummary}
-                      </span>
-                    ) : null}
-                  </h3>
-                  <p className="schedule-page__block-copy">Bracket progression for this stage.</p>
-                </div>
-                <Suspense fallback={<PageLoadingSpinner label="Loading bracket…" />}>
-                  <BracketDiagram
-                    matches={matches}
-                    blastSeedMatches={event?.matches ?? []}
-                    playoffFeedMatches={
-                      tab.id === "blast-qualifiers"
-                        ? (groupedMatches["blast-playoffs"] || []).filter((m) => (m.roundIndex ?? 0) === 0)
-                        : undefined
-                    }
-                  />
-                </Suspense>
-              </section>
-            );
+          {bracketViewSections.map((section) => {
+            const sectionTabs = section.tabIds
+              .map((tabId) => stageTabs.find((tab) => tab.id === tabId) || { id: tabId, label: section.label })
+              .filter((tab) => (groupedMatches[tab.id] || []).length > 0);
+            if (!sectionTabs.length) return null;
+            return sectionTabs.map((tab) => {
+              const matches = groupedMatches[tab.id] || [];
+              const phase = getBracketPhaseForTab(tab.id);
+              const seriesSummary =
+                phase === SCHEDULE_PHASE_QUALIFIERS || phase === SCHEDULE_PHASE_PLAYOFFS
+                  ? summarizeSeriesTypes(matches)
+                  : null;
+              return (
+                <section key={tab.id} className="schedule-page__block schedule-glass space-y-3">
+                  <div>
+                    <h3 className="schedule-page__block-title">
+                      {tab.label}
+                      {seriesSummary ? (
+                        <span className="schedule-page__series-badge" title={`Series: ${seriesSummary}`}>
+                          {seriesSummary}
+                        </span>
+                      ) : null}
+                    </h3>
+                    <p className="schedule-page__block-copy">Bracket progression for this stage.</p>
+                  </div>
+                  <Suspense fallback={<PageLoadingSpinner label="Loading bracket…" />}>
+                    <BracketDiagram
+                      appearance="glass"
+                      matches={matches}
+                      blastSeedMatches={event?.matches ?? []}
+                      playoffFeedMatches={
+                        tab.id === "blast-qualifiers"
+                          ? (groupedMatches["blast-playoffs"] || []).filter((m) => (m.roundIndex ?? 0) === 0)
+                          : undefined
+                      }
+                    />
+                  </Suspense>
+                </section>
+              );
+            });
           })}
           </div>
         </>
@@ -1821,11 +1980,12 @@ export function PublicSchedule({ event, message }) {
             />
 
             {!hasScheduleContent ? (
-              <p className="schedule-page__empty landing-panel">No scheduled matches for this phase yet.</p>
+              <p className="schedule-page__empty schedule-glass">No scheduled matches for this phase yet.</p>
             ) : null}
           </div>
         </>
       )}
+      </div>
     </div>
   );
 }
@@ -1924,54 +2084,105 @@ export function CookiePolicyPage() {
 
 export function GeneralRulesPage({ discordUrl }) {
   const invite = (discordUrl || discordInviteUrl).trim();
+  const sectionCount = PLAYER_RULES_SECTIONS.length;
+
   return (
-    <div className="general-rules-page">
-      <header className="landing-panel general-rules-intro">
-        <p className="landing-panel__label">{SITE_BRAND_SHORT}</p>
-        <h2 className="general-rules-intro__title">General Rules & Player Conduct</h2>
-        <p className="general-rules-intro__lead">
-          These rules cover player behavior, eligibility, communication, and fair-play expectations for every {SITE_BRAND_FULL} event.
-        </p>
-        <p className="general-rules-intro__notice">{PLAYER_RULES_REGISTRATION_NOTICE}</p>
-        <div className="general-rules-intro__rulebook">
-          <a
-            className="general-rules-rulebook-card"
-            href={RULEBOOK_PDF_PATH}
-            download="BPC-League-Rulebook.pdf"
-          >
-            <span className="general-rules-rulebook-card__icon" aria-hidden>
-              <HiOutlineDocumentText />
+    <div className="rules-page-layout">
+      <section className="rules-page__hero-band" aria-labelledby="rules-page-title">
+        <div className="rules-page__hero-band-overlay" aria-hidden="true" />
+        <div className="rules-page__hero-inner">
+          <p className="rules-page__eyebrow">{SITE_BRAND_SHORT}</p>
+          <h1 id="rules-page-title" className="rules-page__hero-title">
+            General Rules &amp; Player Conduct
+          </h1>
+          <p className="rules-page__hero-lead">
+            Player behavior, eligibility, communication, and fair-play expectations for every {SITE_BRAND_FULL} event.
+            These are the same rules you accept when registering.
+          </p>
+          <div className="rules-page__hero-meta">
+            <span className="rules-page__stat">
+              {sectionCount} rule section{sectionCount === 1 ? "" : "s"}
             </span>
-            <span className="general-rules-rulebook-card__copy">
-              <span className="general-rules-rulebook-card__eyebrow">Official document</span>
-              <span className="general-rules-rulebook-card__title">Download full rulebook</span>
-              <span className="general-rules-rulebook-card__meta">PDF · player conduct, eligibility & tournament rules</span>
-            </span>
-            <span className="general-rules-rulebook-card__action" aria-hidden>
-              <HiOutlineArrowDownTray className="general-rules-rulebook-card__action-icon" />
-              <span className="general-rules-rulebook-card__action-label">Download</span>
-            </span>
-          </a>
+            <a className="rules-page__stat" href={RULEBOOK_PDF_PATH} download="BPC-League-Rulebook.pdf">
+              Download PDF rulebook →
+            </a>
+          </div>
         </div>
-      </header>
-      <div className="general-rules-page__list">
-        {PLAYER_RULES_SECTIONS.map(([title, body]) => (
-          <article key={title} className="landing-panel general-rules-section">
-            <h3 className="general-rules-section__title">{title}</h3>
-            <p className="general-rules-section__body">{body}</p>
-            {title === PLAYER_RULES_DISCORD_SECTION_TITLE && invite ? (
-              <p className="general-rules-section__discord">
-                <a className="general-rules-section__link" href={invite} target="_blank" rel="noreferrer">
-                  Join the Discord server
+      </section>
+
+      <div className="rules-page">
+        <article className="rules-page__document rules-glass rules-glass--strong" aria-label="Player rulebook">
+          <header className="rules-page__doc-cover">
+            <p className="rules-page__doc-edition">{SITE_BRAND_FULL}</p>
+            <h2 className="rules-page__doc-title">Official Player Rulebook</h2>
+            <p className="rules-page__doc-subtitle">{PLAYER_RULES_REGISTRATION_NOTICE}</p>
+            <a className="rules-page__doc-download" href={RULEBOOK_PDF_PATH} download="BPC-League-Rulebook.pdf">
+              <HiOutlineDocumentText className="rules-page__doc-download-icon" aria-hidden />
+              Download PDF rulebook
+              <HiOutlineArrowDownTray className="rules-page__doc-download-arrow" aria-hidden />
+            </a>
+          </header>
+
+          <nav className="rules-page__toc" aria-label="Table of contents">
+            <h3 className="rules-page__toc-heading">Contents</h3>
+            <ol className="rules-page__toc-list">
+              {PLAYER_RULES_SECTIONS.map(([title], index) => (
+                <li key={title}>
+                  <a className="rules-page__toc-link" href={`#rule-section-${index + 1}`}>
+                    <span className="rules-page__toc-num">{index + 1}.</span>
+                    {title}
+                  </a>
+                </li>
+              ))}
+            </ol>
+          </nav>
+
+          <div className="rules-page__articles">
+            {PLAYER_RULES_SECTIONS.map(([title, body], index) => (
+              <section
+                key={title}
+                id={`rule-section-${index + 1}`}
+                className="rules-page__article"
+                aria-labelledby={`rule-heading-${index + 1}`}
+              >
+                <header className="rules-page__article-header">
+                  <span className="rules-page__article-num" aria-hidden>
+                    §{index + 1}
+                  </span>
+                  <h2 id={`rule-heading-${index + 1}`} className="rules-page__article-title">
+                    {title}
+                  </h2>
+                </header>
+                <p className="rules-page__article-body">{body}</p>
+                {title === PLAYER_RULES_DISCORD_SECTION_TITLE && invite ? (
+                  <p className="rules-page__article-note">
+                    <a className="rules-page__article-link" href={invite} target="_blank" rel="noreferrer">
+                      <HiOutlineChatBubbleLeftRight className="rules-page__article-link-icon" aria-hidden />
+                      Join the Discord server
+                    </a>
+                    {" — "}
+                    required for pairings, announcements, and admin messages during the event.
+                  </p>
+                ) : null}
+              </section>
+            ))}
+          </div>
+
+          <footer className="rules-page__doc-footer">
+            Questions about eligibility or conduct?{" "}
+            {invite ? (
+              <>
+                <a href={invite} target="_blank" rel="noreferrer">
+                  Join our Discord
                 </a>
-                <span className="general-rules-section__link-muted">
-                  {" "}
-                  now so you are in the right place for pairings, announcements, and admin messages.
-                </span>
-              </p>
+                {" · "}
+              </>
             ) : null}
-          </article>
-        ))}
+            <a href="/register">Register</a>
+            {" · "}
+            <a href="/tournament">Tournament hub</a>
+          </footer>
+        </article>
       </div>
     </div>
   );
@@ -2169,13 +2380,55 @@ function PaymentQrModal({ open, onClose, src }) {
   );
 }
 
+function registrationFlowStepIndex(step, regTab) {
+  if (step === "done") return 3;
+  if (step === "payment") return 2;
+  if (step === "otp") return 1;
+  if (regTab === "payment" && step === "form") return 2;
+  return 0;
+}
+
+const REG_FLOW_STEPS = [
+  { key: "details", label: "Your details" },
+  { key: "verify", label: "Email verify" },
+  { key: "pay", label: "Payment" },
+];
+
+function RegistrationFlowSteps({ activeIndex }) {
+  return (
+    <div className="reg-page__steps" aria-label="Registration progress">
+      {REG_FLOW_STEPS.map((item, index) => {
+        const isDone = activeIndex > index;
+        const isActive = activeIndex === index;
+        return (
+          <div
+            key={item.key}
+            className={`reg-page__step${isDone ? " is-done" : ""}${isActive ? " is-active" : ""}`}
+          >
+            <span className="reg-page__step-track" aria-hidden="true">
+              <span className="reg-page__step-fill" />
+            </span>
+            <span className="reg-page__step-label">
+              <span className="reg-page__step-num" aria-hidden="true">
+                {isDone ? "✓" : index + 1}
+              </span>
+              {item.label}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function RegistrationPage({ event, message, setMessage }) {
   const tournament = event?.tournament;
   const tournamentSlug = tournament?.slug || "bpcl";
   const discordUrl = tournament?.discord_url || discordInviteUrl;
-  const coSponsor = getCoSponsor();
   const registrationDeadline = tournament?.registration_deadline;
-  const registrationAccepting = tournament?.registrations_open === true;
+  const rosterFull = registrationCapIsFull(event, tournament);
+  const registrationAccepting = tournament?.registrations_open === true && !rosterFull;
+  const substitutePoolOpen = Boolean(event?.substitutePoolOpen || rosterFull);
   /** When false: admin has closed signup (deadline remains display-only while open). */
   const registrationGated = !registrationAccepting;
   const qrImage = tournament?.payment_qr_image || "";
@@ -2490,61 +2743,41 @@ export function RegistrationPage({ event, message, setMessage }) {
 
   if (!registrationAccepting) {
     return (
-      <div className="mx-auto w-full max-w-2xl">
-        <div className="rounded-2xl border border-border/80 bg-black/45 p-6 shadow-2xl backdrop-blur-md sm:p-10 dark:bg-black/50">
-          <div className="text-center">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-secondary sm:text-xs">Registration closed</p>
-            <h1 className="mt-4 wrap-break-word font-serif text-3xl font-semibold tracking-tight text-foreground sm:text-4xl md:text-5xl">
-              {tournament?.name || SITE_BRAND_LINE}
-            </h1>
-            <p className="mt-8 text-pretty text-lg font-semibold leading-snug text-foreground sm:text-xl md:text-2xl">
-              Registrations have been closed for this season because our intended player slots have been filled.
+      <div className="reg-page reg-page--closed">
+        <div className="reg-page__shell">
+          <div className="reg-page__inner">
+            <p className="reg-page__eyebrow">{substitutePoolOpen ? "Roster full" : "Registration closed"}</p>
+            <h1 className="reg-page__title">{tournament?.name || SITE_BRAND_LINE}</h1>
+            <p className="reg-page__lead">
+              {substitutePoolOpen
+                ? "Player slots for this season are full. You can still join the substitute pool from your player dashboard."
+                : "Registrations have been closed for this season."}
             </p>
-            <p className="mt-5 text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg">
-              Thank you for your interest — season updates and future registrations will be posted in our Discord community.
+            <p className="text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg">
+              {substitutePoolOpen
+                ? "Substitutes are considered for open roster spots — no entry fee required. Sign in, link Steam and Discord if you have not already, then open Tournaments in your dashboard."
+                : "Thank you for your interest — season updates and future registrations will be posted in our Discord community."}
             </p>
-            <p className="mt-6 text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
-              If you used a link from your email to continue registration or open the Complete payment flow, that route is unavailable while sign-ups are
-              closed. For questions about an existing signup, reach out on Discord.
-            </p>
-            {message ? (
-              <p
-                className="mx-auto mt-8 max-w-md rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm font-medium text-destructive dark:border-destructive/40 dark:bg-destructive/15"
-                role="alert"
-              >
-                {message}
-              </p>
-            ) : null}
-            {coSponsor ? (
-              <div className="mx-auto mt-8 max-w-md">
-                <CoSponsorSpotlight sponsor={coSponsor} variant="inline" />
-              </div>
-            ) : null}
-            <div className="mt-12 flex flex-col items-stretch gap-5 sm:items-center">
-              <a
-                className={`${REGISTRATION_DISCORD_BTN_CLASS} w-full justify-center rounded-xl px-8 py-4 text-lg font-semibold shadow-lg sm:w-auto sm:min-w-[min(92vw,22rem)] md:py-5 md:text-xl`}
-                href={discordUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Join the Discord server
-              </a>
-              <a
-                className="break-all text-center text-sm font-medium text-secondary underline underline-offset-4 transition hover:text-foreground sm:text-base"
-                href={discordUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
+            {message ? <p className="reg-page__alert" role="alert">{message}</p> : null}
+            <div className="mt-10 flex flex-col items-stretch gap-4 sm:items-center">
+              {substitutePoolOpen ? (
+                <>
+                  <Link to="/login" className={`${REGISTRATION_DISCORD_BTN_CLASS} reg-page__cta w-full sm:w-auto`}>
+                    Sign in to join substitute pool
+                  </Link>
+                  <Link to="/dashboard/tournaments" className="text-sm font-medium text-secondary underline underline-offset-4">
+                    Go to player dashboard → Tournaments
+                  </Link>
+                </>
+              ) : (
+                <a className={`${REGISTRATION_DISCORD_BTN_CLASS} reg-page__cta w-full sm:w-auto`} href={discordUrl} target="_blank" rel="noreferrer">
+                  Join the Discord server
+                </a>
+              )}
+              <a className="break-all text-center text-sm text-muted-foreground underline underline-offset-4" href={discordUrl} target="_blank" rel="noreferrer">
                 {discordUrl}
               </a>
             </div>
-            <p className="mt-12 text-sm text-muted-foreground">
-              Email{" "}
-              <a className="text-secondary underline underline-offset-2 hover:text-foreground" href={`mailto:${PUBLIC_CONTACT_EMAIL}`}>
-                {PUBLIC_CONTACT_EMAIL}
-              </a>{" "}
-              for other inquiries.
-            </p>
           </div>
         </div>
       </div>
@@ -2569,8 +2802,12 @@ export function RegistrationPage({ event, message, setMessage }) {
   const showDone = step === "done";
   const showPaymentTabOtpHint = regTab === "payment" && step === "otp";
 
+  const flowStepIndex = registrationFlowStepIndex(step, regTab);
+
   return (
-    <div className="space-y-4 rounded-lg border border-border/40 bg-card/58 p-4 shadow-sm backdrop-blur-xl sm:p-5 dark:border-border/35 dark:bg-card/52">
+    <div className="reg-page">
+      <div className="reg-page__shell">
+        <div className="reg-page__inner">
       <RegistrationTermsModal
         open={showTerms}
         busy={busy}
@@ -2598,35 +2835,30 @@ export function RegistrationPage({ event, message, setMessage }) {
       />
       <PaymentQrModal open={showQrModal} onClose={() => setShowQrModal(false)} src={qrImage} />
 
-      <div>
-        <h2 className="font-serif text-2xl">Register for {tournament?.name || SITE_BRAND_LINE}</h2>
-        <p className="text-sm text-muted-foreground">
-          Multi-step registration: verify your email, receive your tournament ID, then upload payment proof for admin review. Already verified and only need to pay? Use the Complete payment tab.
+      <header className="reg-page__hero">
+        <p className="reg-page__eyebrow">Player registration</p>
+        <h1 className="reg-page__title">{tournament?.name || SITE_BRAND_LINE}</h1>
+        <p className="reg-page__lead">
+          Three quick steps: submit your details, verify email, then upload payment proof. Already verified? Jump to Complete payment.
         </p>
-        {coSponsor ? <CoSponsorSpotlight sponsor={coSponsor} variant="inline" /> : null}
-        <p className="mt-2 text-xs uppercase tracking-wider text-secondary">{stepLabel}</p>
-        {registrationDeadline ? (
-          <p className="mt-2 rounded-md border border-border bg-background p-2 text-sm text-secondary">
-            Registrations will be closed on {new Date(registrationDeadline).toLocaleString()}. Follow Discord for any updates or extensions.
-          </p>
-        ) : null}
-      </div>
+        <div className="reg-page__meta">
+          <span className="reg-page__chip">{stepLabel}</span>
+          {registrationDeadline ? (
+            <span className="reg-page__chip">
+              Closes {new Date(registrationDeadline).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+            </span>
+          ) : null}
+        </div>
+        <RegistrationFlowSteps activeIndex={flowStepIndex} />
+      </header>
 
       {!resumeLoading ? (
-        <div
-          className="inline-flex max-w-full flex-wrap gap-2 rounded-xl border-2 border-foreground/12 bg-muted/70 p-1.5 shadow-sm dark:border-border dark:bg-muted/50"
-          role="tablist"
-          aria-label="Registration type"
-        >
+        <div className="reg-page__tabs" role="tablist" aria-label="Registration type">
           <button
             type="button"
             role="tab"
             aria-selected={regTab === "new"}
-            className={`shrink-0 rounded-lg px-3 py-2 text-center text-xs font-semibold tracking-tight whitespace-nowrap transition sm:px-4 sm:text-sm ${
-              regTab === "new"
-                ? "bg-primary text-primary-foreground shadow-md ring-2 ring-primary/35 ring-offset-2 ring-offset-background"
-                : "border-2 border-border/80 bg-card text-foreground shadow-sm hover:border-primary/40 hover:bg-background dark:border-border dark:bg-card/90 dark:hover:border-primary/35"
-            }`}
+            className={`reg-page__tab${regTab === "new" ? " is-active" : ""}`}
             onClick={() => setRegTab("new")}
           >
             New registration
@@ -2635,11 +2867,7 @@ export function RegistrationPage({ event, message, setMessage }) {
             type="button"
             role="tab"
             aria-selected={regTab === "payment"}
-            className={`shrink-0 rounded-lg px-3 py-2 text-center text-xs font-semibold tracking-tight whitespace-nowrap transition sm:px-4 sm:text-sm ${
-              regTab === "payment"
-                ? "bg-primary text-primary-foreground shadow-md ring-2 ring-primary/35 ring-offset-2 ring-offset-background"
-                : "border-2 border-border/80 bg-card text-foreground shadow-sm hover:border-primary/40 hover:bg-background dark:border-border dark:bg-card/90 dark:hover:border-primary/35"
-            }`}
+            className={`reg-page__tab${regTab === "payment" ? " is-active" : ""}`}
             onClick={() => setRegTab("payment")}
           >
             Complete payment
@@ -2647,40 +2875,36 @@ export function RegistrationPage({ event, message, setMessage }) {
         </div>
       ) : null}
 
+      <div className="reg-page__body">
       {resumeLoading ? <p className="text-sm text-muted-foreground">Checking for a saved registration…</p> : null}
-      {message ? (
-        <p
-          className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm font-medium text-destructive dark:border-destructive/40 dark:bg-destructive/15"
-          role="alert"
-        >
-          {message}
-        </p>
-      ) : null}
+      {message ? <p className="reg-page__alert" role="alert">{message}</p> : null}
 
       {showPaymentTabOtpHint ? (
-        <p className="rounded-md border border-border bg-background p-3 text-sm text-muted-foreground">
+        <p className="reg-page__panel text-sm text-muted-foreground">
           Finish entering your <strong className="text-foreground">verification code</strong> on the <strong className="text-foreground">New registration</strong> tab first.
         </p>
       ) : null}
 
       {step === "done" && !resumeLoading ? (
-        <div className="space-y-2 rounded-md border border-border bg-background p-4 text-sm">
-          <p className="font-medium text-foreground">Thank you — your registration is under review.</p>
-          <p className="text-muted-foreground">
+        <div className="reg-page__panel reg-page__success">
+          <p className="reg-page__success-title">Thank you — your registration is under review.</p>
+          <p className="text-sm text-muted-foreground">
             We emailed you a confirmation. Admins will verify your payment and approve or reject your registration; you will get another email when the decision is made.
           </p>
         </div>
       ) : null}
 
       {showNewForm && !resumeLoading ? (
-        <form className="space-y-4" onSubmit={onFormSubmit}>
-          <div className="grid gap-3 md:grid-cols-2">
+        <form className="reg-page__panel" onSubmit={onFormSubmit}>
+          <h2 className="reg-page__panel-title">Player details</h2>
+          <p className="reg-page__panel-sub">Tell us who you are on Steam and Discord — admins use this for roster verification.</p>
+          <div className="reg-page__form-grid">
             <Input label="Email" type="email" value={form.email} onChange={(v) => setForm((prev) => ({ ...prev, email: v }))} required />
             <Input label="Name" value={form.name} onChange={(v) => setForm((prev) => ({ ...prev, name: v }))} required />
             <Input label="City / region (optional)" value={form.location} onChange={(v) => setForm((prev) => ({ ...prev, location: v }))} />
             <Input label="Phone number" type="tel" value={form.phoneNumber} onChange={(v) => setForm((prev) => ({ ...prev, phoneNumber: v }))} required />
             <Input label="Discord ID" value={form.discordHandle} onChange={(v) => setForm((prev) => ({ ...prev, discordHandle: v }))} required />
-            <p className="text-xs text-muted-foreground md:col-span-2 -mt-2">
+            <p className="reg-page__span-2 text-xs text-muted-foreground -mt-1">
               Format examples: legacy tag <span className="font-mono text-foreground">Name#1234</span>, handle <span className="font-mono text-foreground">my_handle</span>, or numeric ID{" "}
               <span className="font-mono text-foreground">766262940060823456</span>.
             </p>
@@ -2693,21 +2917,15 @@ export function RegistrationPage({ event, message, setMessage }) {
               required
               placeholder="https://steamcommunity.com/profiles/76561198912345678"
             />
-            <p className="text-xs text-muted-foreground md:col-span-2 -mt-2">
-              Must be a <span className="font-mono text-foreground">steamcommunity.com</span> profile link, e.g.{" "}
-              <span className="font-mono text-foreground">https://steamcommunity.com/profiles/76561198912345678</span> or{" "}
-              <span className="font-mono text-foreground">https://steamcommunity.com/id/yourname</span> — you can paste with or
-              without <span className="font-mono text-foreground">https://</span>.
+            <p className="reg-page__span-2 text-xs text-muted-foreground -mt-1">
+              Must be a <span className="font-mono text-foreground">steamcommunity.com</span> profile link — paste with or without <span className="font-mono text-foreground">https://</span>.
             </p>
           </div>
-          <div>
-            <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-3">
-              <span className="text-sm font-medium">Roles</span>
-              <span className="text-xs leading-snug text-muted-foreground sm:max-w-xl">
-                (Select one or more roles to assign to your id.)
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-2">
+          <div className="reg-page__form-grid reg-page__form-grid--roles mt-4">
+            <div>
+              <p className="text-sm font-medium">Roles</p>
+              <p className="text-xs text-muted-foreground">Select one or more positions you can play.</p>
+              <div className="reg-page__roles mt-2">
               {roles.map((role) => {
                 const selected = form.roles.includes(role);
                 const breatheHint = form.roles.length === 0;
@@ -2716,17 +2934,18 @@ export function RegistrationPage({ event, message, setMessage }) {
                     key={role}
                     type="button"
                     onClick={() => toggleRole(role)}
-                    className={`btn btn-sm ${selected ? "btn-primary" : "btn-outline"} ${breatheHint ? "registration-role-breathe" : ""}`}
+                    className={`btn btn-sm reg-page__role ${selected ? "btn-primary is-selected" : "btn-outline"} ${breatheHint ? "registration-role-breathe" : ""}`}
                   >
                     {role}
                   </button>
                 );
               })}
+              </div>
             </div>
-            <div className="mt-4 flex justify-end">
-              <button type="submit" className={REGISTRATION_CONTINUE_BTN_CLASS} disabled={registrationGated || busy}>
+            <div className="reg-page__actions">
+              <button type="submit" className={`${REGISTRATION_CONTINUE_BTN_CLASS} reg-page__cta`} disabled={registrationGated || busy}>
                 {busy ? <RegistrationButtonSpinner /> : null}
-                {registrationGated ? "Registration closed" : busy ? "Continuing…" : "Continue"}
+                {registrationGated ? "Registration closed" : busy ? "Continuing…" : "Continue to verification"}
               </button>
             </div>
           </div>
@@ -2734,39 +2953,37 @@ export function RegistrationPage({ event, message, setMessage }) {
       ) : null}
 
       {showPaymentGate && !resumeLoading ? (
-        <form className="space-y-4" onSubmit={onLoadPaymentSession}>
-          <p className="text-sm text-muted-foreground">
+        <form className="reg-page__panel reg-page__panel--accent" onSubmit={onLoadPaymentSession}>
+          <h2 className="reg-page__panel-title">Resume payment</h2>
+          <p className="reg-page__panel-sub">
             Enter the same email you registered with and your <strong className="text-foreground">registration ID</strong> (for example BPC-012) from your verification email.
           </p>
-          <Input label="Email" type="email" value={paymentLookupEmail} onChange={setPaymentLookupEmail} required />
-          <Input label="Registration ID" value={paymentLookupCode} onChange={setPaymentLookupCode} required />
-          <div className="flex justify-end">
-            <button type="submit" className={REGISTRATION_CONTINUE_BTN_CLASS} disabled={busy || registrationGated}>
+          <div className="reg-page__form-grid">
+            <Input label="Email" type="email" value={paymentLookupEmail} onChange={setPaymentLookupEmail} required />
+            <Input label="Registration ID" value={paymentLookupCode} onChange={setPaymentLookupCode} required />
+          </div>
+          <div className="reg-page__actions">
+            <button type="submit" className={`${REGISTRATION_CONTINUE_BTN_CLASS} reg-page__cta`} disabled={busy || registrationGated}>
               {busy ? <RegistrationButtonSpinner /> : null}
-              {registrationGated ? "Registration closed" : busy ? "Continuing…" : "Continue"}
+              {registrationGated ? "Registration closed" : busy ? "Continuing…" : "Continue to payment"}
             </button>
           </div>
         </form>
       ) : null}
 
       {showOtp && !resumeLoading ? (
-        <form className="space-y-4" onSubmit={onVerifyOtp}>
-          <div className="rounded-lg border border-border bg-background p-4 sm:p-5">
-            <p className="font-serif text-xl font-semibold text-foreground sm:text-2xl">Check your email — including Spam</p>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              We sent a 6-digit code to <span className="font-medium text-foreground">{form.email}</span>. If you do not see it within a few minutes, look in your{" "}
-              <strong className="text-foreground">spam</strong>, <strong className="text-foreground">junk</strong>, or <strong className="text-foreground">Promotions</strong> folder and
-              mark the message as “not spam” so future mail arrives in your inbox.
-            </p>
-          </div>
-          <p className="text-sm text-muted-foreground">Enter the code below when you have it.</p>
+        <form className="reg-page__panel reg-page__panel--accent" onSubmit={onVerifyOtp}>
+          <h2 className="reg-page__panel-title">Check your email</h2>
+          <p className="reg-page__panel-sub">
+            We sent a 6-digit code to <span className="font-medium text-foreground">{form.email}</span>. Check spam, junk, or Promotions if it does not arrive within a few minutes.
+          </p>
           {devOtpHint ? (
-            <p className="rounded-md border border-dashed border-primary/40 bg-primary/5 p-2 text-sm text-muted-foreground">
+            <p className="mb-3 rounded-md border border-dashed border-primary/40 bg-primary/5 p-2 text-sm text-muted-foreground">
               Dev mode: use OTP <span className="font-mono text-foreground">{devOtpHint}</span> (email send skipped).
             </p>
           ) : null}
           <Input label="Verification code" value={otp} onChange={setOtp} required />
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="reg-page__actions">
             <button
               type="button"
               className="btn btn-outline"
@@ -2779,28 +2996,30 @@ export function RegistrationPage({ event, message, setMessage }) {
             >
               Edit details
             </button>
-            <button type="submit" className={REGISTRATION_CONTINUE_BTN_CLASS} disabled={busy}>
+            <button type="submit" className={`${REGISTRATION_CONTINUE_BTN_CLASS} reg-page__cta`} disabled={busy}>
               {busy ? <RegistrationButtonSpinner /> : null}
-              {busy ? "Continuing…" : "Continue"}
+              {busy ? "Continuing…" : "Verify & continue"}
             </button>
           </div>
         </form>
       ) : null}
 
       {showPayment && !resumeLoading ? (
-        <form className="space-y-4" onSubmit={onCompletePayment}>
-          <div className="rounded-md border border-border bg-background p-4 text-sm">
-            <p className="text-xs uppercase tracking-wider text-secondary">Your registration ID</p>
-            <p className="mt-1 font-mono text-lg text-primary">{publicCode}</p>
-            <p className="mt-2 text-muted-foreground">Keep this ID — you will use it in your UPI payment note.</p>
+        <form className="reg-page__panel" onSubmit={onCompletePayment}>
+          <h2 className="reg-page__panel-title">Upload payment proof</h2>
+          <p className="reg-page__panel-sub">Pay the registration fee, then upload a screenshot so admins can approve your spot.</p>
+
+          <div className="reg-page__id-card">
+            <p className="reg-page__id-label">Your registration ID</p>
+            <p className="reg-page__id-value">{publicCode}</p>
+            <p className="text-sm text-muted-foreground">Add this ID in your UPI payment note.</p>
           </div>
 
-          <div className="rounded-lg border border-primary/35 bg-primary/10 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-secondary">Registration fee</p>
-            <p className="mt-2 text-xl font-semibold text-foreground">{registrationFeeDisplay || "See tournament announcement or Discord"}</p>
-            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-              In your UPI app, add this registration ID in the payment note when you send the fee, using the same format you received (for example{" "}
-              <span className="font-mono font-medium text-foreground">{publicCode || "BPC-001"}</span>) so admins can match your payment to your registration.
+          <div className="reg-page__fee mt-4">
+            <p className="reg-page__id-label">Registration fee</p>
+            <p className="reg-page__fee-amount">{registrationFeeDisplay || "See tournament announcement or Discord"}</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Use ID <span className="font-mono font-medium text-foreground">{publicCode || "BPC-001"}</span> in the payment note so admins can match your transfer.
             </p>
           </div>
 
@@ -2878,35 +3097,33 @@ export function RegistrationPage({ event, message, setMessage }) {
           {paymentScreenshot ? (
             <img src={paymentScreenshot} alt="Payment screenshot preview" className="max-h-48 rounded-md border border-border object-contain" />
           ) : null}
-          <div className="flex justify-end">
-            <button type="submit" className={REGISTRATION_CONTINUE_BTN_CLASS} disabled={busy || registrationGated || !paymentScreenshot}>
+          <div className="reg-page__actions">
+            <button type="submit" className={`${REGISTRATION_CONTINUE_BTN_CLASS} reg-page__cta`} disabled={busy || registrationGated || !paymentScreenshot}>
               {busy ? <RegistrationButtonSpinner /> : null}
-              {busy ? "Continuing…" : "Continue"}
+              {busy ? "Submitting…" : "Submit registration"}
             </button>
           </div>
         </form>
       ) : null}
 
-      <div className="mt-8 space-y-4 border-t border-border pt-6">
-        <div className="flex justify-end">
-          <div className="max-w-md text-right">
-            <a className={REGISTRATION_DISCORD_BTN_CLASS} href={discordUrl} target="_blank" rel="noreferrer">
-              Join Discord for match updates
+      <div className="reg-page__panel mt-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            Registration questions?{" "}
+            <a className="text-secondary underline underline-offset-2 hover:text-foreground" href={`mailto:${PUBLIC_CONTACT_EMAIL}`}>
+              {PUBLIC_CONTACT_EMAIL}
             </a>
-            <p className="mt-3 rounded-md border-2 border-secondary/60 bg-secondary/20 px-3 py-2 text-left text-sm font-semibold text-foreground sm:text-right">
-              Mandatory: join the Discord server to receive pairings, rules, and admin messages for this event.
-            </p>
-          </div>
-        </div>
-        <p className="text-center text-xs text-muted-foreground sm:text-left">
-          Registration questions?{" "}
-          <a
-            className="text-secondary underline underline-offset-2 hover:text-foreground"
-            href={`mailto:${PUBLIC_CONTACT_EMAIL}`}
-          >
-            {PUBLIC_CONTACT_EMAIL}
+          </p>
+          <a className={REGISTRATION_DISCORD_BTN_CLASS} href={discordUrl} target="_blank" rel="noreferrer">
+            Join Discord
           </a>
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Discord is mandatory for pairings, rules, and admin messages during the event.
         </p>
+      </div>
+      </div>
+        </div>
       </div>
     </div>
   );

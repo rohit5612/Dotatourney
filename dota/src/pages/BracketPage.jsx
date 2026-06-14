@@ -3,7 +3,18 @@ import { BracketDiagram } from "../components/BracketDiagram";
 import { BracketStageTabs } from "../components/navigation/TournamentTabs.jsx";
 import { GroupAssignmentPanel } from "../components/GroupAssignmentPanel.jsx";
 import { normalizedBlastBracketTabs } from "../components/bracket/bracketLayout.js";
+import { resolveBracketTabs } from "../utils/engineBracketTabs.js";
 import { formatUsesGroupAssignment, isGroupAssignmentValid } from "../utils/groupAssignment.js";
+import { AdminGlassPanel } from "../admin/components/AdminGlassPanel.jsx";
+
+function summarizeEngineConfig(config) {
+  if (!config?.stages?.length) return null;
+  const lines = [`${config.teamCount} teams · ${String(config.format || "").toUpperCase()}`];
+  for (const stage of config.stages) {
+    lines.push(`• ${stage.label || stage.key} (${stage.type})`);
+  }
+  return lines.join("\n");
+}
 
 export function BracketPage({
   state,
@@ -37,10 +48,11 @@ export function BracketPage({
   const selectedRoster = rosters.find((roster) => roster.id === (selectedRosterId || approvedRoster?.id));
   const approvedRosterSummary = rosters.find((roster) => roster.id === approvedRoster?.id);
   const selectedRosterReady = selectedRoster && (!requiredTeamCount || selectedRoster.teamCount === requiredTeamCount);
+  const engineConfig = setup?.engineConfig || state?.tournament?.engine_config || null;
   const groupsReady =
-    !formatUsesGroupAssignment(setup?.format) ||
+    !formatUsesGroupAssignment(setup?.format, engineConfig) ||
     mode === "demo" ||
-    isGroupAssignmentValid(approvedRoster?.teams || []);
+    isGroupAssignmentValid(approvedRoster?.teams || [], engineConfig);
   const canGenerateTournament =
     mode === "demo" ||
     (!bracketActive &&
@@ -52,10 +64,11 @@ export function BracketPage({
       ? `Demo mode will generate placeholder teams from the ${requiredTeamCount}-team ${setup?.format?.toUpperCase() || "configured"} format for the public bracket map.`
       : "Tournament mode will generate real matches from the currently approved roster.";
 
-  const displayTabs = useMemo(
-    () => normalizedBlastBracketTabs(setup?.format || "", state?.tabs || []),
-    [setup?.format, state?.tabs],
-  );
+  const engineSummary = summarizeEngineConfig(setup?.engineConfig || state?.tournament?.engine_config);
+  const displayTabs = useMemo(() => {
+    const raw = resolveBracketTabs(setup?.format || "", state?.tabs, engineConfig);
+    return normalizedBlastBracketTabs(setup?.format || "", raw);
+  }, [setup?.format, engineConfig, state?.tabs]);
 
   const blastPlayoffQuarterRows = useMemo(
     () => (groupedMatches["blast-playoffs"] || []).filter((m) => (m.roundIndex ?? 0) === 0),
@@ -112,10 +125,17 @@ export function BracketPage({
   }
 
   return (
-    <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+    <div className="admin-page-stack">
+    <AdminGlassPanel className="space-y-4">
+      {engineSummary ? (
+        <div className="rounded-md border border-border/50 bg-background/30 p-3 text-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tournament engine</p>
+          <pre className="mt-1 whitespace-pre-wrap font-sans text-foreground">{engineSummary}</pre>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-serif text-lg">Bracket</h2>
+          <h2 className="admin-section-title">Bracket</h2>
           <div className="text-sm text-muted-foreground">
             {completedMatches}/{totalMatches} completed ({completionPct}%)
           </div>
@@ -211,16 +231,18 @@ export function BracketPage({
           {selectedRoster && !selectedRosterReady ? (
             <p className="text-xs text-destructive">Selected roster needs exactly {requiredTeamCount} teams before approval.</p>
           ) : null}
-          {mode === "tournament" && formatUsesGroupAssignment(setup?.format) && approvedRoster && !groupsReady ? (
-            <p className="text-xs text-destructive">Assign and save Group A / Group B before generating the bracket.</p>
+          {mode === "tournament" && formatUsesGroupAssignment(setup?.format, engineConfig) && approvedRoster && !groupsReady ? (
+            <p className="text-xs text-destructive">Assign and save groups before generating the bracket.</p>
           ) : null}
         </div>
       </section>
       {mode === "tournament" ? (
         <GroupAssignmentPanel
           format={setup?.format}
+          engineConfig={engineConfig}
           approvedRoster={approvedRoster}
           bracketActive={bracketActive}
+          bracketGenerated={totalMatches > 0}
           onSave={saveGroupAssignments}
           disabled={!approvedRoster}
         />
@@ -242,6 +264,7 @@ export function BracketPage({
         playoffFeedMatches={activeTab === "blast-qualifiers" ? blastPlayoffQuarterRows : undefined}
         blastSeedMatches={state?.matches ?? []}
       />
+    </AdminGlassPanel>
     </div>
   );
 }

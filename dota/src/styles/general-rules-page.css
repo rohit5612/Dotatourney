@@ -1,244 +1,528 @@
-@import "./landing-panel.css";
+/* /rules — liquid glass rulebook document (rules.jpg background via PageContentShell) */
 
-/* /rules — general player conduct (landing glass theme) */
-.general-rules-page {
+.rules-page-layout {
+  --rules-content-max: min(86.5rem, calc(100vw - 2rem));
+  --rules-glass-bg: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.68) 0%,
+    rgba(255, 255, 255, 0.52) 45%,
+    rgba(248, 250, 252, 0.42) 100%
+  );
+  --rules-glass-bg-strong: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.74) 0%,
+    rgba(255, 255, 255, 0.56) 55%,
+    rgba(248, 250, 252, 0.48) 100%
+  );
+  --rules-glass-border: rgba(255, 255, 255, 0.55);
+  --rules-glass-border-soft: rgba(15, 23, 42, 0.1);
+  --rules-glass-highlight: rgba(255, 255, 255, 0.72);
+  --rules-glass-shadow:
+    0 12px 40px rgba(15, 23, 42, 0.1),
+    0 4px 14px rgba(15, 23, 42, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.22);
+  --rules-glass-blur: blur(36px) saturate(185%);
+  --rules-text-shadow: none;
+  --rules-body-text: var(--foreground);
+  --rules-muted-text: color-mix(in srgb, var(--foreground) 78%, var(--muted-foreground));
+  --rules-rule-color: color-mix(in srgb, var(--foreground) 18%, transparent);
+  --rules-divider-strong: color-mix(in srgb, var(--foreground) 26%, transparent);
+  --rules-section-bg: rgba(255, 255, 255, 0.14);
+  --rules-section-bg-alt: rgba(255, 255, 255, 0.22);
+  --rules-section-inset: rgba(255, 255, 255, 0.1);
+  --rules-accent-surface: color-mix(in srgb, var(--primary) 12%, rgba(255, 255, 255, 0.42));
+  --rules-accent-border: color-mix(in srgb, var(--primary) 22%, rgba(15, 23, 42, 0.12));
+
   display: flex;
   flex-direction: column;
-  gap: clamp(1rem, 3vw, 1.35rem);
-  padding-bottom: clamp(2rem, 5vh, 3rem);
+  gap: clamp(0.75rem, 2vw, 1.25rem);
+  padding-bottom: clamp(2rem, 5vh, 3.5rem);
+  color: var(--foreground);
 }
 
-.general-rules-intro {
-  padding: clamp(1.35rem, 3.5vw, 1.85rem) clamp(1.25rem, 4vw, 2rem);
+.dark .rules-page-layout,
+:root:not([data-season="emerald"]) .rules-page-layout {
+  --rules-glass-bg: linear-gradient(
+    145deg,
+    rgba(12, 16, 28, 0.58) 0%,
+    rgba(8, 10, 18, 0.48) 50%,
+    rgba(6, 8, 14, 0.42) 100%
+  );
+  --rules-glass-bg-strong: linear-gradient(
+    145deg,
+    rgba(14, 18, 32, 0.64) 0%,
+    rgba(8, 10, 18, 0.52) 55%,
+    rgba(6, 8, 14, 0.46) 100%
+  );
+  --rules-glass-border: rgba(255, 255, 255, 0.2);
+  --rules-glass-border-soft: rgba(255, 255, 255, 0.11);
+  --rules-glass-highlight: rgba(255, 255, 255, 0.14);
+  --rules-glass-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.32),
+    0 4px 14px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03);
+  --rules-glass-blur: blur(38px) saturate(165%);
+  --rules-text-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --rules-body-text: rgba(248, 250, 252, 0.98);
+  --rules-muted-text: rgba(226, 232, 240, 0.92);
+  --rules-rule-color: rgba(255, 255, 255, 0.16);
+  --rules-divider-strong: rgba(255, 255, 255, 0.22);
+  --rules-section-bg: rgba(255, 255, 255, 0.04);
+  --rules-section-bg-alt: rgba(255, 255, 255, 0.07);
+  --rules-section-inset: rgba(255, 255, 255, 0.05);
+  --rules-accent-surface: color-mix(in srgb, var(--primary) 18%, rgba(255, 255, 255, 0.06));
+  --rules-accent-border: color-mix(in srgb, var(--primary) 32%, rgba(255, 255, 255, 0.16));
 }
 
-.general-rules-intro__title {
-  margin: 0.5rem 0 0;
+.rules-page {
+  width: 100%;
+  max-width: var(--rules-content-max);
+  margin-inline: auto;
+  padding: 0 clamp(1rem, 3vw, 2rem);
+}
+
+/* Shared liquid glass surface */
+.rules-glass {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 1.25rem;
+  border: 1px solid var(--rules-glass-border);
+  background: var(--rules-glass-bg);
+  backdrop-filter: var(--rules-glass-blur);
+  -webkit-backdrop-filter: var(--rules-glass-blur);
+  box-shadow: var(--rules-glass-shadow);
+}
+
+.rules-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    125deg,
+    var(--rules-glass-highlight) 0%,
+    transparent 38%,
+    transparent 72%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  opacity: 0.28;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.rules-page__document.rules-glass {
+  background: var(--rules-glass-bg-strong);
+  backdrop-filter: var(--rules-glass-blur);
+  -webkit-backdrop-filter: var(--rules-glass-blur);
+}
+
+.rules-glass > * {
+  position: relative;
+  z-index: 1;
+}
+
+.rules-glass--strong {
+  background: var(--rules-glass-bg-strong);
+}
+
+/* Hero — compact, defers to document */
+.rules-page__hero-band {
+  position: relative;
+  left: 50%;
+  width: 100vw;
+  transform: translateX(-50%);
+  min-height: 24vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: calc(var(--site-navbar-offset, 5.5rem) + 1.25rem) clamp(1rem, 3vw, 2rem)
+    clamp(1.15rem, 2.5vh, 1.65rem);
+  overflow: hidden;
+  border-bottom: 1px solid var(--rules-glass-border-soft);
+}
+
+.rules-page__hero-band-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--background) 84%, transparent) 0%,
+    color-mix(in srgb, var(--background) 52%, transparent) 45%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+.rules-page__hero-inner {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: var(--rules-content-max);
+  margin-inline: auto;
+}
+
+.rules-page__eyebrow {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--secondary);
+}
+
+.rules-page__hero-title {
+  margin: 0.4rem 0 0;
   font-family: var(--font-serif);
-  font-size: clamp(1.75rem, 4.5vw, 2.5rem);
+  font-size: clamp(1.65rem, 4.5vw, 2.35rem);
   font-weight: 650;
   letter-spacing: -0.03em;
   line-height: 1.1;
   color: var(--foreground);
 }
 
-.general-rules-intro__lead {
-  margin: 0.75rem 0 0;
-  max-width: 42rem;
-  font-size: 0.9375rem;
-  line-height: 1.55;
-  color: var(--muted-foreground);
+.rules-page__hero-lead {
+  margin: 0.65rem 0 0;
+  max-width: 62rem;
+  font-size: clamp(0.9375rem, 2vw, 1rem);
+  line-height: 1.6;
+  color: var(--rules-muted-text);
 }
 
-.general-rules-intro__notice {
-  margin: 1rem 0 0;
-  border-radius: 0.85rem;
-  border: 1px solid color-mix(in srgb, var(--secondary) 32%, rgb(255 255 255 / 0.08));
-  background: linear-gradient(135deg, rgb(255 255 255 / 0.04) 0%, rgb(0 0 0 / 0.25) 100%);
-  padding: 0.85rem 1rem;
-  font-size: 0.875rem;
-  line-height: 1.55;
-  color: color-mix(in srgb, var(--foreground) 92%, white);
-  box-shadow: 0 0 24px color-mix(in srgb, var(--secondary) 8%, transparent);
-}
-
-.general-rules-intro__rulebook {
-  margin: 1.15rem 0 0;
-  max-width: 36rem;
-}
-
-.general-rules-rulebook-card {
+.rules-page__hero-meta {
+  margin-top: 0.85rem;
   display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.85rem;
   align-items: center;
-  gap: 0.9rem 1rem;
-  width: 100%;
-  padding: 0.9rem 1rem 0.9rem 0.95rem;
-  border-radius: 0.95rem;
-  border: 1px solid color-mix(in srgb, var(--primary) 28%, rgb(255 255 255 / 0.1));
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--primary) 14%, rgb(255 255 255 / 0.04)) 0%,
-    rgb(0 0 0 / 0.28) 55%,
-    rgb(0 0 0 / 0.38) 100%
-  );
+}
+
+.rules-page__stat {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.85rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--rules-glass-border-soft);
+  background: color-mix(in srgb, var(--rules-glass-bg-strong) 90%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--rules-body-text);
   text-decoration: none;
-  color: inherit;
-  box-shadow:
-    0 1px 0 rgb(255 255 255 / 0.07) inset,
-    0 12px 28px rgb(0 0 0 / 0.32),
-    0 0 32px color-mix(in srgb, var(--primary) 10%, transparent);
-  transition:
-    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    border-color 220ms ease,
-    box-shadow 280ms ease,
-    background 280ms ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  transition: border-color 180ms ease, background 180ms ease;
 }
 
-.general-rules-rulebook-card:hover {
-  transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--primary) 48%, var(--secondary) 22%);
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--primary) 22%, rgb(255 255 255 / 0.06)) 0%,
-    rgb(0 0 0 / 0.22) 50%,
-    rgb(0 0 0 / 0.34) 100%
-  );
-  box-shadow:
-    0 1px 0 rgb(255 255 255 / 0.1) inset,
-    0 16px 36px rgb(0 0 0 / 0.4),
-    0 0 40px color-mix(in srgb, var(--primary) 18%, transparent);
+a.rules-page__stat:hover {
+  border-color: var(--rules-accent-border);
+  background: var(--rules-accent-surface);
 }
 
-.general-rules-rulebook-card:focus-visible {
+/* ── Rulebook document ── */
+.rules-page__document {
+  border-radius: 1rem 1.35rem 1.35rem 1rem;
+  border-left: 4px solid color-mix(in srgb, var(--primary) 55%, var(--rules-glass-border));
+}
+
+.rules-page__doc-cover {
+  padding: clamp(1.35rem, 3.5vw, 1.85rem) clamp(1.35rem, 4vw, 2rem) clamp(1.15rem, 3vw, 1.45rem);
+  text-align: center;
+  border-bottom: 1px solid var(--rules-divider-strong);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--rules-glass-highlight) 35%, transparent);
+}
+
+.rules-page__doc-edition {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--secondary);
+}
+
+.rules-page__doc-title {
+  margin: 0.45rem 0 0;
+  font-family: var(--font-serif);
+  font-size: clamp(1.35rem, 3.5vw, 1.75rem);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--foreground);
+}
+
+.rules-page__doc-subtitle {
+  margin: 0.65rem auto 0;
+  max-width: 58rem;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--rules-muted-text);
+}
+
+.rules-page__doc-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  margin-top: 1rem;
+  padding: 0.55rem 1.1rem;
+  border-radius: 999px;
+  border: 1px solid var(--rules-accent-border);
+  background: var(--rules-accent-surface);
+  font-size: 0.875rem;
+  font-weight: 650;
+  color: var(--primary);
+  text-decoration: none;
+  transition: background 180ms ease, border-color 180ms ease;
+}
+
+.rules-page__doc-download:hover {
+  border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+  background: color-mix(in srgb, var(--primary) 18%, rgba(255, 255, 255, 0.12));
+}
+
+.rules-page__doc-download:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--secondary) 65%, white);
   outline-offset: 3px;
 }
 
-.general-rules-rulebook-card__icon {
-  display: flex;
+.rules-page__doc-download-icon,
+.rules-page__doc-download-arrow {
+  width: 1.05rem;
+  height: 1.05rem;
   flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  border-radius: 0.7rem;
-  border: 1px solid color-mix(in srgb, var(--primary) 35%, rgb(255 255 255 / 0.1));
-  background: linear-gradient(
-    145deg,
-    color-mix(in srgb, var(--primary) 32%, rgb(20 14 8)) 0%,
-    rgb(0 0 0 / 0.45) 100%
-  );
-  color: var(--primary);
-  font-size: 1.35rem;
-  box-shadow: 0 0 20px color-mix(in srgb, var(--primary) 22%, transparent);
 }
 
-.general-rules-rulebook-card__copy {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 0.15rem;
-  min-width: 0;
+/* Table of contents */
+.rules-page__toc {
+  padding: clamp(1rem, 3vw, 1.35rem) clamp(1.35rem, 4vw, 2rem);
+  border-bottom: 1px solid var(--rules-divider-strong);
+  background: var(--rules-section-inset);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--rules-glass-highlight) 28%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
-.general-rules-rulebook-card__eyebrow {
-  font-size: 0.62rem;
-  font-weight: 650;
-  letter-spacing: 0.14em;
+.rules-page__toc-heading {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--muted-foreground);
+  color: var(--rules-muted-text);
 }
 
-.general-rules-rulebook-card__title {
+.rules-page__toc-list {
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+  columns: 1;
+  column-gap: 2rem;
+}
+
+@media (min-width: 540px) {
+  .rules-page__toc-list {
+    columns: 2;
+  }
+}
+
+@media (min-width: 900px) {
+  .rules-page__toc-list {
+    columns: 3;
+  }
+}
+
+.rules-page__toc-list li {
+  break-inside: avoid;
+  margin-bottom: 0.35rem;
+}
+
+.rules-page__toc-link {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: 0.2rem 0;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--rules-body-text);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+.rules-page__toc-link:hover {
+  color: var(--primary);
+  border-bottom-color: color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+.rules-page__toc-num {
+  flex-shrink: 0;
+  min-width: 1.35rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--primary);
+}
+
+/* Articles — linear rulebook body */
+.rules-page__articles {
+  padding: clamp(0.85rem, 2vw, 1.15rem) clamp(1rem, 3vw, 1.35rem) clamp(1.35rem, 3vw, 1.75rem);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(0.55rem, 1.5vw, 0.75rem);
+}
+
+.rules-page__article {
+  padding: clamp(1.2rem, 3vw, 1.55rem) clamp(1.1rem, 2.8vw, 1.45rem);
+  border-radius: 0.8rem;
+  border: 1px solid var(--rules-glass-border-soft);
+  background: var(--rules-section-bg);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 1px 2px rgba(15, 23, 42, 0.03);
+  scroll-margin-top: calc(var(--site-navbar-offset, 5.5rem) + 1rem);
+}
+
+.rules-page__article:nth-child(even) {
+  background: var(--rules-section-bg-alt);
+}
+
+.rules-page__article:last-child {
+  padding-bottom: clamp(1.2rem, 3vw, 1.55rem);
+}
+
+.rules-page__article-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--rules-rule-color);
+}
+
+.rules-page__article-num {
+  flex-shrink: 0;
+  min-width: 2.35rem;
+  padding-right: 0.65rem;
+  margin-right: 0.15rem;
   font-family: var(--font-serif);
-  font-size: 1rem;
+  font-size: clamp(1.1rem, 2.5vw, 1.25rem);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--primary);
+  opacity: 0.92;
+  border-right: 2px solid color-mix(in srgb, var(--primary) 35%, var(--rules-rule-color));
+}
+
+.rules-page__article-title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: clamp(1.125rem, 2.8vw, 1.35rem);
   font-weight: 650;
   letter-spacing: -0.02em;
-  line-height: 1.2;
+  line-height: 1.25;
   color: var(--foreground);
 }
 
-.general-rules-rulebook-card__meta {
-  font-size: 0.75rem;
-  line-height: 1.4;
-  color: var(--muted-foreground);
+.rules-page__article-body {
+  margin: 0;
+  padding-left: calc(2.35rem + 0.65rem + 0.15rem + 0.75rem);
+  font-size: clamp(1rem, 2.1vw, 1.0625rem);
+  font-weight: 450;
+  line-height: 1.78;
+  color: var(--rules-body-text);
+  letter-spacing: 0.01em;
 }
 
-.general-rules-rulebook-card__action {
-  display: none;
-  flex-shrink: 0;
-  flex-direction: column;
+.rules-page__article-note {
+  margin: 0.95rem 0 0;
+  padding: 0.8rem 1rem;
+  margin-left: calc(2.35rem + 0.65rem + 0.15rem + 0.75rem);
+  border-radius: 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--rules-glass-border-soft));
+  border-left: 3px solid color-mix(in srgb, var(--primary) 55%, transparent);
+  background: color-mix(in srgb, var(--primary) 9%, rgba(255, 255, 255, 0.05));
+  font-size: 0.9375rem;
+  line-height: 1.68;
+  color: var(--rules-body-text);
+}
+
+.rules-page__article-link {
+  display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  padding-left: 0.35rem;
-  color: color-mix(in srgb, var(--secondary) 88%, white);
+  gap: 0.3rem;
+  font-weight: 650;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
-.general-rules-rulebook-card__action-icon {
-  width: 1.25rem;
-  height: 1.25rem;
+.rules-page__article-link:hover {
+  color: var(--accent);
 }
 
-.general-rules-rulebook-card__action-label {
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+.rules-page__article-link-icon {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
 }
 
-@media (min-width: 480px) {
-  .general-rules-rulebook-card {
-    padding: 1rem 1.1rem 1rem 1rem;
-    gap: 1rem 1.15rem;
+/* Document footer */
+.rules-page__doc-footer {
+  padding: clamp(1rem, 2.5vw, 1.25rem) clamp(1.35rem, 4vw, 2rem);
+  border-top: 1px solid var(--rules-divider-strong);
+  background: var(--rules-section-inset);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  text-align: center;
+  color: var(--rules-muted-text);
+}
+
+.rules-page__doc-footer a {
+  color: var(--primary);
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.rules-page__doc-footer a:hover {
+  color: var(--accent);
+}
+
+@media (max-width: 479px) {
+  .rules-page__article-body,
+  .rules-page__article-note {
+    padding-left: 0;
+    margin-left: 0;
   }
 
-  .general-rules-rulebook-card__icon {
-    width: 3rem;
-    height: 3rem;
-    font-size: 1.5rem;
+  .rules-page__article-num {
+    min-width: auto;
+    padding-right: 0;
+    margin-right: 0;
+    border-right: none;
   }
 
-  .general-rules-rulebook-card__title {
-    font-size: 1.0625rem;
-  }
-
-  .general-rules-rulebook-card__action {
-    display: flex;
+  .rules-page__article-header {
+    flex-direction: column;
+    gap: 0.25rem;
+    padding-bottom: 0.5rem;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .general-rules-rulebook-card:hover {
-    transform: none;
+  .rules-page__toc-link,
+  .rules-page__doc-download,
+  a.rules-page__stat {
+    transition: none;
   }
-}
-
-.general-rules-page__list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.general-rules-section {
-  padding: clamp(1.1rem, 3vw, 1.35rem) clamp(1.15rem, 3.5vw, 1.5rem);
-}
-
-.general-rules-section__title {
-  margin: 0;
-  font-family: var(--font-serif);
-  font-size: clamp(1.05rem, 2.2vw, 1.2rem);
-  font-weight: 650;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-  color: var(--foreground);
-}
-
-.general-rules-section__body {
-  margin: 0.65rem 0 0;
-  font-size: 0.875rem;
-  line-height: 1.6;
-  color: var(--muted-foreground);
-}
-
-.general-rules-section__discord {
-  margin: 0.85rem 0 0;
-  font-size: 0.875rem;
-  line-height: 1.55;
-  color: var(--foreground);
-}
-
-.general-rules-section__link {
-  font-weight: 650;
-  color: color-mix(in srgb, var(--secondary) 88%, white);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  transition: color 180ms ease;
-}
-
-.general-rules-section__link:hover {
-  color: var(--foreground);
-}
-
-.general-rules-section__link-muted {
-  color: var(--muted-foreground);
 }

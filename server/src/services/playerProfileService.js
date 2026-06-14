@@ -1,12 +1,14 @@
 import { pool } from "../db/pool.js";
+import { syncRegistrationCapState } from "./registrationRepository.js";
 import {
   findAccountBySlug,
-  publicPlayerAccount,
+  publicPlayerProfileAccount,
   publicSteamOnlyProfile,
   getCoinBalance,
 } from "./playerAccountRepository.js";
 import { buildCardManifest } from "./cardManifestService.js";
 import { getOrCreateCommerceConfig, publicCommerceConfig } from "./commerceConfigRepository.js";
+import { getPlayerMatchAppearances, getPlayerMatchSchedule } from "./matchSubstitutionService.js";
 
 export async function getPublicPlayerProfileSteamOnly(slug) {
   const account = await findAccountBySlug(slug);
@@ -69,7 +71,7 @@ export async function getPublicPlayerProfile(slug) {
   const approvedCount = registrations.filter((r) => r.registration_status === "approved").length;
 
   return {
-    account: publicPlayerAccount(account),
+    account: publicPlayerProfileAccount(account),
     card,
     currentTeam,
     career: {
@@ -177,41 +179,16 @@ export async function getPlayerTeamForAccount(playerAccountId) {
 }
 
 export async function getPlayerMatchesForAccount(playerAccountId) {
-  const { team: teamInfo, tournamentId } = await getPlayerTeamForAccount(playerAccountId);
-  if (!teamInfo?.team?.name || !tournamentId) {
-    return { matches: [], teamName: null };
-  }
+  return getPlayerMatchSchedule(playerAccountId);
+}
 
-  const teamName = teamInfo.team.name;
-  const { rows: matches } = await pool.query(
-    `SELECT m.*, ss.start_at, ss.stream AS schedule_stream, ss.status AS schedule_status, ss.notes AS schedule_notes
-     FROM matches m
-     LEFT JOIN schedule_slots ss ON ss.match_id = m.id
-     WHERE m.tournament_id = $1
-       AND (lower(m.team1) = lower($2) OR lower(m.team2) = lower($2))
-     ORDER BY ss.start_at ASC NULLS LAST, m.round_index ASC, m.match_index ASC`,
-    [tournamentId, teamName],
-  );
-
-  return {
-    teamName,
-    tournamentId,
-    matches: matches.map((m) => ({
-      id: m.id,
-      stageKey: m.stage_key,
-      roundIndex: m.round_index,
-      matchIndex: m.match_index,
-      team1: m.team1,
-      team2: m.team2,
-      winner: m.winner,
-      status: m.status,
-      opponent: m.team1.toLowerCase() === teamName.toLowerCase() ? m.team2 : m.team1,
-      startAt: m.start_at,
-      stream: m.schedule_stream || m.stream || "",
-      scheduleStatus: m.schedule_status,
-      notes: m.schedule_notes,
-    })),
-  };
+function cardTierRankSql(column = "card_tier") {
+  return `CASE COALESCE(NULLIF(TRIM(${column}), ''), 'default')
+    WHEN 'holo' THEN 0
+    WHEN 'gold' THEN 1
+    WHEN 'player' THEN 2
+    ELSE 3
+  END`;
 }
 
 export async function getCommunityDirectory({ search = "", limit = 48, offset = 0 } = {}) {
@@ -221,31 +198,53 @@ export async function getCommunityDirectory({ search = "", limit = 48, offset = 
     params.push(`%${search.trim().toLowerCase()}%`);
     where += ` AND (lower(pa.display_name) LIKE $${params.length} OR lower(pa.slug) LIKE $${params.length} OR lower(pa.bpc_id) LIKE $${params.length})`;
   }
-  params.push(Math.min(Math.max(1, limit), 100));
-  params.push(Math.max(0, offset));
 
+  const countParams = [...params];
+  const { rows: countRows } = await pool.query(
+    `SELECT COUNT(*)::int AS total FROM player_accounts pa ${where}`,
+    countParams,
+  );
+  const total = countRows[0]?.total ?? 0;
+
+  const safeLimit = Math.min(Math.max(1, limit), 100);
+  const safeOffset = Math.max(0, offset);
+  params.push(safeLimit);
+  params.push(safeOffset);
+
+  const tierRank = cardTierRankSql("best_card.card_tier");
   const { rows } = await pool.query(
-    `SELECT pa.*
+    `SELECT pa.*, best_card.card_tier AS directory_card_tier
      FROM player_accounts pa
+     LEFT JOIN LATERAL (
+       SELECT pr.card_tier
+       FROM player_registrations pr
+       WHERE pr.player_account_id = pa.id AND pr.archived_at IS NULL
+       ORDER BY ${cardTierRankSql("pr.card_tier")}, pr.created_at DESC
+       LIMIT 1
+     ) best_card ON TRUE
      ${where}
-     ORDER BY pa.display_name ASC NULLS LAST, pa.created_at ASC
+     ORDER BY ${tierRank}, pa.display_name ASC NULLS LAST, pa.created_at ASC
      LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params,
   );
 
   const players = [];
   for (const account of rows) {
-    const card = await buildCardManifest(account);
+    const directoryTier = account.directory_card_tier || "default";
+    const card = await buildCardManifest(account, {
+      cardTier: directoryTier,
+      registration: { card_tier: directoryTier },
+    });
     players.push({
       slug: account.slug,
       bpcId: account.bpc_id,
       displayName: account.display_name || account.slug,
       avatarUrl: account.steam_avatar_url || account.avatar_url || "",
-      cardTier: card?.tier || "default",
+      cardTier: card?.tier || directoryTier,
       card,
     });
   }
-  return { players, limit, offset };
+  return { players, total, limit: safeLimit, offset: safeOffset };
 }
 
 export async function getPlayerDashboardHistory(playerAccountId) {
@@ -256,18 +255,20 @@ export async function getPlayerDashboardHistory(playerAccountId) {
     (await pool.query(`SELECT slug FROM player_accounts WHERE id = $1`, [playerAccountId])).rows[0]?.slug,
   );
   if (!full) return null;
+  const matchAppearances = await getPlayerMatchAppearances(playerAccountId);
   return {
     seasonHistory: full.seasonHistory,
     teamHistory: full.teamHistory,
     registrations: full.registrations,
     career: full.career,
+    matchAppearances,
   };
 }
 
 export async function getUpcomingTournamentsForPlayer(playerAccountId) {
   const { rows } = await pool.query(
-    `SELECT t.id, t.slug, t.name, t.registrations_open, t.start_date, t.end_date,
-            t.entry_fee, t.prize_pool
+    `SELECT t.id, t.slug, t.name, t.registrations_open, t.registration_cap, t.start_date, t.end_date,
+            t.entry_fee, t.prize_pool, t.season_card_bg, t.season_card_badge
      FROM tournaments t
      WHERE t.is_published = TRUE
      ORDER BY t.registrations_open DESC, t.published_at DESC NULLS LAST`,
@@ -277,34 +278,33 @@ export async function getUpcomingTournamentsForPlayer(playerAccountId) {
   for (const t of rows) {
     const commerceRow = await getOrCreateCommerceConfig(t.id);
     const commerce = publicCommerceConfig(commerceRow);
-    const [{ rows: existing }, { rows: countRows }] = await Promise.all([
+    const capState = await syncRegistrationCapState(t.id);
+    const [{ rows: existing }] = await Promise.all([
       pool.query(
         `SELECT registration_status, payment_status FROM player_registrations
          WHERE tournament_id = $1 AND player_account_id = $2 AND archived_at IS NULL
          LIMIT 1`,
         [t.id, playerAccountId],
       ),
-      pool.query(
-        `SELECT COUNT(*)::int AS count FROM player_registrations
-         WHERE tournament_id = $1 AND archived_at IS NULL AND substitute_flag = FALSE`,
-        [t.id],
-      ),
     ]);
     const reg = existing[0];
     const entryFeeText = String(t.entry_fee || "").trim();
+    const registrationsOpen = capState.changed ? false : t.registrations_open === true;
     tournaments.push({
       id: t.id,
       slug: t.slug,
       name: t.name,
-      registrationsOpen: t.registrations_open === true,
+      registrationsOpen,
+      substitutePoolOpen: capState.reached && !registrationsOpen,
       startDate: t.start_date,
       endDate: t.end_date,
       entryFee: commerce?.registrationFeeRupees ?? 300,
       entryFeeLabel: entryFeeText || `₹${commerce?.registrationFeeRupees ?? 300}`,
       prizePool: String(t.prize_pool || "").trim() || null,
-      registrationCount: countRows[0]?.count ?? 0,
-      // Admin will expose a configured cap later; null until tournament engine ships.
-      registrationLimit: null,
+      seasonCardBg: String(t.season_card_bg || "").trim() || null,
+      seasonCardBadge: String(t.season_card_badge || "").trim() || null,
+      registrationCount: capState.count,
+      registrationLimit: capState.cap,
       commerce,
       registrationStatus: reg?.registration_status || null,
       paymentStatus: reg?.payment_status || null,
@@ -313,24 +313,35 @@ export async function getUpcomingTournamentsForPlayer(playerAccountId) {
   return { tournaments };
 }
 
-export async function getPlayerCoinSummary(playerAccountId) {
+export async function getPlayerCoinSummary(playerAccountId, { limit = 30, offset = 0 } = {}) {
   const balance = await getCoinBalance(playerAccountId);
+  const safeLimit = Math.min(Math.max(1, limit), 100);
+  const safeOffset = Math.max(0, offset);
+
+  const { rows: countRows } = await pool.query(
+    `SELECT COUNT(*)::int AS total FROM bpc_coin_ledger WHERE player_account_id = $1`,
+    [playerAccountId],
+  );
+
   const { rows } = await pool.query(
     `SELECT id, delta, balance_after, reason, created_at
      FROM bpc_coin_ledger
      WHERE player_account_id = $1
      ORDER BY created_at DESC
-     LIMIT 10`,
-    [playerAccountId],
+     LIMIT $2 OFFSET $3`,
+    [playerAccountId, safeLimit, safeOffset],
   );
   return {
     balance,
-    recent: rows.map((r) => ({
-      id: r.id,
-      delta: r.delta,
-      balanceAfter: r.balance_after,
-      reason: r.reason,
-      createdAt: r.created_at,
+    ledger: rows.map((row) => ({
+      id: row.id,
+      delta: row.delta,
+      balanceAfter: row.balance_after,
+      reason: row.reason,
+      createdAt: row.created_at,
     })),
+    total: countRows[0]?.total ?? 0,
+    limit: safeLimit,
+    offset: safeOffset,
   };
 }

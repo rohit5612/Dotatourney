@@ -1,6 +1,5 @@
 /**
- * Cosmetic tournament display helpers for the player dashboard.
- * Substitute eligibility and registration caps will be driven by admin routes later.
+ * Tournament display + substitute eligibility for the player dashboard.
  */
 
 export function isTournamentInSeasonWindow(tournament) {
@@ -12,26 +11,25 @@ export function isTournamentInSeasonWindow(tournament) {
   return now >= start && now <= end;
 }
 
-/** @returns {boolean|null} null = limit not configured yet (admin) */
+/** @returns {boolean|null} null = cap not configured */
 export function isRegistrationLimitFilled(tournament) {
+  if (tournament?.substitutePoolOpen) return true;
   const limit = tournament?.registrationLimit;
   const count = tournament?.registrationCount ?? 0;
   if (limit == null || limit <= 0) {
-    // Temporary stand-in until admin sets registrationLimit on the tournament.
     return tournament?.registrationsOpen === false ? true : null;
   }
   return count >= limit;
 }
 
 /**
- * Substitute pool: active season window + roster cap reached.
- * Full rules ship with admin tournament engine.
+ * Substitute pool: roster cap reached and main registration closed.
  */
 export function canJoinSubstitutePool(tournament, account) {
   if (!account?.eligibleForRegistration) return false;
-  if (!isTournamentInSeasonWindow(tournament)) return false;
+  if (tournament?.substitutePoolOpen) return true;
   const limitFilled = isRegistrationLimitFilled(tournament);
-  return limitFilled === true;
+  return limitFilled === true && tournament?.registrationsOpen !== true;
 }
 
 export function formatEntryFee(tournament) {

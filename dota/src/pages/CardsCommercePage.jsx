@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
+import { AdminGlassPanel } from "../admin/components/AdminGlassPanel.jsx";
 
 const TIER_KEYS = ["default", "player", "gold", "holo"];
 
@@ -57,13 +58,26 @@ export function CardsCommercePage({ tournamentId, message, setMessage }) {
     }
   }
 
-  if (!tournamentId) return <p className="text-muted-foreground">Select a tournament first.</p>;
-  if (!commerce) return <p className="text-muted-foreground">Loading commerce config…</p>;
+  if (!tournamentId) {
+    return (
+      <AdminGlassPanel>
+        <p className="text-muted-foreground">Select a tournament first.</p>
+      </AdminGlassPanel>
+    );
+  }
+  if (!commerce) {
+    return (
+      <AdminGlassPanel>
+        <p className="text-muted-foreground">Loading commerce config…</p>
+      </AdminGlassPanel>
+    );
+  }
 
   return (
-    <div className="space-y-8">
+    <div className="admin-page-stack">
+    <AdminGlassPanel className="space-y-8">
       <section>
-        <h2 className="font-serif text-xl">Registration & card pricing</h2>
+        <h2 className="admin-section-title">Registration & card pricing</h2>
         <p className="text-sm text-muted-foreground mt-1">Per-tournament fees used at player checkout.</p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2 max-w-lg">
           <label className="text-sm">
@@ -155,6 +169,7 @@ export function CardsCommercePage({ tournamentId, message, setMessage }) {
         )}
       </section>
       {message ? <p className="text-sm">{message}</p> : null}
+    </AdminGlassPanel>
     </div>
   );
 }

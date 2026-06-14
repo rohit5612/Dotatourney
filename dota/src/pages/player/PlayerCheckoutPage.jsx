@@ -7,6 +7,7 @@ import { DashboardActionIcon } from "../../components/player/DashboardActionIcon
 import { DashboardNavIcon } from "../../components/player/DashboardNavIcon.jsx";
 import {
   buildCardManifest,
+  RegistrationBody,
   RegistrationHero,
   RegistrationStepper,
   useRegistrationTournament,
@@ -50,21 +51,22 @@ export function PlayerCheckoutPage() {
       .finally(() => setPreviewLoading(false));
   }, [slug, cardTier, coinsToApply]);
 
+  const maxCoins = preview?.maxCoinsApplicable ?? 0;
+  const coinBalance = preview?.coinBalance ?? 0;
+  const coinSliderMax = Math.min(maxCoins, coinBalance);
+  const minCash = preview?.commerce?.minCashRupees ?? 100;
+  const subtotal = preview?.subtotal ?? 0;
+  const appliedCoins = Math.min(liveCoins, coinSliderMax);
+  const displayTotal = preview ? Math.max(minCash, subtotal - appliedCoins) : 0;
+
   useEffect(() => {
     if (!preview) return;
-    const cap = preview.maxCoinsApplicable ?? 0;
-    setCoinsToApply((current) => (current > cap ? cap : current));
-    setLiveCoins((current) => (current > cap ? cap : current));
-  }, [preview?.maxCoinsApplicable, cardTier, preview]);
+    setCoinsToApply((current) => (current > coinSliderMax ? coinSliderMax : current));
+    setLiveCoins((current) => (current > coinSliderMax ? coinSliderMax : current));
+  }, [preview, coinSliderMax]);
 
   const tiers = preview?.commerce?.cardTiers || {};
   const cardManifest = buildCardManifest(account, cardTier);
-  const maxCoins = preview?.maxCoinsApplicable ?? 0;
-  const coinBalance = preview?.coinBalance ?? 0;
-  const minCash = preview?.commerce?.minCashRupees ?? 100;
-  const subtotal = preview?.subtotal ?? 0;
-  const appliedCoins = Math.min(liveCoins, coinBalance, maxCoins);
-  const displayTotal = preview ? Math.max(minCash, subtotal - appliedCoins) : 0;
 
   async function pay() {
     setBusy(true);
@@ -102,6 +104,7 @@ export function PlayerCheckoutPage() {
 
     return (
       <div className="player-reg">
+        <RegistrationBody>
         <section className="player-dash__card player-reg__success">
           <div className="player-reg__success-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.85">
@@ -129,6 +132,7 @@ export function PlayerCheckoutPage() {
             </Link>
           </div>
         </section>
+        </RegistrationBody>
       </div>
     );
   }
@@ -136,6 +140,7 @@ export function PlayerCheckoutPage() {
   return (
     <div className="player-reg">
       <RegistrationHero tournament={tournament || preview?.tournament} account={account} step={2} stepLabel="Step 2 of 2" />
+      <RegistrationBody>
       <RegistrationStepper step={2} />
 
       {error ? <div className="player-auth__message player-auth__message--error">{error}</div> : null}
@@ -233,7 +238,11 @@ export function PlayerCheckoutPage() {
                     </span>
                   </div>
                   <p className="player-reg__field-hint">
-                    Up to {maxCoins} coins · minimum ₹{preview.commerce?.minCashRupees ?? 100} cash due
+                    {coinBalance === 0
+                      ? "No coins in your wallet yet."
+                      : coinSliderMax < maxCoins
+                        ? `Using up to ${coinSliderMax} of your ${coinBalance} coins (min ₹${minCash} cash due).`
+                        : `Up to ${coinSliderMax} coins · minimum ₹${minCash} cash due`}
                   </p>
                   <BpcCoinSlider
                     value={coinsToApply}
@@ -271,6 +280,7 @@ export function PlayerCheckoutPage() {
           </section>
         </aside>
       </div>
+      </RegistrationBody>
     </div>
   );
 }

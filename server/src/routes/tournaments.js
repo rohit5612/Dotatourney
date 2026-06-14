@@ -3,16 +3,27 @@ import express from "express";
 import { z } from "zod";
 import { persistBlastGroupSeedingIfReady } from "../services/blastSeeding.js";
 import { generateMatches, getFormatTeamCountMessage, stageTabsForFormat } from "../services/formatGenerator.js";
-import { buildGroupIndices, formatUsesGroupAssignment, validateGroupAssignment } from "../services/groupAssignment.js";
+import { compileEngineConfigToGenerator, engineBracketTabs, engineStageTabs } from "../services/tournamentEngineService.js";
+import { buildGroupIndices, formatUsesGroupAssignment, resolveGroupStageConfig, validateGroupAssignment } from "../services/groupAssignment.js";
 import { reapplyAllProgression } from "../services/progressionEngine.js";
 import { buildPublicHonorsPayload } from "../services/bracketHonorsEngine.js";
 import { applySeriesRulesToMatches } from "../services/seriesRulesEngine.js";
 import { archivePlayerRegistration, getPlayerRegistrationById, listPlayerRegistrations, updatePlayerRegistration } from "../services/registrationRepository.js";
 import { sendPlayerRegistrationDecisionEmail } from "../services/emailService.js";
 import { buildGroupedStandings, buildStandings } from "../services/standingsEngine.js";
-import { requireAdmin } from "../services/authService.js";
+import { requireAdmin, requirePermission } from "../services/authService.js";
 import { syncCrmRegistrationsToGoogleSheet } from "../services/googleSheetsSync.js";
 import { invalidatePublicCache } from "../services/publicCache.js";
+import { writeAuditLog } from "../services/auditLogService.js";
+import { listTeamProfileHistory, listPlayerTeamStints } from "../services/teamHistoryService.js";
+import {
+  listSubstitutePool,
+  listSubstitutionRequests,
+  updateSubstitutePoolRegistration,
+  updateSubstitutionRequest,
+  assignSubstitutionRequest,
+  listEligibleSubstitutes,
+} from "../services/substituteAdminService.js";
 import {
   approveRosterSnapshot,
   adjustApprovedRoster,
@@ -25,6 +36,8 @@ import {
   listRosterSnapshots,
   listTournaments,
   publishTournament,
+  approveTournament,
+  completeTournament,
   replaceMatches,
   replaceSchedule,
   replaceTeamsAndPlayers,
@@ -92,11 +105,16 @@ const tournamentSchema = z.object({
     .default([]),
   visibilityMode: z.enum(["demo", "tournament"]).optional().default("demo"),
   bracketActive: z.boolean().optional().default(false),
-  status: z.enum(["draft", "approved", "published", "archived"]).optional().default("draft"),
+  status: z.enum(["draft", "approved", "published", "archived", "concluded"]).optional().default("draft"),
+  engineConfig: z.any().nullable().optional(),
+  engineTemplateId: z.string().uuid().nullable().optional(),
   registrationCodePrefix: z.string().max(12).optional().default("BPC"),
   paymentQrImage: z.string().optional().default(""),
   paymentUpiId: z.string().optional().default(""),
+  seasonCardBg: z.string().max(2_500_000).optional().default(""),
+  seasonCardBadge: z.string().max(16).optional().default(""),
   registrationsOpen: z.boolean().optional().default(false),
+  registrationCap: z.union([z.number().int().min(1).max(9999), z.null()]).optional(),
     tournamentHonors: z
     .object({
       displayPodiumCount: z.number().int().min(1).max(12).optional().default(2),
@@ -140,9 +158,9 @@ async function validateRosterRegistrations(tournamentId, players) {
     registrations
       .filter(
         (registration) =>
-          registration.paymentStatus === "paid" &&
+          !registration.archivedAt &&
           registration.registrationStatus === "approved" &&
-          !registration.archivedAt,
+          (registration.substituteFlag || registration.paymentStatus === "paid"),
       )
       .map((registration) => registration.id),
   );
@@ -241,11 +259,112 @@ router.put("/:id", async (req, res, next) => {
   }
 });
 
-router.post("/:id/publish", async (req, res, next) => {
+router.post("/:id/publish", requirePermission("setup.update"), async (req, res, next) => {
   try {
     const tournament = await publishTournament(req.params.id, req.adminUser.id);
     if (!tournament) return res.status(404).json({ message: "Tournament not found" });
+    invalidatePublicCache();
     return res.json({ tournament });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post("/:id/approve", requirePermission("setup.update"), async (req, res, next) => {
+  try {
+    const row = await approveTournament(req.params.id, req.adminUser.id);
+    if (!row) return res.status(404).json({ message: "Tournament not found" });
+    await writeAuditLog({ adminUserId: req.adminUser.id, action: "tournament.approve", entityType: "tournament", entityId: req.params.id, payload: {} });
+    return res.json({ tournament: row });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post("/:id/complete", requirePermission("setup.update"), async (req, res, next) => {
+  try {
+    const body = z.object({ force: z.boolean().optional().default(false) }).parse(req.body || {});
+    const row = await completeTournament(req.params.id, req.adminUser.id, body);
+    await writeAuditLog({ adminUserId: req.adminUser.id, action: "tournament.complete", entityType: "tournament", entityId: req.params.id, payload: body });
+    invalidatePublicCache();
+    return res.json({ tournament: row });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/:id/substitutes", async (req, res, next) => {
+  try {
+    const query = z
+      .object({
+        search: z.string().optional().default(""),
+        limit: z.coerce.number().int().min(1).max(100).optional().default(25),
+        offset: z.coerce.number().int().min(0).optional().default(0),
+        status: z.string().optional(),
+      })
+      .parse(req.query);
+    const poolResult = await listSubstitutePool(req.params.id, query);
+    const requests = await listSubstitutionRequests(req.params.id, { status: query.status });
+    const eligible = await listEligibleSubstitutes(req.params.id);
+    return res.json({ ...poolResult, requests, eligible });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.patch("/:id/substitution-requests/:requestId/assign", requirePermission("playerCrm.substitutes.update"), async (req, res, next) => {
+  try {
+    const body = z
+      .object({
+        substituteRegistrationId: z.string().uuid().optional(),
+        substitutePlayerAccountId: z.string().uuid().optional(),
+        adminNotes: z.string().optional(),
+      })
+      .refine((d) => d.substituteRegistrationId || d.substitutePlayerAccountId, {
+        message: "substituteRegistrationId or substitutePlayerAccountId required",
+      })
+      .parse(req.body);
+    const result = await assignSubstitutionRequest(req.params.id, req.params.requestId, {
+      ...body,
+      adminUserId: req.adminUser.id,
+    });
+    await writeAuditLog({
+      adminUserId: req.adminUser.id,
+      action: "substitution.assign",
+      entityType: "substitution_request",
+      entityId: req.params.requestId,
+      payload: body,
+    });
+    return res.json(result);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.patch("/:id/substitution-requests/:requestId", requirePermission("playerCrm.substitutes.update"), async (req, res, next) => {
+  try {
+    const body = z.object({ status: z.enum(["approved", "rejected", "cancelled"]).optional(), adminNotes: z.string().optional() }).parse(req.body);
+    const row = await updateSubstitutionRequest(req.params.id, req.params.requestId, body);
+    if (!row) return res.status(404).json({ message: "Request not found" });
+    return res.json({ request: row });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/:id/teams/:teamId/history", async (req, res, next) => {
+  try {
+    const history = await listTeamProfileHistory(req.params.id, req.params.teamId);
+    return res.json({ history });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/:id/players/:playerId/stints", async (req, res, next) => {
+  try {
+    const stints = await listPlayerTeamStints(req.params.id, req.params.playerId);
+    return res.json({ stints });
   } catch (error) {
     return next(error);
   }
@@ -255,6 +374,7 @@ router.post("/:id/unpublish", async (req, res, next) => {
   try {
     const tournament = await unpublishTournament(req.params.id);
     if (!tournament) return res.status(404).json({ message: "Tournament not found" });
+    invalidatePublicCache();
     return res.json({ tournament });
   } catch (error) {
     return next(error);
@@ -294,7 +414,7 @@ router.get("/:id", async (req, res, next) => {
     return res.json({
       ...data,
       matches,
-      tabs: stageTabsForFormat(data.tournament.format, { teamCount: data.tournament.team_count }),
+      tabs: engineBracketTabs(data.tournament.engine_config) || stageTabsForFormat(data.tournament.format, { teamCount: data.tournament.team_count }),
       standings,
       groupedStandings,
       honors,
@@ -555,7 +675,8 @@ router.put("/:id/group-assignments", async (req, res, next) => {
   try {
     const data = await getTournament(req.params.id);
     if (!data) return res.status(404).json({ message: "Tournament not found" });
-    if (!formatUsesGroupAssignment(data.tournament.format)) {
+    const engineConfig = data.tournament.engine_config;
+    if (!formatUsesGroupAssignment(data.tournament.format, engineConfig)) {
       return res.status(400).json({ message: "This tournament format does not use group assignment" });
     }
     if (data.tournament.bracket_active) {
@@ -565,27 +686,36 @@ router.put("/:id/group-assignments", async (req, res, next) => {
       return res.status(400).json({ message: "Approve a roster before assigning groups" });
     }
 
+    const plan = resolveGroupStageConfig(engineConfig || { teamCount: data.tournament.team_count, format: data.tournament.format });
+    const allowedKeys = plan.groupKeys;
+
     const payload = z
       .object({
         assignments: z.array(
           z.object({
             teamId: z.string().uuid(),
-            groupKey: z.enum(["A", "B"]),
+            groupKey: z.string().regex(/^[A-H]$/),
           }),
         ),
       })
       .parse(req.body);
 
+    for (const entry of payload.assignments) {
+      if (!allowedKeys.includes(entry.groupKey)) {
+        return res.status(400).json({ message: `Invalid group key ${entry.groupKey}. Allowed: ${allowedKeys.join(", ")}` });
+      }
+    }
+
     const mergedTeams = data.approvedRoster.teams.map((team) => {
       const entry = payload.assignments.find((item) => item.teamId === team.id);
       return entry ? { ...team, groupKey: entry.groupKey } : team;
     });
-    const validationMessage = validateGroupAssignment(mergedTeams);
+    const validationMessage = validateGroupAssignment(mergedTeams, engineConfig || { teamCount: data.tournament.team_count, format: data.tournament.format });
     if (validationMessage) {
       return res.status(400).json({ message: validationMessage });
     }
 
-    const result = await updateRosterGroupAssignments(req.params.id, payload.assignments);
+    const result = await updateRosterGroupAssignments(req.params.id, payload.assignments, allowedKeys);
     if (result.error) return res.status(400).json({ message: result.error });
 
     return res.json({ approvedRoster: result.approvedRoster });
@@ -601,8 +731,16 @@ router.post("/:id/generate", async (req, res, next) => {
       return res.status(404).json({ message: "Tournament not found" });
     }
 
-    let names = Array.from({ length: data.tournament.team_count }, (_, index) => `Team ${index + 1}`);
-    const teamCountMessage = getFormatTeamCountMessage(data.tournament.format, names.length);
+    const compiled = data.tournament.engine_config
+      ? compileEngineConfigToGenerator(data.tournament.engine_config)
+      : null;
+    const teamCount = compiled?.teamCount || data.tournament.team_count;
+    const format = compiled?.format || data.tournament.format;
+    const seriesRules = compiled?.seriesRules || data.tournament.series_rules || {};
+    const engineConfig = compiled?.engineConfig || data.tournament.engine_config;
+
+    let names = Array.from({ length: teamCount }, (_, index) => `Team ${index + 1}`);
+    const teamCountMessage = getFormatTeamCountMessage(format, names.length);
     if (teamCountMessage) {
       return res.status(400).json({ message: teamCountMessage });
     }
@@ -613,25 +751,38 @@ router.post("/:id/generate", async (req, res, next) => {
       if (!data.approvedRoster) {
         return res.status(400).json({ message: "Approve a tournament roster before generating the bracket" });
       }
-      if (data.approvedRoster.teams.length !== data.tournament.team_count) {
-        return res.status(400).json({ message: `Approved roster must have exactly ${data.tournament.team_count} teams` });
+      if (data.approvedRoster.teams.length !== teamCount) {
+        return res.status(400).json({ message: `Approved roster must have exactly ${teamCount} teams` });
       }
       names = data.approvedRoster.teams.map((team) => team.name);
     }
 
     const generateOptions = {};
-    if (formatUsesGroupAssignment(data.tournament.format) && data.tournament.visibility_mode !== "demo") {
+    if (formatUsesGroupAssignment(format, engineConfig) && data.tournament.visibility_mode !== "demo") {
       const teamsForGroups = data.approvedRoster?.teams || [];
-      const validationMessage = validateGroupAssignment(teamsForGroups);
+      const validationMessage = validateGroupAssignment(
+        teamsForGroups,
+        engineConfig || { teamCount, format },
+      );
       if (validationMessage) {
         return res.status(400).json({ message: validationMessage });
       }
-      generateOptions.groupIndices = buildGroupIndices(teamsForGroups);
+      generateOptions.groupIndices = buildGroupIndices(
+        teamsForGroups,
+        engineConfig || { teamCount, format },
+      );
     }
 
-    const matches = generateMatches(data.tournament.format, names, data.tournament.series_rules || {}, generateOptions);
+    if (engineConfig) {
+      generateOptions.engineConfig = engineConfig;
+    }
+
+    const matches = generateMatches(format, names, seriesRules, generateOptions);
     await replaceMatches(req.params.id, matches);
-    res.json({ matches, tabs: stageTabsForFormat(data.tournament.format, { teamCount: data.tournament.team_count }) });
+    const tabs =
+      engineBracketTabs(engineConfig) ||
+      stageTabsForFormat(format, { teamCount });
+    res.json({ matches, tabs });
   } catch (error) {
     next(error);
   }
@@ -839,13 +990,36 @@ router.patch("/:id/matches/:matchId", async (req, res, next) => {
 
 router.get("/:id/registrations", async (req, res, next) => {
   try {
-    res.json({ registrations: await listPlayerRegistrations(req.params.id) });
+    res.json({ registrations: await listPlayerRegistrations(req.params.id, { excludeSubstitutes: true }) });
   } catch (error) {
     next(error);
   }
 });
 
-router.patch("/:id/registrations/:registrationId", async (req, res, next) => {
+router.patch("/:id/substitutes/:registrationId", requirePermission("playerCrm.substitutes.update"), async (req, res, next) => {
+  try {
+    const payload = z
+      .object({
+        registrationStatus: z.enum(["pending", "approved", "waitlisted", "rejected"]).optional(),
+        adminNotes: z.string().optional(),
+      })
+      .parse(req.body);
+    const registration = await updateSubstitutePoolRegistration(req.params.id, req.params.registrationId, payload);
+    if (!registration) return res.status(404).json({ message: "Substitute pool entry not found" });
+    await writeAuditLog({
+      adminUserId: req.adminUser.id,
+      action: "substitute_pool.update",
+      entityType: "player_registration",
+      entityId: req.params.registrationId,
+      payload,
+    });
+    return res.json({ registration });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.patch("/:id/registrations/:registrationId", requirePermission("playerCrm.registrations.update"), async (req, res, next) => {
   try {
     const payload = z
       .object({
@@ -856,6 +1030,9 @@ router.patch("/:id/registrations/:registrationId", async (req, res, next) => {
       })
       .parse(req.body);
     const prev = await getPlayerRegistrationById(req.params.id, req.params.registrationId);
+    if (prev?.substituteFlag) {
+      return res.status(403).json({ message: "Substitute pool entries are managed under Player CRM → Substitutes." });
+    }
     const registration = await updatePlayerRegistration(req.params.id, req.params.registrationId, payload);
     if (!registration) return res.status(404).json({ message: "Registration not found" });
     const registrationStatusChanged =

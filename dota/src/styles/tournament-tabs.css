@@ -392,6 +392,47 @@
   }
 }
 
+/* Schedule page — lighter liquid glass tabs (brighter overlay shows through) */
+.schedule-page .view-tabs-primary,
+.schedule-page .schedule-phase-nav,
+.schedule-page .bracket-stage-nav {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: linear-gradient(
+    155deg,
+    rgba(14, 18, 32, 0.58) 0%,
+    rgba(8, 10, 18, 0.48) 55%,
+    rgba(6, 8, 14, 0.52) 100%
+  );
+  backdrop-filter: blur(22px) saturate(175%);
+  -webkit-backdrop-filter: blur(22px) saturate(175%);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.14) inset,
+    0 18px 44px rgba(0, 0, 0, 0.22),
+    0 0 72px color-mix(in srgb, var(--secondary) 10%, transparent);
+}
+
+.schedule-page .view-tabs-primary::before,
+.schedule-page .schedule-phase-nav::before,
+.schedule-page .bracket-stage-nav::before {
+  opacity: 0.55;
+  background: radial-gradient(
+    ellipse 90% 70% at 50% -30%,
+    color-mix(in srgb, var(--secondary) 22%, transparent),
+    transparent 58%
+  );
+}
+
+.schedule-page .schedule-phase-tab,
+.schedule-page .bracket-stage-tab {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: color-mix(in srgb, var(--foreground) 78%, white);
+}
+
+.schedule-page .view-tabs-primary__tab {
+  color: color-mix(in srgb, var(--foreground) 72%, white);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .view-tabs-primary__tab,
   .schedule-phase-tab,

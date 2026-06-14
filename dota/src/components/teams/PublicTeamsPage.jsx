@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import "../../styles/teams-page.css";
 import "../../styles/team-logo-img.css";
 import { SITE_BRAND_FULL } from "../../constants/siteMeta.js";
+import { parseSeasonLabelFromName } from "../../utils/tournamentNaming.js";
 import { TeamCard } from "./TeamCard.jsx";
 import {
   enrichTeam,
@@ -38,7 +39,8 @@ export function PublicTeamsPage({ event, message, navigate }) {
     tournament?.format,
   ]);
 
-  const heroEyebrow = `${SITE_BRAND_FULL} Season 1 Roster`;
+  const seasonLabel = parseSeasonLabelFromName(tournament?.name) || tournament?.name || "Season";
+  const heroEyebrow = `${SITE_BRAND_FULL} ${seasonLabel} Roster`;
 
   const heroSubtitle = squadCountLabel(rawTeams.length || tournament?.team_count);
 

@@ -1,0 +1,87 @@
+/* Saved CTA emerald profile — landing primary actions + sign-in only */
+
+:root {
+  --cta-emerald: #047857;
+  --cta-emerald-mid: #059669;
+  --cta-emerald-deep: #065f46;
+  --cta-emerald-accent: #10b981;
+  --cta-emerald-foreground: #ffffff;
+  --cta-emerald-ring: #047857;
+}
+
+.dark {
+  --cta-emerald: #059669;
+  --cta-emerald-mid: #047857;
+  --cta-emerald-deep: #065f46;
+  --cta-emerald-accent: #047857;
+  --cta-emerald-foreground: #ffffff;
+  --cta-emerald-ring: #059669;
+}
+
+/* Landing */
+.landing-v2-hero__cta--primary,
+.landing-circuit__solo-cta--primary,
+.landing-v2-discord .btn.btn-primary {
+  border-color: color-mix(in srgb, var(--cta-emerald) 88%, #000);
+  background: var(--cta-emerald);
+  color: var(--cta-emerald-foreground);
+}
+
+.landing-v2-hero__cta--primary:hover,
+.landing-circuit__solo-cta--primary:hover,
+.landing-v2-discord .btn.btn-primary:hover {
+  filter: brightness(1.08);
+}
+
+.landing-circuit__solo-cta--primary {
+  border: 1px solid rgb(255 255 255 / 0.12);
+}
+
+.landing-circuit__solo-cta--primary:hover {
+  background: color-mix(in srgb, var(--cta-emerald) 88%, white);
+}
+
+/* Sign-in (navbar + auth pages) */
+.site-navbar:not(.site-navbar--admin) .site-navbar__cta,
+.site-navbar-drawer__cta,
+.player-auth .btn.btn-primary {
+  border-color: color-mix(in srgb, var(--cta-emerald-foreground) 20%, transparent);
+  background: linear-gradient(
+    128deg,
+    color-mix(in srgb, var(--cta-emerald-accent) 42%, var(--cta-emerald)) 0%,
+    var(--cta-emerald) 50%,
+    color-mix(in srgb, var(--cta-emerald-mid) 38%, var(--cta-emerald)) 100%
+  );
+  color: var(--cta-emerald-foreground);
+}
+
+.site-navbar:not(.site-navbar--admin) .site-navbar__cta:hover,
+.site-navbar-drawer__cta:hover,
+.player-auth .btn.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--cta-emerald) 38%, transparent);
+}
+
+.player-auth .btn.btn-primary:focus-visible,
+.site-navbar:not(.site-navbar--admin) .site-navbar__cta:focus-visible,
+.site-navbar-drawer__cta:focus-visible {
+  outline-color: var(--cta-emerald-ring);
+}
+
+.player-auth .btn-primary.player-auth__submit {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--cta-emerald-accent) 25%, transparent) inset,
+    0 8px 28px color-mix(in srgb, var(--cta-emerald) 22%, transparent);
+}
+
+.player-auth__glass--form .btn-primary.player-auth__submit:hover:not(:disabled) {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--cta-emerald-accent) 40%, transparent) inset,
+    0 14px 40px color-mix(in srgb, var(--cta-emerald) 32%, transparent);
+}
+
+.player-auth__glass--form .btn-primary.player-auth__submit:active:not(:disabled) {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--cta-emerald-accent) 30%, transparent) inset,
+    0 6px 18px color-mix(in srgb, var(--cta-emerald) 20%, transparent);
+}

@@ -187,7 +187,7 @@ export async function syncCrmRegistrationsToGoogleSheet(tournamentId, spreadshee
       registrations = ids.map((id) => byId.get(id)).filter(Boolean);
     }
   } else {
-    registrations = registrations.filter((r) => !r.archivedAt);
+    registrations = registrations.filter((r) => !r.archivedAt && !r.substituteFlag);
     registrations.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }
 

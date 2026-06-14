@@ -136,15 +136,30 @@ export function PlayerLoginPage() {
           <GoogleAuthButton label="Continue with Google" intent="login" />
         </div>
       </form>
+      <div className="player-auth__claim-callout">
+        <div className="player-auth__claim-callout-inner">
+          <span className="player-auth__claim-badge">Season 1</span>
+          <div className="player-auth__claim-copy">
+            <p className="player-auth__claim-title">Already on the roster?</p>
+            <p className="player-auth__claim-desc">
+              Claim your BPC account with the email you registered in Season 1.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="player-auth__claim-btn"
+            onClick={() => navigate("/claim-account")}
+          >
+            Claim Season 1 account
+          </button>
+        </div>
+      </div>
       <nav className="player-auth__footer-links" aria-label="Account options">
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => navigate("/forgot-password")}>
           Forgot password
         </button>
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => navigate("/signup")}>
           Create account
-        </button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => navigate("/claim-account")}>
-          Claim Season 1 account
         </button>
       </nav>
     </AuthLayout>
@@ -155,6 +170,7 @@ export function PlayerSignupPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -164,6 +180,10 @@ export function PlayerSignupPage() {
     e.preventDefault();
     setError("");
     setMessage("");
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
     setLoading(true);
     try {
       const data = await playerApi.register({ email, password, displayName });
@@ -202,8 +222,21 @@ export function PlayerSignupPage() {
             type="password"
             required
             minLength={8}
+            autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
+        <div className="player-auth__field">
+          <label htmlFor="confirmPassword">Confirm password</label>
+          <input
+            id="confirmPassword"
+            type="password"
+            required
+            minLength={8}
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
           />
         </div>
         <button type="submit" className="btn btn-primary player-auth__submit w-full" disabled={loading}>
@@ -418,21 +451,85 @@ export function PlayerClaimAccountPage() {
   const [step, setStep] = useState("start");
   const [bpcId, setBpcId] = useState("");
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
   const [claimToken, setClaimToken] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("step") === "verify") {
-      setBpcId(params.get("bpcId") || "");
-      setEmail(params.get("email") || "");
-      setCode(params.get("token") || "");
-      setStep("verify");
+    if (params.get("step") !== "verify") return;
+
+    const linkBpcId = params.get("bpcId") || "";
+    const linkEmail = params.get("email") || "";
+    const token = params.get("token") || "";
+    if (!linkBpcId || !linkEmail || !token) {
+      setError("Invalid claim link. Request a new email from the form below.");
+      setStep("start");
+      return;
     }
+
+    const cacheKey = `bpcl:claim-verify:${token}`;
+    try {
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        const { claimToken: storedClaimToken, bpcId: storedBpcId, email: storedEmail } =
+          JSON.parse(cached);
+        if (storedClaimToken) {
+          setBpcId(storedBpcId || linkBpcId);
+          setEmail(storedEmail || linkEmail);
+          setClaimToken(storedClaimToken);
+          setStep("password");
+          setMessage("Email verified. Create your password to finish claiming your account.");
+          window.history.replaceState({}, "", "/claim-account");
+          return;
+        }
+      }
+    } catch {
+      // ignore corrupt cache
+    }
+
+    let active = true;
+    setBpcId(linkBpcId);
+    setEmail(linkEmail);
+    setStep("verifying");
+    setLoading(true);
+    setError("");
+
+    playerApi
+      .claimVerifyFromLink(linkBpcId, linkEmail, token)
+      .then((data) => {
+        if (!active) return;
+        try {
+          sessionStorage.setItem(
+            cacheKey,
+            JSON.stringify({
+              claimToken: data.claimToken,
+              bpcId: linkBpcId,
+              email: linkEmail,
+            }),
+          );
+        } catch {
+          // ignore quota errors
+        }
+        setClaimToken(data.claimToken);
+        setStep("password");
+        setMessage("Email verified. Create your password to finish claiming your account.");
+        window.history.replaceState({}, "", "/claim-account");
+      })
+      .catch((err) => {
+        if (!active) return;
+        setError(err.message || "Could not verify your claim link.");
+        setStep("start");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   async function onStart(e) {
@@ -444,25 +541,8 @@ export function PlayerClaimAccountPage() {
       const data = await playerApi.claimStart({ bpcId, email });
       let msg = data.message;
       if (data.devVerifyUrl) msg += ` Dev link: ${data.devVerifyUrl}`;
-      if (data.devVerifyToken) setCode(data.devVerifyToken);
       setMessage(msg);
-      setStep("verify");
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function onVerify(e) {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-    try {
-      const data = await playerApi.claimVerify({ bpcId, email, code });
-      setClaimToken(data.claimToken);
-      setStep("password");
-      setMessage("Verified. Create your password.");
+      setStep("pending");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -472,8 +552,12 @@ export function PlayerClaimAccountPage() {
 
   async function onSetPassword(e) {
     e.preventDefault();
-    setLoading(true);
     setError("");
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    setLoading(true);
     try {
       const data = await playerApi.claimSetPassword({ token: claimToken, password });
       setPlayerToken(data.token);
@@ -507,31 +591,54 @@ export function PlayerClaimAccountPage() {
             <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <button type="submit" className="btn btn-primary w-full" disabled={loading}>
-            Send verification
+            {loading ? "Sending…" : "Send claim link"}
           </button>
         </form>
       ) : null}
 
-      {step === "verify" ? (
-        <form onSubmit={onVerify}>
-          <div className="player-auth__field">
-            <label>Verification code</label>
-            <input required value={code} onChange={(e) => setCode(e.target.value)} />
-          </div>
-          <button type="submit" className="btn btn-primary w-full" disabled={loading}>
-            Verify email
-          </button>
-        </form>
+      {step === "pending" ? (
+        <div className="player-auth__message player-auth__message--ok" role="status">
+          <p style={{ margin: 0 }}>{message || "Check your email for a secure link to verify and claim your account."}</p>
+          <p className="player-auth__sub player-auth__sub--tight" style={{ marginTop: "0.75rem", marginBottom: 0 }}>
+            Open the link in the email — no verification code needed.
+          </p>
+        </div>
+      ) : null}
+
+      {step === "verifying" ? (
+        <p className="player-auth__sub" role="status">
+          Verifying your claim link…
+        </p>
       ) : null}
 
       {step === "password" ? (
         <form onSubmit={onSetPassword}>
           <div className="player-auth__field">
-            <label>New password (min 8)</label>
-            <input type="password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} />
+            <label htmlFor="claimPassword">New password (min 8)</label>
+            <input
+              id="claimPassword"
+              type="password"
+              minLength={8}
+              required
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+          <div className="player-auth__field">
+            <label htmlFor="claimConfirmPassword">Confirm password</label>
+            <input
+              id="claimConfirmPassword"
+              type="password"
+              minLength={8}
+              required
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
           </div>
           <button type="submit" className="btn btn-primary w-full" disabled={loading}>
-            Set password & sign in
+            {loading ? "Saving…" : "Set password & sign in"}
           </button>
         </form>
       ) : null}

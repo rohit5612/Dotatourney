@@ -13,11 +13,12 @@ export function PublicTournamentProvider({ children }) {
 
   useEffect(() => {
     let active = true;
-    const load = () =>
-      api
-        .getPublicTournamentFresh()
+
+    const load = (fresh = false) =>
+      (fresh ? api.getPublicTournamentFresh() : api.getPublicTournament())
         .then((payload) => {
-          if (active) setEvent(payload);
+          if (!active) return;
+          setEvent(payload);
         })
         .catch((error) => {
           if (active) setMessage(error.message);
@@ -26,8 +27,8 @@ export function PublicTournamentProvider({ children }) {
           if (active) setReady(true);
         });
 
-    load();
-    const poll = window.setInterval(load, 30_000);
+    load(false);
+    const poll = window.setInterval(() => load(true), 30_000);
     return () => {
       active = false;
       window.clearInterval(poll);

@@ -48,6 +48,7 @@ export function PlayerHistoryPage() {
   const seasonCount = data?.seasonHistory?.length ?? 0;
   const teamCount = data?.teamHistory?.length ?? 0;
   const regCount = data?.registrations?.length ?? 0;
+  const matchCount = data?.matchAppearances?.length ?? 0;
   const approvedCount = data?.career?.approvedRegistrations ?? 0;
 
   return (
@@ -90,7 +91,7 @@ export function PlayerHistoryPage() {
           <p className="player-auth__sub">Loading your history…</p>
         </div>
       ) : (
-        <div className="player-dash__history-sections">
+        <div className="player-dash__history-sections" data-tour="history-sections">
           <section className="player-dash__card player-dash__section-card">
             <header className="player-dash__card-head player-dash__card-head--compact">
               <div>
@@ -166,6 +167,41 @@ export function PlayerHistoryPage() {
                 title="No teams yet"
                 hint="Once you're drafted onto a roster, your team history will appear here."
               />
+            )}
+          </section>
+
+          <section className="player-dash__card player-dash__section-card">
+            <header className="player-dash__card-head player-dash__card-head--compact">
+              <div>
+                <h2 className="player-dash__card-title">Match appearances</h2>
+                <p className="player-dash__card-sub">Substitutions and lineup history per match</p>
+              </div>
+              <span className="player-dash__section-count">{matchCount}</span>
+            </header>
+
+            {data?.matchAppearances?.length ? (
+              <ul className="player-dash__timeline">
+                {data.matchAppearances.map((row) => (
+                  <li key={`${row.matchId}-${row.teamName}-${row.displayName}`} className="player-dash__timeline-item">
+                    <span className="player-dash__timeline-dot" aria-hidden="true" />
+                    <div className="player-dash__timeline-copy">
+                      <p className="player-dash__timeline-title">
+                        {row.team1} vs {row.team2}
+                      </p>
+                      <p className="player-dash__timeline-meta">
+                        {row.tournamentName}
+                        {row.startAt ? ` · ${formatDate(row.startAt)}` : ""}
+                        {row.teamName ? ` · ${row.teamName}` : ""}
+                      </p>
+                    </div>
+                    <span className={`player-dash__tourney-badge player-dash__tourney-badge--${row.playedAsSub ? "secondary" : row.wasReplaced ? "warm" : "muted"}`}>
+                      {row.playedAsSub ? "Subbed in" : row.wasReplaced ? "Replaced" : "Played"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <EmptyBlock title="No match appearances yet" hint="Lineup history appears after scheduled matches and substitutions." />
             )}
           </section>
 

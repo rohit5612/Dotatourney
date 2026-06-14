@@ -1,0 +1,65 @@
+.player-dash__wallet-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+}
+
+.player-wallet__balance {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+}
+
+.player-wallet-table-wrap {
+  overflow-x: auto;
+}
+
+.player-wallet-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.player-wallet-table th,
+.player-wallet-table td {
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+  text-align: left;
+}
+
+.player-wallet-table th {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, rgb(248 250 252) 50%, transparent);
+}
+
+.player-wallet-table__credit {
+  color: #6ee7b7;
+  font-weight: 650;
+}
+
+.player-wallet-table__debit {
+  color: #fca5a5;
+  font-weight: 650;
+}
+
+.player-dash__wallet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.player-dash__wallet-link {
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.player-dash__wallet-link:hover {
+  text-decoration: underline;
+}

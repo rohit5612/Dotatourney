@@ -1,23 +1,31 @@
 import { useEffect } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { BpcCoin } from "../../components/coins/BpcCoin.jsx";
 import { DashboardActionIcon } from "../../components/player/DashboardActionIcon.jsx";
 import { DashboardNavIcon } from "../../components/player/DashboardNavIcon.jsx";
+import { PlayerSpotlightTour } from "../../components/player/onboarding/PlayerSpotlightTour.jsx";
 import { PlayerAreaLayout } from "../../components/layout/PlayerAreaLayout.jsx";
 import { SITE_BRAND_SHORT } from "../../constants/siteMeta.js";
+import { buildSetupTasks, setupProgress, usePlayerOnboarding } from "../../hooks/usePlayerOnboarding.js";
 import { usePlayerSession } from "./usePlayerSession";
 import "../../styles/player-auth.css";
 import "../../styles/player-dashboard.css";
+import "../../styles/player-onboarding.css";
+import "../../styles/seasons-page.css";
 
 const NAV = [
-  { to: "/dashboard", label: "Overview", end: true, icon: "overview" },
-  { to: "/dashboard/tournaments", label: "Tournaments", icon: "tournaments" },
-  { to: "/dashboard/history", label: "History", icon: "history" },
-  { to: "/dashboard/settings", label: "Profile settings", icon: "settings" },
+  { to: "/dashboard", label: "Overview", end: true, icon: "overview", tourId: null },
+  { to: "/dashboard/tournaments", label: "Tournaments", icon: "tournaments", tourId: "nav-tournaments" },
+  { to: "/dashboard/notifications", label: "Notifications", icon: "notifications", tourId: null },
+  { to: "/dashboard/history", label: "History", icon: "history", tourId: null },
+  { to: "/dashboard/wallet", label: "Wallet", icon: "wallet", tourId: null },
+  { to: "/dashboard/settings", label: "Profile settings", icon: "settings", tourId: "nav-settings" },
 ];
 
-function SidebarPlayer({ account, coinBalance, logout }) {
+function SidebarPlayer({ account, coinBalance, logout, onShowSetupGuide }) {
   const initial = (account.displayName || account.bpcId || "?")[0].toUpperCase();
+  const progress = setupProgress(buildSetupTasks(account));
+  const setupIncomplete = progress.done < progress.total;
 
   return (
     <>
@@ -47,6 +55,7 @@ function SidebarPlayer({ account, coinBalance, logout }) {
             key={item.to}
             to={item.to}
             end={item.end}
+            data-tour={item.tourId || undefined}
             className={({ isActive }) => `player-dash__nav-link${isActive ? " is-active" : ""}`}
           >
             <DashboardNavIcon name={item.icon} />
@@ -55,11 +64,21 @@ function SidebarPlayer({ account, coinBalance, logout }) {
         ))}
       </nav>
 
-      <div className="player-dash__sidebar-meta">
+      <div className="player-dash__sidebar-meta" data-tour="wallet-balance">
         <div className="player-dash__wallet">
           <p className="player-dash__wallet-label">Balance</p>
-          <BpcCoin amount={coinBalance} size="sm" className="player-dash__wallet-coins" />
+          <div className="player-dash__wallet-row">
+            <BpcCoin amount={coinBalance} size="sm" className="player-dash__wallet-coins" />
+            <NavLink to="/dashboard/wallet" className="player-dash__wallet-link" title="Transaction log">
+              Transactions
+            </NavLink>
+          </div>
         </div>
+        {setupIncomplete ? (
+          <button type="button" className="player-dash__sidebar-setup-link" onClick={onShowSetupGuide}>
+            Show setup guide
+          </button>
+        ) : null}
         <div className="player-dash__sidebar-actions">
           <NavLink
             to="/dashboard/tournaments"
@@ -99,7 +118,18 @@ function SidebarPlayer({ account, coinBalance, logout }) {
 
 export function PlayerDashboardLayout() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const { account, coinBalance, loading, error, logout, refreshMe } = usePlayerSession();
+  const onboarding = usePlayerOnboarding({ enabled: Boolean(account) && !loading });
+
+  const handleShowSetupGuide = () => {
+    if (pathname !== "/dashboard" && pathname !== "/dashboard/") {
+      navigate("/dashboard");
+      window.setTimeout(() => onboarding.restartDashboardTour(), 400);
+      return;
+    }
+    onboarding.restartDashboardTour();
+  };
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
@@ -117,7 +147,14 @@ export function PlayerDashboardLayout() {
             </div>
           </div>
 
-          {account ? <SidebarPlayer account={account} coinBalance={coinBalance} logout={logout} /> : null}
+          {account ? (
+            <SidebarPlayer
+              account={account}
+              coinBalance={coinBalance}
+              logout={logout}
+              onShowSetupGuide={handleShowSetupGuide}
+            />
+          ) : null}
         </aside>
 
         <main className="player-dash__main">
@@ -132,6 +169,16 @@ export function PlayerDashboardLayout() {
           )}
         </main>
       </div>
+
+      <PlayerSpotlightTour
+        open={onboarding.tourOpen}
+        step={onboarding.currentStep}
+        stepIndex={onboarding.stepIndex}
+        stepsLength={onboarding.steps.length}
+        onNext={onboarding.nextStep}
+        onBack={onboarding.prevStep}
+        onSkip={onboarding.skipTour}
+      />
     </PlayerAreaLayout>
   );
 }

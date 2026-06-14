@@ -15,13 +15,14 @@ export function BpcCoinSlider({
   balance = 0,
   disabled = false,
 }) {
-  const [local, setLocal] = useState(() => clampCoins(value, max));
-  const [inputText, setInputText] = useState(() => String(clampCoins(value, max)));
+  const effectiveMax = Math.min(Math.max(0, max), Math.max(0, balance));
+  const [local, setLocal] = useState(() => clampCoins(value, effectiveMax));
+  const [inputText, setInputText] = useState(() => String(clampCoins(value, effectiveMax)));
   const dragging = useRef(false);
   const debounceRef = useRef(null);
-  const maxRef = useRef(max);
+  const maxRef = useRef(effectiveMax);
 
-  maxRef.current = max;
+  maxRef.current = effectiveMax;
 
   const emitLive = useCallback(
     (n) => {
@@ -56,11 +57,11 @@ export function BpcCoinSlider({
 
   useEffect(() => {
     if (dragging.current) return;
-    const clamped = clampCoins(value, max);
+    const clamped = clampCoins(value, effectiveMax);
     setLocal(clamped);
     setInputText(String(clamped));
     emitLive(clamped);
-  }, [value, max, emitLive]);
+  }, [value, effectiveMax, emitLive]);
 
   useEffect(() => () => clearTimeout(debounceRef.current), []);
 
@@ -76,8 +77,8 @@ export function BpcCoinSlider({
     commit(inputText === "" ? 0 : Number(inputText));
   }
 
-  const pct = max > 0 ? (local / max) * 100 : 0;
-  const discount = Math.min(local, balance, max);
+  const pct = effectiveMax > 0 ? (local / effectiveMax) * 100 : 0;
+  const discount = local;
 
   return (
     <div className="player-reg__coin-slider">
@@ -90,14 +91,14 @@ export function BpcCoinSlider({
         <input
           type="range"
           min={0}
-          max={max}
+          max={effectiveMax}
           step={1}
           value={local}
-          disabled={disabled || max === 0}
+          disabled={disabled || effectiveMax === 0}
           className="player-reg__coin-range"
           aria-label="BPC coins to apply"
           aria-valuemin={0}
-          aria-valuemax={max}
+          aria-valuemax={effectiveMax}
           aria-valuenow={local}
           onPointerDown={() => {
             dragging.current = true;
@@ -105,7 +106,7 @@ export function BpcCoinSlider({
           onPointerUp={() => {
             dragging.current = false;
             clearTimeout(debounceRef.current);
-            onChange(clampCoins(local, max));
+            onChange(clampCoins(local, effectiveMax));
           }}
           onPointerCancel={() => {
             dragging.current = false;
@@ -121,10 +122,10 @@ export function BpcCoinSlider({
             type="number"
             inputMode="numeric"
             min={0}
-            max={max}
+            max={effectiveMax}
             step={1}
             value={inputText}
-            disabled={disabled || max === 0}
+            disabled={disabled || effectiveMax === 0}
             onChange={onManualInput}
             onBlur={onManualCommit}
             onKeyDown={(e) => {
@@ -141,6 +142,13 @@ export function BpcCoinSlider({
         </label>
         <span className="player-reg__coin-discount">−₹{discount}</span>
       </div>
+      {balance === 0 ? (
+        <p className="player-reg__field-hint">You have no BPC coins to apply.</p>
+      ) : effectiveMax < max ? (
+        <p className="player-reg__field-hint">
+          Slider capped at your balance ({balance} coin{balance === 1 ? "" : "s"}).
+        </p>
+      ) : null}
     </div>
   );
 }

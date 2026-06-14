@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, setAuthToken } from "../lib/api";
 
-export function AdminAuthPage({ onAuthed, inviteToken }) {
+export function AdminAuthPage({ onAuthed, inviteToken, darkMode, setDarkMode }) {
   const [hasAdminUsers, setHasAdminUsers] = useState(true);
   const [invite, setInvite] = useState(null);
   const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "" });
@@ -56,96 +56,113 @@ export function AdminAuthPage({ onAuthed, inviteToken }) {
     }
   }
 
-  const title = inviteToken ? "Accept admin invite" : hasAdminUsers ? "Admin login" : "Create superadmin";
+  const title = inviteToken ? "Accept invite" : hasAdminUsers ? "Sign in" : "Create superadmin";
+  const subtitle = inviteToken
+    ? "Register with the invited email, then wait for manual approval."
+    : hasAdminUsers
+      ? "Manage tournaments, registrations, brackets, and league operations."
+      : "No admins exist yet. Create the first superadmin account.";
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background p-4 text-foreground">
-      <form className="w-full max-w-md space-y-4 rounded-lg border border-border bg-card p-5" onSubmit={submit}>
-        <div>
-          <h1 className="font-serif text-2xl text-primary">{title}</h1>
-          <p className="text-sm text-muted-foreground">
-            {inviteToken
-              ? "Register with the invited email, then wait for manual approval."
-              : hasAdminUsers
-                ? "Sign in to manage Bharat Pro Circuit League (BPC League)."
-                : "No admins exist yet. Create the first superadmin account."}
+    <main className="admin-auth">
+      <button
+        type="button"
+        className="admin-auth__theme-btn site-navbar-icon-btn"
+        onClick={() => setDarkMode?.((prev) => !prev)}
+        aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+        title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+      >
+        {darkMode ? "☀" : "☾"}
+      </button>
+      <div className="admin-glass-panel admin-auth__card">
+        <span className="admin-auth__eyebrow">Staff portal</span>
+        <h1 className="admin-auth__title">{title}</h1>
+        <p className="admin-auth__lead">{subtitle}</p>
+
+        {message ? (
+          <p className={`admin-auth__message${message.includes("match") || message.includes("fail") ? " admin-auth__message--error" : ""}`}>
+            {message}
           </p>
-        </div>
-        {message ? <p className="rounded-md border border-border bg-background p-2 text-sm text-secondary">{message}</p> : null}
-        {invite ? <p className="text-sm text-muted-foreground">Invite for {invite.email}</p> : null}
-        {needsRegistration ? (
-          <label className="block text-sm">
-            Name
+        ) : null}
+        {invite ? <p className="admin-auth__invite-note">Invite for {invite.email}</p> : null}
+
+        <form className="admin-auth__form" onSubmit={submit}>
+          {needsRegistration ? (
+            <label className="admin-auth__field">
+              Full name
+              <input
+                value={form.name}
+                onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+                required
+                autoComplete="name"
+              />
+            </label>
+          ) : null}
+
+          <label className="admin-auth__field">
+            Email
             <input
-              className="mt-1 w-full rounded-md border border-input bg-background p-2"
-              value={form.name}
-              onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+              type="email"
+              value={form.email}
+              onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
               required
+              autoComplete="email"
             />
           </label>
-        ) : null}
-        <label className="block text-sm">
-          Email
-          <input
-            className="mt-1 w-full rounded-md border border-input bg-background p-2"
-            type="email"
-            value={form.email}
-            onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
-            required
-          />
-        </label>
-        <label className="block text-sm">
-          Password
-          <div className="relative mt-1">
-            <input
-              className="w-full rounded-md border border-input bg-background py-2 pl-2 pr-14"
-              type={showPassword ? "text" : "password"}
-              value={form.password}
-              onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
-              required
-              minLength={8}
-              autoComplete={needsRegistration ? "new-password" : "current-password"}
-            />
-            <button
-              type="button"
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => setShowPassword((s) => !s)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
-              tabIndex={-1}
-            >
-              {showPassword ? "Hide" : "Show"}
-            </button>
-          </div>
-        </label>
-        {needsRegistration ? (
-          <label className="block text-sm">
-            Confirm password
-            <div className="relative mt-1">
+
+          <label className="admin-auth__field">
+            Password
+            <div className="admin-auth__password-wrap">
               <input
-                className="w-full rounded-md border border-input bg-background py-2 pl-2 pr-14"
-                type={showConfirmPassword ? "text" : "password"}
-                value={form.confirmPassword}
-                onChange={(event) => setForm((prev) => ({ ...prev, confirmPassword: event.target.value }))}
+                type={showPassword ? "text" : "password"}
+                value={form.password}
+                onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
                 required
                 minLength={8}
-                autoComplete="new-password"
+                autoComplete={needsRegistration ? "new-password" : "current-password"}
               />
               <button
                 type="button"
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => setShowConfirmPassword((s) => !s)}
-                aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                className="admin-auth__toggle"
+                onClick={() => setShowPassword((s) => !s)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
                 tabIndex={-1}
               >
-                {showConfirmPassword ? "Hide" : "Show"}
+                {showPassword ? "Hide" : "Show"}
               </button>
             </div>
           </label>
-        ) : null}
-        <button type="submit" className="btn btn-primary btn-block">
-          {title}
-        </button>
-      </form>
+
+          {needsRegistration ? (
+            <label className="admin-auth__field">
+              Confirm password
+              <div className="admin-auth__password-wrap">
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={form.confirmPassword}
+                  onChange={(event) => setForm((prev) => ({ ...prev, confirmPassword: event.target.value }))}
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  className="admin-auth__toggle"
+                  onClick={() => setShowConfirmPassword((s) => !s)}
+                  aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                  tabIndex={-1}
+                >
+                  {showConfirmPassword ? "Hide" : "Show"}
+                </button>
+              </div>
+            </label>
+          ) : null}
+
+          <button type="submit" className="btn btn-primary btn-block admin-auth__submit">
+            {hasAdminUsers && !inviteToken ? "Sign in to staff portal" : title}
+          </button>
+        </form>
+      </div>
     </main>
   );
 }

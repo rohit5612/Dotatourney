@@ -259,7 +259,7 @@ export function PlayerProfileSettingsPage() {
           </form>
         </section>
 
-        <section className="player-dash__card player-dash__section-card">
+        <section className="player-dash__card player-dash__section-card" data-tour="linked-accounts">
           <header className="player-dash__card-head player-dash__card-head--compact">
             <div className="player-dash__section-title-row">
               <span className="player-dash__section-icon" aria-hidden="true">

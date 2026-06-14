@@ -23,8 +23,14 @@ function getTransporter() {
   return transporter;
 }
 
-function baseEmailWrapper({ title, preheader, innerHtml }) {
+function baseEmailWrapper({ title, preheader, innerHtml, audience = "player" }) {
   const app = env.appUrl.replace(/\/$/, "");
+  const isAdmin = audience === "admin";
+  const footerLine = isAdmin
+    ? `This message was sent by <strong style="color:#e9a84a;">${BRAND_LINE}</strong> administrator tools.`
+    : `This message was sent by <strong style="color:#e9a84a;">${BRAND_LINE}</strong>.`;
+  const footerLink = isAdmin ? `${app}/admin` : app;
+  const footerLinkLabel = isAdmin ? "Open admin panel" : "Open BPC League";
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -49,8 +55,8 @@ function baseEmailWrapper({ title, preheader, innerHtml }) {
             <td style="padding:28px 28px 32px;">
               ${innerHtml}
               <p style="margin:28px 0 0;font-size:12px;color:#71717a;border-top:1px solid #27272f;padding-top:16px;">
-                This message was sent by <strong style="color:#e9a84a;">${BRAND_LINE}</strong> tournament admin tools.
-                <br /><a href="${app}" style="color:#5eead4;text-decoration:none;">Open panel</a>
+                ${footerLine}
+                <br /><a href="${footerLink}" style="color:#5eead4;text-decoration:none;">${footerLinkLabel}</a>
               </p>
             </td>
           </tr>
@@ -121,6 +127,7 @@ export async function sendAdminInviteEmail({ to, registerUrl, expiresAt }) {
     title: "Admin invitation",
     preheader: `Complete your ${BRAND_SHORT} admin registration.`,
     innerHtml,
+    audience: "admin",
   });
 
   await sendMail({ to, subject, text, html });
@@ -149,6 +156,7 @@ export async function sendAdminApprovedEmail({ to, name }) {
     title: "You're approved",
     preheader: `Your ${BRAND_SHORT} admin access is ready.`,
     innerHtml,
+    audience: "admin",
   });
   await sendMail({ to, subject, text, html });
 }
@@ -175,6 +183,7 @@ export async function sendAdminRejectedEmail({ to, name }) {
     title: "Registration not approved",
     preheader: `Your ${BRAND_SHORT} admin request was not approved.`,
     innerHtml,
+    audience: "admin",
   });
   await sendMail({ to, subject, text, html });
 }
@@ -201,6 +210,7 @@ export async function sendAdminRevokedEmail({ to, name }) {
     title: "Access revoked",
     preheader: `Your ${BRAND_SHORT} admin access has been removed.`,
     innerHtml,
+    audience: "admin",
   });
   await sendMail({ to, subject, text, html });
 }
@@ -233,6 +243,7 @@ export async function sendPlayerRegistrationOtpEmail({ to, name, tournamentName,
     title: "Verify your email",
     preheader: `Your code: ${otp}`,
     innerHtml,
+    audience: "player",
   });
   await sendMail({ to, subject, text, html });
 }
@@ -279,6 +290,7 @@ export async function sendPlayerRegistrationVerifiedEmail({ to, name, tournament
     title: "Email verified",
     preheader: `Your ID: ${code}`,
     innerHtml,
+    audience: "player",
   });
   await sendMail({ to, subject, text, html });
 }
@@ -302,6 +314,7 @@ export async function sendPlayerRegistrationSubmittedEmail({ to, name, tournamen
     title: "Under review",
     preheader: "Your registration is being reviewed.",
     innerHtml,
+    audience: "player",
   });
   await sendMail({ to, subject, text, html });
 }
@@ -429,8 +442,39 @@ export async function sendPlayerRegistrationDecisionEmail({
     title,
     preheader: subject,
     innerHtml,
+    audience: "player",
   });
   await sendMail({ to, subject, text: textBody, html });
+}
+
+/**
+ * @param {{ to: string; verifyUrl: string; displayName?: string; bpcId?: string }} params
+ */
+export async function sendPlayerClaimAccountEmail({ to, verifyUrl, displayName = "", bpcId = "" }) {
+  const name = displayName || "there";
+  const idLabel = bpcId ? ` (${bpcId})` : "";
+  const subject = `Claim your Season 1 account${idLabel} — ${BRAND_SHORT}`;
+  const text = [
+    `Hi ${name},`,
+    ``,
+    `Verify your email to claim your ${BRAND_LINE} player account and set a password:`,
+    verifyUrl,
+    ``,
+    `This link expires in a few hours. If you didn't request this, ignore this email.`,
+  ].join("\n");
+  const innerHtml = `
+    <p style="margin:0;font-size:15px;color:#d4d4d8;">Hi <strong style="color:#fff;">${escapeHtml(name)}</strong>,</p>
+    <p style="margin:16px 0 0;font-size:14px;color:#a1a1aa;">You requested to claim your Season 1 player account${bpcId ? ` (<strong style="color:#e9a84a;">${escapeHtml(bpcId)}</strong>)` : ""}. Click the button below to verify your email and continue to set your password.</p>
+    ${buttonHtml(verifyUrl, "Verify & claim account")}
+    <p style="margin:16px 0 0;font-size:13px;color:#71717a;">No verification code is required — this secure link is all you need.</p>
+  `;
+  const html = baseEmailWrapper({
+    title: "Claim your account",
+    preheader: `Verify your email to claim your ${BRAND_SHORT} account.`,
+    innerHtml,
+    audience: "player",
+  });
+  await sendMail({ to, subject, text, html });
 }
 
 /**
@@ -449,13 +493,15 @@ export async function sendPlayerEmailVerificationEmail({ to, verifyUrl, displayN
   ].join("\n");
   const innerHtml = `
     <p style="margin:0;font-size:15px;color:#d4d4d8;">Hi <strong style="color:#fff;">${escapeHtml(name)}</strong>,</p>
-    <p style="margin:16px 0 0;font-size:14px;color:#a1a1aa;">Confirm your email to sign in and link Steam &amp; Discord for tournament registration.</p>
+    <p style="margin:16px 0 0;font-size:14px;color:#a1a1aa;">Confirm your email to activate your player account. Click the button below — no code required.</p>
     ${buttonHtml(verifyUrl, "Verify email")}
+    <p style="margin:16px 0 0;font-size:13px;color:#71717a;">After verifying, sign in and link Steam &amp; Discord from your dashboard to register for tournaments.</p>
   `;
   const html = baseEmailWrapper({
     title: "Verify your email",
     preheader: `Complete your ${BRAND_SHORT} account setup.`,
     innerHtml,
+    audience: "player",
   });
   await sendMail({ to, subject, text, html });
 }
@@ -480,6 +526,7 @@ export async function sendPlayerPasswordResetEmail({ to, resetUrl }) {
     title: "Password reset",
     preheader: `Reset your ${BRAND_SHORT} password.`,
     innerHtml,
+    audience: "player",
   });
   await sendMail({ to, subject, text, html });
 }

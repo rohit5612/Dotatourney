@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { DashboardActionIcon } from "./DashboardActionIcon.jsx";
+import { PlayerTournamentSeasonShell } from "./PlayerTournamentSeasonShell.jsx";
 import { playerApi } from "../../lib/playerApi";
+import { resolveTournamentCardPresentation } from "../../utils/seasonPayload.js";
 
 const LINKAGE = [
   { key: "emailVerified", label: "Email", detailKey: "email" },
@@ -73,16 +75,20 @@ function LinkageChip({ item, account }) {
 
 export function RegistrationHero({ tournament, account, step, stepLabel }) {
   const linkageDone = LINKAGE.filter((item) => account?.[item.key]).length;
+  const { badge, displayLabel } = resolveTournamentCardPresentation(tournament);
 
   return (
-    <header className="player-dash__hero player-dash__hero--compact player-reg__hero">
-      <div className="player-dash__hero-main">
-        <div className="player-dash__tourney-hero-icon" aria-hidden="true">
-          <DashboardActionIcon name="tournaments" />
-        </div>
-        <div className="player-dash__hero-copy">
+    <PlayerTournamentSeasonShell tournament={tournament} className="player-reg__season-hero">
+      <div className="season-card__identity player-reg__season-hero-identity">
+        <span className="season-card__badge" aria-hidden="true">
+          {badge}
+        </span>
+        <div className="season-card__headline">
           <p className="player-dash__hero-eyebrow">Tournament registration</p>
-          <h1 className="player-dash__hero-title">{tournament?.name || "Register"}</h1>
+          <h1 className="season-card__title player-dash__hero-title">{displayLabel}</h1>
+          {tournament?.name && tournament.name !== displayLabel ? (
+            <p className="season-card__tagline player-reg__season-hero-subtitle">{tournament.name}</p>
+          ) : null}
           <div className="player-dash__hero-meta">
             {account?.bpcId ? <span className="player-dash__badge">{account.bpcId}</span> : null}
             <span className="player-dash__hero-chip">
@@ -98,13 +104,17 @@ export function RegistrationHero({ tournament, account, step, stepLabel }) {
         </div>
       </div>
 
-      <div className="player-dash__hero-actions">
+      <div className="player-dash__hero-actions player-reg__season-hero-actions">
         <Link to="/dashboard/tournaments" className="player-dash__action player-dash__action--public">
           <span>All tournaments</span>
         </Link>
       </div>
-    </header>
+    </PlayerTournamentSeasonShell>
   );
+}
+
+export function RegistrationBody({ children }) {
+  return <div className="player-reg__body">{children}</div>;
 }
 
 export function RegistrationStepper({ step }) {

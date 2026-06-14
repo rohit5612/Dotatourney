@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { SeasonArchiveEmbedsEditor } from "../admin/seasons/SeasonArchiveEmbedsEditor.jsx";
 import {
   buildStageTabLabels,
   formatMatchRoundSummary,
@@ -9,7 +10,9 @@ import {
   stageRoundStructure,
 } from "../components/bracket/bracketLayout.js";
 import { SchedulePhaseTabs } from "../components/navigation/TournamentTabs.jsx";
+import { api } from "../lib/api";
 import { createId } from "../utils/client";
+import { normalizeArchiveEmbeds } from "../utils/seasonContentSchema.js";
 import { datetimeLocalToIso, toDatetimeLocalValue } from "../utils/datetime.js";
 import { isValidScheduleInstant, resolveScheduleStatus } from "../utils/schedule.js";
 
@@ -394,10 +397,68 @@ export function SchedulePage({
   const [liveStreamDraft, setLiveStreamDraft] = useState(() => String(liveYoutubeUrl || "").trim());
   const [savingLiveStream, setSavingLiveStream] = useState(false);
   const [liveStreamMessage, setLiveStreamMessage] = useState("");
+  const [linkedSeasonId, setLinkedSeasonId] = useState("");
+  const [archiveEmbedsDraft, setArchiveEmbedsDraft] = useState([]);
+  const [savingArchiveEmbeds, setSavingArchiveEmbeds] = useState(false);
+  const [archiveEmbedsMessage, setArchiveEmbedsMessage] = useState("");
+  const [loadingArchiveEmbeds, setLoadingArchiveEmbeds] = useState(false);
+
+  const tournamentId = state?.tournament?.id || "";
+
+  useEffect(() => {
+    if (!tournamentId) {
+      setLinkedSeasonId("");
+      setArchiveEmbedsDraft([]);
+      return;
+    }
+    let active = true;
+    setLoadingArchiveEmbeds(true);
+    api
+      .getAdminSeasons()
+      .then((data) => {
+        if (!active) return;
+        const season = (data.seasons || []).find((entry) => entry.tournamentId === tournamentId);
+        if (!season) {
+          setLinkedSeasonId("");
+          setArchiveEmbedsDraft([]);
+          return;
+        }
+        setLinkedSeasonId(season.id);
+        setArchiveEmbedsDraft(normalizeArchiveEmbeds(season.archiveEmbeds || []));
+      })
+      .catch(() => {
+        if (!active) return;
+        setLinkedSeasonId("");
+        setArchiveEmbedsDraft([]);
+      })
+      .finally(() => {
+        if (active) setLoadingArchiveEmbeds(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [tournamentId]);
 
   useEffect(() => {
     setLiveStreamDraft(String(liveYoutubeUrl || "").trim());
   }, [liveYoutubeUrl]);
+
+  async function handleSaveArchiveEmbeds() {
+    if (!linkedSeasonId) return;
+    setSavingArchiveEmbeds(true);
+    setArchiveEmbedsMessage("");
+    try {
+      const { season } = await api.updateAdminSeasonContent(linkedSeasonId, {
+        archiveEmbeds: archiveEmbedsDraft,
+      });
+      setArchiveEmbedsDraft(normalizeArchiveEmbeds(season.archiveEmbeds || []));
+      setArchiveEmbedsMessage("Saved.");
+    } catch (error) {
+      setArchiveEmbedsMessage(error?.message || "Could not save archive embeds.");
+    } finally {
+      setSavingArchiveEmbeds(false);
+    }
+  }
 
   async function handleSaveLiveStream() {
     if (!onSaveLiveYoutubeUrl) return;
@@ -841,6 +902,39 @@ export function SchedulePage({
     <div className="w-full space-y-4 rounded-lg border border-border bg-card p-4 sm:p-6">
       <section className="space-y-3 rounded-lg border border-border bg-background/60 p-4">
         <div>
+          <h3 className="font-serif text-lg">Off-air YouTube embeds</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Shown on the home page and tournament hub below the countdown when the event is not in its live window.
+            Configure highlights, trailers, or past broadcasts here.
+          </p>
+        </div>
+        {loadingArchiveEmbeds ? (
+          <p className="text-sm text-muted-foreground">Loading season archive settings…</p>
+        ) : linkedSeasonId ? (
+          <>
+            <SeasonArchiveEmbedsEditor value={archiveEmbedsDraft} onChange={setArchiveEmbedsDraft} />
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="btn btn-primary btn-sm shrink-0"
+                disabled={savingArchiveEmbeds}
+                onClick={() => void handleSaveArchiveEmbeds()}
+              >
+                {savingArchiveEmbeds ? "Saving…" : "Save archive embeds"}
+              </button>
+              {archiveEmbedsMessage ? <span className="text-sm text-secondary">{archiveEmbedsMessage}</span> : null}
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No season is linked to this tournament yet. Create or link a season in Setup / Seasons to configure archive
+            embeds.
+          </p>
+        )}
+      </section>
+
+      <section className="space-y-3 rounded-lg border border-border bg-background/60 p-4">
+        <div>
           <h3 className="font-serif text-lg">Live YouTube stream</h3>
           <p className="mt-1 text-sm text-muted-foreground">
             Tournament-wide broadcast embed for the public site during the live event window. Does not change per-match
@@ -869,8 +963,9 @@ export function SchedulePage({
           {liveStreamMessage ? <span className="text-sm text-secondary">{liveStreamMessage}</span> : null}
         </div>
         <p className="text-xs text-muted-foreground">
-          Home page: embed appears below the status card when live. Tournament page: embed replaces the hero status card.
-          Clear the URL to fall back to the timer / live status panel.
+          Home page: embed appears below the status card when live. Tournament page: live embed replaces the hero status
+          card during the live window. Archive embeds above are used when off-air. Clear the URL to fall back to the timer
+          / live status panel.
         </p>
       </section>
 

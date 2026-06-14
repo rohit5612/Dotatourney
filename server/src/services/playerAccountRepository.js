@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { pool } from "../db/pool.js";
 import { slugifyPlayer } from "../utils/playerSlug.js";
+import { demoAccessDisplayOverrides, isDemoAccessAccount } from "../utils/demoAccessAccount.js";
 
 const BPC_PREFIX = "BPC";
 
@@ -34,6 +35,14 @@ export function publicPlayerAccount(row) {
   };
 }
 
+/** Public profile page — omits private account fields. */
+export function publicPlayerProfileAccount(row) {
+  const pub = publicPlayerAccount(row);
+  if (!pub) return null;
+  const { email, phoneNumber, hasPassword, emailVerifiedAt, ...safe } = pub;
+  return safe;
+}
+
 export function publicSteamOnlyProfile(account) {
   if (!account) return null;
   return {
@@ -48,6 +57,12 @@ export function publicSteamOnlyProfile(account) {
 export function eligibilityFromAccount(account) {
   const pub = publicPlayerAccount(account);
   if (!pub) return null;
+
+  if (isDemoAccessAccount(account)) {
+    const overrides = demoAccessDisplayOverrides(account);
+    return { ...pub, ...overrides };
+  }
+
   const emailVerified = Boolean(account.email_verified_at);
   const steamLinked = Boolean(account.steam_id);
   const discordLinked = Boolean(account.discord_id);

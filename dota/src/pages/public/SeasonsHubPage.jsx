@@ -1,41 +1,41 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useMemo } from "react";
+import { SeasonCard, SeasonsEmptyState, SeasonsPageHeader } from "../../components/seasons/SeasonCard.jsx";
+import { PageLoadingSpinner } from "../../components/PageLoadingSpinner.jsx";
 import { api } from "../../lib/api";
+import { usePublicCachedQuery } from "../../hooks/usePublicCachedQuery.js";
 
 export function SeasonsHubPage() {
-  const [seasons, setSeasons] = useState([]);
-  const [error, setError] = useState("");
+  const fetchSeasons = useMemo(() => () => api.getPublicSeasons(), []);
+  const { data, loading, error } = usePublicCachedQuery("public:seasons", fetchSeasons);
+  const seasons = data?.seasons || [];
 
-  useEffect(() => {
-    api
-      .getPublicSeasons()
-      .then((data) => setSeasons(data.seasons || []))
-      .catch((err) => setError(err.message));
-  }, []);
+  const sortedSeasons = useMemo(
+    () => [...seasons].sort((a, b) => (b.number ?? 0) - (a.number ?? 0)),
+    [seasons],
+  );
 
   return (
-    <section className="mx-auto max-w-4xl px-4 py-12">
-      <h1 className="font-serif text-3xl">Seasons</h1>
-      <p className="mt-2 text-muted-foreground">BPC League history across competitive seasons.</p>
-      {error ? <p className="mt-6 text-destructive">{error}</p> : null}
-      <div className="mt-8 grid gap-4 sm:grid-cols-2">
-        {seasons.length === 0 && !error ? (
-          <p className="text-muted-foreground">Season archive coming soon.</p>
+    <div className="seasons-page">
+      <div className="seasons-hub">
+        <SeasonsPageHeader />
+
+        {error ? <p className="season-detail__error season-glass">{error}</p> : null}
+        {loading ? (
+          <div className="seasons-hub__loading">
+            <PageLoadingSpinner label="Loading seasons…" compact />
+          </div>
         ) : null}
-        {seasons.map((season) => (
-          <Link
-            key={season.id}
-            to={`/seasons/${season.slug}`}
-            className="rounded-lg border border-border bg-card p-5 transition hover:border-accent/50"
-          >
-            <span className="text-xs uppercase tracking-wider text-accent">{season.status}</span>
-            <h2 className="mt-2 font-serif text-xl">{season.name || `Season ${season.number}`}</h2>
-            {season.themeKey ? (
-              <p className="mt-1 text-sm text-muted-foreground capitalize">{season.themeKey} theme</p>
-            ) : null}
-          </Link>
-        ))}
+
+        {!loading && !error && seasons.length === 0 ? <SeasonsEmptyState /> : null}
+
+        {!loading && sortedSeasons.length > 0 ? (
+          <div className="seasons-hub__list">
+            {sortedSeasons.map((season) => (
+              <SeasonCard key={season.id} season={season} />
+            ))}
+          </div>
+        ) : null}
       </div>
-    </section>
+    </div>
   );
 }

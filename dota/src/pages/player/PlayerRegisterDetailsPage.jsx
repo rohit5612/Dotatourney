@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { DashboardActionIcon } from "../../components/player/DashboardActionIcon.jsx";
 import {
+  RegistrationBody,
   RegistrationHero,
   RegistrationLinkagePanel,
   RegistrationPlayerStrip,
@@ -66,6 +67,7 @@ export function PlayerRegisterDetailsPage() {
   return (
     <div className="player-reg">
       <RegistrationHero tournament={tournament} account={account} step={1} stepLabel="Step 1 of 2" />
+      <RegistrationBody>
       <RegistrationStepper step={1} />
 
       {error ? <div className="player-auth__message player-auth__message--error">{error}</div> : null}
@@ -90,7 +92,7 @@ export function PlayerRegisterDetailsPage() {
           <p className="player-auth__sub">Loading tournament…</p>
         </div>
       ) : (
-        <div className="player-reg__layout">
+        <div className="player-reg__layout" data-tour="register-flow">
           <section className="player-dash__card player-dash__section-card player-reg__form-card">
             <header className="player-dash__card-head player-dash__card-head--compact">
               <div className="player-dash__section-title-row">
@@ -199,6 +201,7 @@ export function PlayerRegisterDetailsPage() {
           </aside>
         </div>
       )}
+      </RegistrationBody>
     </div>
   );
 }

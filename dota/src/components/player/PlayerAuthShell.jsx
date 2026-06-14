@@ -133,6 +133,10 @@ export function PlayerAuthShell({
 
       <div className="player-auth-split__stage">
         <div className="player-auth-split__cards">
+          <section className="player-auth__glass player-auth__glass--card player-auth__glass--form">
+            <div className="player-auth__form-inner">{children}</div>
+          </section>
+
           <aside
             className="player-auth__glass player-auth__glass--card player-auth__glass--brand"
             aria-label={`${SITE_BRAND_SHORT} branding`}
@@ -158,10 +162,6 @@ export function PlayerAuthShell({
 
             <p className="player-auth-split__footnote">{SITE_BRAND_FULL}</p>
           </aside>
-
-          <section className="player-auth__glass player-auth__glass--card player-auth__glass--form">
-            <div className="player-auth__form-inner">{children}</div>
-          </section>
         </div>
       </div>
     </div>

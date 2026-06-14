@@ -47,7 +47,42 @@
     <meta name="twitter:image" content="__OG_IMAGE_ABS__" />
     <meta name="twitter:image:alt" content="BPC League — Bharat Pro Circuit League logo" />
 
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "name": "BPC League",
+            "alternateName": "Bharat Pro Circuit League",
+            "url": "__OG_URL_HOME__",
+            "logo": "__OG_IMAGE_ABS__"
+          },
+          {
+            "@type": "WebSite",
+            "name": "BPC League",
+            "url": "__OG_URL_HOME__",
+            "description": "Bharat Pro Circuit League (BPC League) — Dota 2 tournaments, registrations, brackets, and schedules for the Indian circuit."
+          }
+        ]
+      }
+    </script>
+
     <title>BPC League | Bharat Pro Circuit League — Dota 2</title>
+    <style>
+      html {
+        background-color: #0c0c12;
+        color-scheme: dark;
+      }
+      html[data-season="emerald"] {
+        background-color: #f8fafc;
+        color-scheme: light;
+      }
+      body {
+        margin: 0;
+        background-color: inherit;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

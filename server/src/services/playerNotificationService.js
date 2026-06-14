@@ -1,0 +1,129 @@
+import { randomUUID } from "node:crypto";
+import { pool } from "../db/pool.js";
+
+export async function createNotification(playerAccountId, { type, title, body, payload = {} }) {
+  const id = randomUUID();
+  const { rows } = await pool.query(
+    `INSERT INTO player_notifications (id, player_account_id, type, title, body, payload)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+     RETURNING *`,
+    [id, playerAccountId, type, title, body, JSON.stringify(payload)],
+  );
+  return rows[0];
+}
+
+export async function createNotificationsForAccounts(accountIds, notification) {
+  const unique = [...new Set(accountIds.filter(Boolean))];
+  const results = [];
+  for (const accountId of unique) {
+    results.push(await createNotification(accountId, notification));
+  }
+  return results;
+}
+
+export async function listPlayerNotifications(playerAccountId, { limit = 30, offset = 0, unreadOnly = false } = {}) {
+  const params = [playerAccountId];
+  let where = `WHERE player_account_id = $1`;
+  if (unreadOnly) {
+    where += ` AND read_at IS NULL`;
+  }
+  params.push(Math.min(Math.max(limit, 1), 100));
+  params.push(Math.max(offset, 0));
+
+  const { rows: countRows } = await pool.query(
+    `SELECT COUNT(*)::int AS total FROM player_notifications ${where}`,
+    unreadOnly ? [playerAccountId] : [playerAccountId],
+  );
+
+  const { rows } = await pool.query(
+    `SELECT id, type, title, body, payload, read_at AS "readAt", created_at AS "createdAt"
+     FROM player_notifications
+     ${where}
+     ORDER BY created_at DESC
+     LIMIT $2 OFFSET $3`,
+    params,
+  );
+
+  return {
+    notifications: rows.map((row) => ({
+      id: row.id,
+      type: row.type,
+      title: row.title,
+      body: row.body,
+      payload: row.payload || {},
+      readAt: row.readAt,
+      createdAt: row.createdAt,
+    })),
+    total: countRows[0]?.total ?? 0,
+    limit: params[1],
+    offset: params[2],
+  };
+}
+
+export async function getUnreadNotificationCount(playerAccountId) {
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS count FROM player_notifications
+     WHERE player_account_id = $1 AND read_at IS NULL`,
+    [playerAccountId],
+  );
+  return rows[0]?.count ?? 0;
+}
+
+export async function markNotificationRead(playerAccountId, notificationId) {
+  const { rows } = await pool.query(
+    `UPDATE player_notifications SET read_at = NOW()
+     WHERE id = $2 AND player_account_id = $1 AND read_at IS NULL
+     RETURNING id`,
+    [playerAccountId, notificationId],
+  );
+  return Boolean(rows[0]);
+}
+
+export async function markAllNotificationsRead(playerAccountId) {
+  const { rowCount } = await pool.query(
+    `UPDATE player_notifications SET read_at = NOW()
+     WHERE player_account_id = $1 AND read_at IS NULL`,
+    [playerAccountId],
+  );
+  return rowCount ?? 0;
+}
+
+export async function notifySubstitutionFiled({ match, teamName, requesterName, recipientAccountIds }) {
+  const title = "Substitution request filed";
+  const body = `${requesterName} requested a substitute for ${match.team1} vs ${match.team2}.`;
+  return createNotificationsForAccounts(recipientAccountIds, {
+    type: "substitution_filed",
+    title,
+    body,
+    payload: { matchId: match.id, teamName },
+  });
+}
+
+export async function notifySubstitutionAssigned({
+  match,
+  teamName,
+  requesterName,
+  substituteName,
+  recipientAccountIds,
+  substitutionRequestId,
+}) {
+  const title = "Lineup substitution";
+  const body = `${substituteName} will sub in for ${requesterName} (${teamName}) in ${match.team1} vs ${match.team2}.`;
+  return createNotificationsForAccounts(recipientAccountIds, {
+    type: "substitution_assigned",
+    title,
+    body,
+    payload: { matchId: match.id, teamName, substitutionRequestId },
+  });
+}
+
+export async function notifySubstitutionCancelled({ match, requesterName, recipientAccountIds, substitutionRequestId }) {
+  const title = "Substitution request cancelled";
+  const body = `${requesterName} cancelled their substitute request for ${match.team1} vs ${match.team2}.`;
+  return createNotificationsForAccounts(recipientAccountIds, {
+    type: "substitution_cancelled",
+    title,
+    body,
+    payload: { matchId: match.id, substitutionRequestId },
+  });
+}

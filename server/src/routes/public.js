@@ -3,10 +3,11 @@ import { z } from "zod";
 import { env } from "../config/env.js";
 import {
   completeRegistrationPayment,
-  countApprovedPlayerRegistrations,
   getPublicRegistrationSession,
   lookupRegistrationFlowStage,
   requestRegistrationOtp,
+  syncRegistrationCapState,
+  substitutePoolIsOpen,
   verifyRegistrationOtp,
 } from "../services/registrationRepository.js";
 import {
@@ -19,6 +20,7 @@ import { applyBlastGroupSeeding } from "../services/blastSeeding.js";
 import { buildPublicHonorsPayload } from "../services/bracketHonorsEngine.js";
 import { buildGroupedStandings, buildStandings } from "../services/standingsEngine.js";
 import { stageTabsForFormat } from "../services/formatGenerator.js";
+import { engineBracketTabs } from "../services/tournamentEngineService.js";
 import {
   sendPlayerRegistrationOtpEmail,
   sendPlayerRegistrationSubmittedEmail,
@@ -27,11 +29,15 @@ import {
 import { resolvePublicTeamLogo } from "../utils/teamLogoUrl.js";
 import { getPublicPlayerProfile, getCommunityDirectory } from "../services/playerProfileService.js";
 import {
-  listSeasons,
+  isSeasonPubliclyVisible,
+  listPublicSeasons,
   getSeasonBySlug,
   getPublicMatchDetail,
   listAnnouncements,
+  getArchiveEmbedsForTournament,
+  getLandingSponsorsConfig,
 } from "../services/seasonService.js";
+import { getPublicSiteContent } from "../services/siteContentService.js";
 import {
   buildCardManifestBySlug,
   buildMatchRosterCards,
@@ -130,6 +136,7 @@ function fallbackTournament(identifier) {
     payment_upi_id: "",
     registration_code_prefix: DEFAULT_REG_PREFIX,
     registrations_open: false,
+    registration_cap: null,
   };
 }
 
@@ -163,10 +170,22 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
       groupedStandings: [],
       isPlaceholder: true,
       approvedRegistrationCount: 0,
+      substitutePoolOpen: false,
+      archiveEmbeds: [],
+      sponsorsConfig: { section: {}, sponsors: [] },
     };
   }
 
-  const approvedRegistrationCount = await countApprovedPlayerRegistrations(data.tournament.id);
+  const capState = await syncRegistrationCapState(data.tournament.id);
+  const approvedRegistrationCount = capState.count;
+  if (capState.changed) {
+    data.tournament.registrations_open = false;
+  }
+  const substitutePoolOpen = substitutePoolIsOpen(capState);
+  const [archiveEmbeds, sponsorsConfig] = await Promise.all([
+    getArchiveEmbedsForTournament(data.tournament.id),
+    getLandingSponsorsConfig(),
+  ]);
 
   const visibilityMode = data.tournament.visibility_mode || "demo";
   const format = data.tournament.format;
@@ -246,35 +265,54 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
     matches,
     honors,
     schedule: data.schedule,
-    tabs: stageTabsForFormat(format, { teamCount: data.tournament.team_count }),
+    tabs:
+      engineBracketTabs(data.tournament.engine_config) ||
+      stageTabsForFormat(format, { teamCount: data.tournament.team_count }),
     standings: buildStandings(standingsTeams, matches, format),
     groupedStandings: buildGroupedStandings(standingsTeams, matches, format),
     approvedRegistrationCount,
+    substitutePoolOpen,
+    archiveEmbeds,
+    sponsorsConfig,
   };
 }
 
-function assertPublishedOpen(data) {
+async function assertPublishedOpen(data) {
   if (!data) {
     const err = new Error("No tournament is currently published for registration");
     err.status = 404;
     throw err;
   }
-  if (data.tournament.registrations_open !== true) {
+  const capState = await syncRegistrationCapState(data.tournament.id);
+  if (capState.changed) {
+    data.tournament.registrations_open = false;
+  }
+  if (capState.reached || data.tournament.registrations_open !== true) {
     const err = new Error(
-      "Registration is closed. New sign-ups, email verification, continuing from an email link (including Complete payment), and submitting payment online are disabled.",
+      capState.reached
+        ? "Registration is full. Join the substitute pool from your player dashboard."
+        : "Registration is closed. New sign-ups, email verification, continuing from an email link (including Complete payment), and submitting payment online are disabled.",
     );
     err.status = 403;
     throw err;
   }
 }
 
-const PUBLIC_HTTP_CACHE = "public, max-age=5, stale-while-revalidate=20";
+const PUBLIC_HTTP_CACHE = "public, max-age=10, stale-while-revalidate=30";
+
+function publicQueryCacheKey(base, query) {
+  const parts = Object.entries(query)
+    .filter(([, value]) => value !== "" && value != null)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${key}=${value}`);
+  return parts.length ? `${base}?${parts.join("&")}` : base;
+}
 
 async function cachedPublicJson(res, cacheKey, loader) {
-  let payload = getCachedPublicPayload(cacheKey);
+  let payload = await getCachedPublicPayload(cacheKey);
   if (!payload) {
     payload = await loader();
-    setCachedPublicPayload(cacheKey, payload);
+    await setCachedPublicPayload(cacheKey, payload);
   }
   res.set("Cache-Control", PUBLIC_HTTP_CACHE);
   return res.json(payload);
@@ -305,7 +343,7 @@ router.get("/tournaments/:identifier", async (req, res, next) => {
 router.get("/tournaments/:identifier/register/session", async (req, res, next) => {
   try {
     const data = await getPublishedTournamentForPublicRequest(req.params.identifier);
-    assertPublishedOpen(data);
+    await assertPublishedOpen(data);
     const email = req.query.email;
     const code = req.query.code;
     if (!email || typeof email !== "string") {
@@ -322,7 +360,7 @@ router.get("/tournaments/:identifier/register/session", async (req, res, next) =
 router.post("/tournaments/:identifier/register/lookup-email", async (req, res, next) => {
   try {
     const data = await getPublishedTournamentForPublicRequest(req.params.identifier);
-    assertPublishedOpen(data);
+    await assertPublishedOpen(data);
     const body = z.object({ email: z.string().email() }).parse(req.body);
     const { stage } = await lookupRegistrationFlowStage(data.tournament.id, body.email);
     return res.json({ stage });
@@ -340,7 +378,7 @@ router.post("/tournaments/:identifier/register/request-otp", async (req, res, ne
       });
     }
     const data = await getPublishedTournamentForPublicRequest(req.params.identifier);
-    assertPublishedOpen(data);
+    await assertPublishedOpen(data);
     const body = registerFormSchema.extend({ termsAcceptedAt: z.string().min(1) }).parse(req.body);
     const { registrationId, otp } = await requestRegistrationOtp(data.tournament.id, body, body.termsAcceptedAt);
     const tournamentName = data.tournament.name || DEFAULT_PUBLIC_TOURNAMENT_NAME;
@@ -374,7 +412,7 @@ router.post("/tournaments/:identifier/register/verify-otp", async (req, res, nex
       });
     }
     const data = await getPublishedTournamentForPublicRequest(req.params.identifier);
-    assertPublishedOpen(data);
+    await assertPublishedOpen(data);
     const body = z
       .object({
         email: z.string().email(),
@@ -410,7 +448,7 @@ router.post("/tournaments/:identifier/register/complete", async (req, res, next)
       });
     }
     const data = await getPublishedTournamentForPublicRequest(req.params.identifier);
-    assertPublishedOpen(data);
+    await assertPublishedOpen(data);
     const body = z
       .object({
         email: z.string().email(),
@@ -453,10 +491,16 @@ router.post("/tournaments/:identifier/register", async (_req, res) => {
 
 router.get("/players/:slug", async (req, res, next) => {
   try {
-    const { getPublicPlayerProfileSteamOnly } = await import("../services/playerProfileService.js");
-    const profile = await getPublicPlayerProfileSteamOnly(req.params.slug);
-    if (!profile) return res.status(404).json({ message: "Player not found" });
-    return res.json(profile);
+    const slug = String(req.params.slug || "").trim().toLowerCase();
+    return await cachedPublicJson(res, `player:${slug}`, async () => {
+      const payload = await getPublicPlayerProfile(slug);
+      if (!payload) {
+        const err = new Error("Player not found");
+        err.status = 404;
+        throw err;
+      }
+      return payload;
+    });
   } catch (error) {
     return next(error);
   }
@@ -487,9 +531,16 @@ router.get("/players/:slug/card.png", async (req, res, next) => {
 
 router.get("/matches/:id/roster-cards", async (req, res, next) => {
   try {
-    const payload = await buildMatchRosterCards(req.params.id);
-    if (!payload) return res.status(404).json({ message: "Match not found" });
-    return res.json(payload);
+    const id = String(req.params.id || "").trim();
+    return await cachedPublicJson(res, `match-roster:${id}`, async () => {
+      const payload = await buildMatchRosterCards(id);
+      if (!payload) {
+        const err = new Error("Match not found");
+        err.status = 404;
+        throw err;
+      }
+      return payload;
+    });
   } catch (error) {
     return next(error);
   }
@@ -497,9 +548,24 @@ router.get("/matches/:id/roster-cards", async (req, res, next) => {
 
 router.get("/match/:id", async (req, res, next) => {
   try {
-    const payload = await getPublicMatchDetail(req.params.id);
-    if (!payload) return res.status(404).json({ message: "Match not found" });
-    return res.json(payload);
+    const id = String(req.params.id || "").trim();
+    return await cachedPublicJson(res, `match:${id}`, async () => {
+      const payload = await getPublicMatchDetail(id);
+      if (!payload) {
+        const err = new Error("Match not found");
+        err.status = 404;
+        throw err;
+      }
+      return payload;
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/site-content", async (_req, res, next) => {
+  try {
+    return await cachedPublicJson(res, "site-content", async () => getPublicSiteContent());
   } catch (error) {
     return next(error);
   }
@@ -507,8 +573,10 @@ router.get("/match/:id", async (req, res, next) => {
 
 router.get("/seasons", async (_req, res, next) => {
   try {
-    const seasons = await listSeasons();
-    return res.json({ seasons });
+    return await cachedPublicJson(res, "seasons:list", async () => {
+      const seasons = await listPublicSeasons();
+      return { seasons };
+    });
   } catch (error) {
     return next(error);
   }
@@ -516,9 +584,26 @@ router.get("/seasons", async (_req, res, next) => {
 
 router.get("/seasons/:slug", async (req, res, next) => {
   try {
-    const payload = await getSeasonBySlug(req.params.slug);
-    if (!payload) return res.status(404).json({ message: "Season not found" });
-    return res.json(payload);
+    const slug = String(req.params.slug || "").trim().toLowerCase();
+    return await cachedPublicJson(res, `seasons:slug:${slug}`, async () => {
+      const payload = await getSeasonBySlug(slug);
+      if (!payload) {
+        const err = new Error("Season not found");
+        err.status = 404;
+        throw err;
+      }
+      const tournament = payload.tournament?.tournament || null;
+      const visible = isSeasonPubliclyVisible(payload.season, {
+        isPublished: Boolean(tournament?.is_published),
+        tournamentStatus: tournament?.status,
+      });
+      if (!visible) {
+        const err = new Error("Season not found");
+        err.status = 404;
+        throw err;
+      }
+      return payload;
+    });
   } catch (error) {
     return next(error);
   }
@@ -529,12 +614,23 @@ router.get("/community", async (req, res, next) => {
     const query = z
       .object({
         search: z.string().optional().default(""),
+        q: z.string().optional().default(""),
         limit: z.coerce.number().int().min(1).max(100).optional().default(48),
         offset: z.coerce.number().int().min(0).optional().default(0),
       })
       .parse(req.query);
-    const payload = await getCommunityDirectory(query);
-    return res.json(payload);
+    const cacheKey = publicQueryCacheKey("community", {
+      search: query.search || query.q || "",
+      limit: query.limit,
+      offset: query.offset,
+    });
+    return await cachedPublicJson(res, cacheKey, async () =>
+      getCommunityDirectory({
+        search: query.search || query.q || "",
+        limit: query.limit,
+        offset: query.offset,
+      }),
+    );
   } catch (error) {
     return next(error);
   }
@@ -549,8 +645,8 @@ router.get("/announcements", async (req, res, next) => {
         offset: z.coerce.number().int().min(0).optional().default(0),
       })
       .parse(req.query);
-    const payload = await listAnnouncements(query);
-    return res.json(payload);
+    const cacheKey = publicQueryCacheKey("announcements", query);
+    return await cachedPublicJson(res, cacheKey, async () => listAnnouncements(query));
   } catch (error) {
     return next(error);
   }

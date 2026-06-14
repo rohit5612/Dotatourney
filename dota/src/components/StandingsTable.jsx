@@ -1,11 +1,11 @@
 import { TeamLogoImg } from "./TeamLogoImg.jsx";
 import { hexToRgbTriplet } from "../hooks/useLogoAccent.js";
 import { findTeamByName, teamInitials } from "../utils/teamPage.js";
+import "../styles/standings-table-public.css";
 
 function groupAccentClass(title) {
-  if (/group\s*a/i.test(title)) return "standings-table--group-a";
-  if (/group\s*b/i.test(title)) return "standings-table--group-b";
-  return "";
+  const match = String(title || "").match(/group\s*([a-h])/i);
+  return match ? `standings-table--group-${match[1].toLowerCase()}` : "";
 }
 
 function teamAccentTriplet(team) {

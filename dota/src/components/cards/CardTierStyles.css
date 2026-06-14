@@ -1,7 +1,19 @@
 .bpcl-card {
   --card-glow: var(--accent);
+  /*
+   * Fixed card slot dimensions for layout surfaces (dashboard pedestal, public profile,
+   * checkout preview). Future admin-uploaded card templates will use the same size everywhere.
+   * Target artwork: 280×392px (5:7). Adjust --bpcl-card-slot-width if template size changes.
+   */
+  --bpcl-card-slot-width: 15.5rem;
+  --bpcl-card-slot-aspect: 5 / 7;
   width: 100%;
   max-width: 280px;
+}
+
+.bpcl-card--pedestal {
+  max-width: var(--bpcl-card-slot-width);
+  aspect-ratio: var(--bpcl-card-slot-aspect);
 }
 
 .bpcl-card--sm {

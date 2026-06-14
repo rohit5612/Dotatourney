@@ -21,6 +21,6 @@ Copy `.env.example` to `.env` and adjust values as needed.
 Keep `VITE_API_BASE_URL=/api` and run the backend on `http://localhost:3000`.
 Vite will proxy `/api` requests to the backend in development mode.
 
-## Production (e.g. Render + EC2)
+## Production (Netlify + Hostinger VPS — bpcleague.in)
 
-Set `VITE_API_BASE_URL` at **build time** on Render to your EC2 API origin, including the `/api` prefix (see `dota/.env.example`). On the server, set `CORS_ORIGIN` and `APP_URL` to your Render site URL so admin invite links and browser CORS match.
+Set `VITE_API_BASE_URL` and `VITE_API_PUBLIC_URL` at **build time** on Netlify (see `dota/.env.example` and `docs/deploy-bpcleague.md`). On the server, set `CORS_ORIGIN` and `APP_URL` to `https://bpcleague.in` so admin invite links and browser CORS match.

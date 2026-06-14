@@ -1,10 +1,12 @@
 import { lazy, Suspense } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { PageLoadingSpinner } from "../../components/PageLoadingSpinner";
+import { PublicEventGate } from "../../components/public/PublicEventGate.jsx";
 import { usePublicTournament } from "../../context/PublicTournamentContext.jsx";
 import { AnnouncementsPublicPage } from "./AnnouncementsPublicPage.jsx";
 import { CommunityPage } from "./CommunityPage.jsx";
 import { MatchPublicPage } from "./MatchPublicPage.jsx";
+import { PublicPlayerProfilePage } from "./PublicPlayerProfilePage.jsx";
 import { SeasonDetailPage } from "./SeasonDetailPage.jsx";
 import { SeasonsHubPage } from "./SeasonsHubPage.jsx";
 
@@ -27,9 +29,11 @@ export function PublicLandingRoute() {
   const { event, message } = usePublicTournament();
   const navigate = useNavigate();
   return (
-    <PageContentShell path="/">
-      <LandingPage event={event} navigate={navigate} message={message} />
-    </PageContentShell>
+    <PublicEventGate label="Loading home…">
+      <PageContentShell path="/">
+        <LandingPage event={event} navigate={navigate} message={message} />
+      </PageContentShell>
+    </PublicEventGate>
   );
 }
 
@@ -37,18 +41,22 @@ export function PublicTournamentRoute() {
   const { event, message } = usePublicTournament();
   const navigate = useNavigate();
   return (
-    <PageContentShell path="/tournament">
-      <TournamentInfo event={event} message={message} navigate={navigate} />
-    </PageContentShell>
+    <PublicEventGate label="Loading tournament…">
+      <PageContentShell path="/tournament">
+        <TournamentInfo event={event} message={message} navigate={navigate} />
+      </PageContentShell>
+    </PublicEventGate>
   );
 }
 
 export function PublicScheduleRoute() {
   const { displayEvent, message } = usePublicTournament();
   return (
-    <PageContentShell path="/schedule">
-      <PublicSchedule event={displayEvent} message={message} />
-    </PageContentShell>
+    <PublicEventGate label="Loading bracket & schedule…">
+      <PageContentShell path="/schedule">
+        <PublicSchedule event={displayEvent} message={message} />
+      </PageContentShell>
+    </PublicEventGate>
   );
 }
 
@@ -56,11 +64,13 @@ export function PublicTeamsRoute() {
   const { event, message } = usePublicTournament();
   const navigate = useNavigate();
   return (
-    <PageContentShell path="/teams">
-      <Suspense fallback={<PageLoadingSpinner label="Loading teams…" />}>
-        <PublicTeamsPage event={event} message={message} navigate={navigate} />
-      </Suspense>
-    </PageContentShell>
+    <PublicEventGate label="Loading teams…">
+      <PageContentShell path="/teams">
+        <Suspense fallback={<PageLoadingSpinner label="Loading teams…" compact />}>
+          <PublicTeamsPage event={event} message={message} navigate={navigate} />
+        </Suspense>
+      </PageContentShell>
+    </PublicEventGate>
   );
 }
 
@@ -68,9 +78,11 @@ export function PublicRegisterRoute() {
   const { event, message, setMessage } = usePublicTournament();
   const registerClosedCentered = event?.tournament?.registrations_open !== true;
   return (
-    <PageContentShell path="/register" registerClosedCentered={registerClosedCentered}>
-      <RegistrationPage event={event} message={message} setMessage={setMessage} />
-    </PageContentShell>
+    <PublicEventGate label="Loading registration…">
+      <PageContentShell path="/register" registerClosedCentered={registerClosedCentered}>
+        <RegistrationPage event={event} message={message} setMessage={setMessage} />
+      </PageContentShell>
+    </PublicEventGate>
   );
 }
 
@@ -120,6 +132,14 @@ export function PublicCommunityRoute() {
   return (
     <PageContentShell path="/community">
       <CommunityPage />
+    </PageContentShell>
+  );
+}
+
+export function PublicPlayerProfileRoute() {
+  return (
+    <PageContentShell path="/player">
+      <PublicPlayerProfilePage />
     </PageContentShell>
   );
 }

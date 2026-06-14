@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { pool } from "../db/pool.js";
+import { recordTeamProfileChange } from "./teamHistoryService.js";
 import { defaultGroupKeysForTeams } from "./groupAssignment.js";
 import { getPlayerRegistrationById } from "./registrationRepository.js";
+import { resolveEngineConfigForApproval } from "./tournamentEngineService.js";
+import { upsertSeasonForTournament } from "./seasonUpsert.js";
+import { buildPublicHonorsPayload } from "./bracketHonorsEngine.js";
+import { buildStandings } from "./standingsEngine.js";
+import { parseSeasonLabelFromName, seasonSlugFromLabel } from "../utils/tournamentNaming.js";
 
 function parseMeta(raw) {
   if (raw == null) return {};
@@ -62,6 +68,19 @@ function serializePrizePoolBreakdown(value) {
   return value || "";
 }
 
+/** Push current tournament copy metadata to the public site without unpublishing. */
+export async function refreshPublishedSnapshot(tournamentId) {
+  const { rows } = await pool.query(`SELECT * FROM tournaments WHERE id = $1 AND is_published = TRUE`, [tournamentId]);
+  const row = rows[0];
+  if (!row) return null;
+  const snapshot = buildPublishedSnapshotFromRow(row);
+  await pool.query(`UPDATE tournaments SET published_snapshot = $2::jsonb, updated_at = NOW() WHERE id = $1`, [
+    tournamentId,
+    JSON.stringify(snapshot),
+  ]);
+  return row;
+}
+
 /** Fields frozen for the public site until the next publish. */
 export function buildPublishedSnapshotFromRow(row) {
   if (!row) return null;
@@ -75,6 +94,7 @@ export function buildPublishedSnapshotFromRow(row) {
     prize_pool: row.prize_pool,
     prize_pool_breakdown: row.prize_pool_breakdown,
     entry_fee: row.entry_fee,
+    registration_cap: row.registration_cap,
     start_date: row.start_date,
     end_date: row.end_date,
     registration_deadline: row.registration_deadline,
@@ -86,6 +106,8 @@ export function buildPublishedSnapshotFromRow(row) {
     registration_code_prefix: row.registration_code_prefix,
     payment_qr_image: row.payment_qr_image,
     payment_upi_id: row.payment_upi_id,
+    season_card_bg: row.season_card_bg,
+    season_card_badge: row.season_card_badge,
   };
 }
 
@@ -125,10 +147,11 @@ export async function createTournament(payload) {
       id, name, slug, format, series_type, team_count, dark_mode, series_rules,
       description, prize_pool, prize_pool_breakdown, entry_fee, start_date, end_date, registration_deadline,
       discord_url, rulebook, live_youtube_url, announcements, banner_announcements, tournament_honors, visibility_mode, bracket_active, status,
-      registration_code_prefix, registration_code_seq, payment_qr_image, payment_upi_id, registrations_open
+      registration_code_prefix, registration_code_seq, payment_qr_image, payment_upi_id, registrations_open, registration_cap, engine_config,
+      season_card_bg, season_card_badge, engine_template_id
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, 'draft',
-      $23, $24, $25, $26, $27, $28)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
+      $25, $26, $27, $28, $29, $30::jsonb, $31, $32, $33)
     RETURNING *;
   `;
   const values = [
@@ -155,11 +178,17 @@ export async function createTournament(payload) {
     JSON.stringify(payload.tournamentHonors || { displayPodiumCount: 2, mvp: null, customCards: [] }),
     payload.visibilityMode || "demo",
     Boolean(payload.bracketActive),
+    payload.status || "draft",
     (payload.registrationCodePrefix || "BPC").toString().slice(0, 12).toUpperCase().replace(/[^A-Z0-9]/g, "") || "BPC",
     Number.isFinite(Number(payload.registrationCodeSeq)) ? Number(payload.registrationCodeSeq) : 0,
     payload.paymentQrImage || "",
     payload.paymentUpiId || "",
     Boolean(payload.registrationsOpen),
+    payload.registrationCap != null && payload.registrationCap !== "" ? Number(payload.registrationCap) : null,
+    JSON.stringify(payload.engineConfig || payload.engine_config || null),
+    payload.seasonCardBg || "",
+    String(payload.seasonCardBadge || "").trim().slice(0, 16),
+    payload.engineTemplateId || payload.engine_template_id || null,
   ];
   const { rows } = await pool.query(query, values);
   return rows[0];
@@ -195,6 +224,11 @@ export async function updateTournament(tournamentId, payload) {
         payment_qr_image = $26,
         payment_upi_id = $27,
         registrations_open = $28,
+        registration_cap = $29,
+        engine_config = COALESCE($30::jsonb, engine_config),
+        season_card_bg = $31,
+        season_card_badge = $32,
+        engine_template_id = COALESCE($33, engine_template_id),
         updated_at = NOW()
     WHERE id = $1
     RETURNING *;
@@ -228,8 +262,27 @@ export async function updateTournament(tournamentId, payload) {
     payload.paymentQrImage || "",
     payload.paymentUpiId || "",
     Boolean(payload.registrationsOpen),
+    payload.registrationCap != null && payload.registrationCap !== "" ? Number(payload.registrationCap) : null,
+    Object.prototype.hasOwnProperty.call(payload, "engineConfig") ||
+      Object.prototype.hasOwnProperty.call(payload, "engine_config")
+      ? JSON.stringify(payload.engineConfig ?? payload.engine_config ?? null)
+      : null,
+    payload.seasonCardBg || "",
+    String(payload.seasonCardBadge || "").trim().slice(0, 16),
+    Object.prototype.hasOwnProperty.call(payload, "engineTemplateId") ||
+      Object.prototype.hasOwnProperty.call(payload, "engine_template_id")
+      ? payload.engineTemplateId ?? payload.engine_template_id ?? null
+      : undefined,
   ];
   const { rows } = await pool.query(query, values);
+  if (rows[0]) {
+    if (rows[0].is_published) {
+      await refreshPublishedSnapshot(tournamentId);
+    }
+    if (["approved", "published"].includes(rows[0].status)) {
+      await upsertSeasonForTournament(rows[0]);
+    }
+  }
   return rows[0];
 }
 
@@ -237,7 +290,7 @@ export async function listTournaments() {
   const { rows } = await pool.query(
     `SELECT id, name, slug, format, series_type, team_count, status, is_published,
             published_at, start_date, end_date, registration_deadline, prize_pool, prize_pool_breakdown, entry_fee,
-            visibility_mode, updated_at, created_at
+            visibility_mode, completed_at, updated_at, created_at, engine_template_id, engine_config
      FROM tournaments
      WHERE status <> 'archived'
      ORDER BY is_published DESC, updated_at DESC, created_at DESC`,
@@ -389,6 +442,15 @@ async function seedRosterMemberships(client, rosterId, tournamentId, adminUserId
   }
 }
 
+async function resolvePlayerAccountId(client, registrationId) {
+  if (!registrationId) return null;
+  const { rows } = await client.query(
+    `SELECT player_account_id FROM player_registrations WHERE id = $1`,
+    [registrationId],
+  );
+  return rows[0]?.player_account_id || null;
+}
+
 async function replaceRosterSnapshotContents(client, tournamentId, rosterId) {
   const roster = await loadWorkingRoster(client, tournamentId);
   const teamIdMap = new Map();
@@ -423,18 +485,20 @@ async function replaceRosterSnapshotContents(client, tournamentId, rosterId) {
   for (const player of roster.players) {
     const snapshotPlayerId = randomUUID();
     playerIdMap.set(player.id, snapshotPlayerId);
+    const playerAccountId = await resolvePlayerAccountId(client, player.registrationId);
     await client.query(
       `INSERT INTO roster_snapshot_players (
-        id, roster_snapshot_id, tournament_id, source_player_id, registration_id, name, display_name, role, roles, mmr,
+        id, roster_snapshot_id, tournament_id, source_player_id, registration_id, player_account_id, name, display_name, role, roles, mmr,
         steam_name, steam_profile, discord_handle, location, is_captain
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
       [
         snapshotPlayerId,
         rosterId,
         tournamentId,
         player.id,
         player.registrationId || null,
+        playerAccountId,
         player.name,
         player.displayName || player.display_name || player.name || "",
         player.role,
@@ -660,10 +724,18 @@ export async function approveRosterSnapshot(tournamentId, rosterId, adminUserId)
     );
 
     const teamsResult = await client.query(
-      `SELECT id FROM roster_snapshot_teams WHERE roster_snapshot_id = $1 ORDER BY seed ASC NULLS LAST, created_at ASC`,
+      `SELECT id, seed FROM roster_snapshot_teams WHERE roster_snapshot_id = $1 ORDER BY seed ASC NULLS LAST, created_at ASC`,
       [rosterId],
     );
-    for (const assignment of defaultGroupKeysForTeams(teamsResult.rows)) {
+    const tourRow = (
+      await client.query(`SELECT team_count, format, engine_config FROM tournaments WHERE id = $1`, [tournamentId])
+    ).rows[0];
+    const engineConfig = tourRow?.engine_config || {
+      teamCount: tourRow?.team_count || teamsResult.rows.length,
+      format: tourRow?.format || "blast",
+    };
+    const assignments = defaultGroupKeysForTeams(teamsResult.rows, engineConfig);
+    for (const assignment of assignments) {
       await client.query(
         "UPDATE roster_snapshot_teams SET group_key = $1 WHERE roster_snapshot_id = $2 AND id = $3",
         [assignment.groupKey, rosterId, assignment.teamId],
@@ -682,17 +754,18 @@ export async function approveRosterSnapshot(tournamentId, rosterId, adminUserId)
   }
 }
 
-export async function updateRosterGroupAssignments(tournamentId, assignments) {
+export async function updateRosterGroupAssignments(tournamentId, assignments, allowedKeys = ["A", "B"]) {
   const approved = await getApprovedRosterSnapshot(tournamentId);
   if (!approved) return { error: "Approve a roster before assigning groups" };
 
+  const allowed = new Set(allowedKeys);
   const teamIds = new Set(approved.teams.map((team) => team.id));
   for (const entry of assignments) {
     if (!teamIds.has(entry.teamId)) {
       return { error: "Group assignment includes a team that is not on the approved roster" };
     }
-    if (entry.groupKey !== "A" && entry.groupKey !== "B") {
-      return { error: "Each team must be assigned to Group A or Group B" };
+    if (!allowed.has(entry.groupKey)) {
+      return { error: `Each team must be assigned to one of: ${[...allowed].join(", ")}` };
     }
   }
 
@@ -719,9 +792,9 @@ export async function updateRosterGroupAssignments(tournamentId, assignments) {
 function registrationIsReady(registration) {
   return (
     registration &&
-    registration.paymentStatus === "paid" &&
     registration.registrationStatus === "approved" &&
-    !registration.archivedAt
+    !registration.archivedAt &&
+    (registration.substituteFlag || registration.paymentStatus === "paid")
   );
 }
 
@@ -830,17 +903,19 @@ async function ensureSnapshotPlayerForRegistration(client, tournamentId, rosterI
 
   const snapshotPlayerId = randomUUID();
   const role = primaryRoleFromRegistration(registration);
+  const playerAccountId = registration.player_account_id || registration.playerAccountId || null;
   await client.query(
     `INSERT INTO roster_snapshot_players (
-      id, roster_snapshot_id, tournament_id, source_player_id, registration_id, name, display_name, role, roles, mmr,
+      id, roster_snapshot_id, tournament_id, source_player_id, registration_id, player_account_id, name, display_name, role, roles, mmr,
       steam_name, steam_profile, discord_handle, location, is_captain
     )
-    VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, FALSE)`,
+    VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, FALSE)`,
     [
       snapshotPlayerId,
       rosterId,
       tournamentId,
       registration.id,
+      playerAccountId,
       registration.name,
       registration.displayName || registration.name || "",
       role,
@@ -892,12 +967,45 @@ export async function syncApprovedRosterFromTeamSave(tournamentId, rosterId, adm
     }
 
     const teamsResult = await client.query(
-      `SELECT id, source_team_id AS "sourceTeamId", name
+      `SELECT id, source_team_id AS "sourceTeamId", name, captain, logo_url AS "logoUrl", accent_color AS "accentColor"
        FROM roster_snapshot_teams
        WHERE roster_snapshot_id = $1`,
       [rosterId],
     );
     const snapshotTeams = teamsResult.rows;
+
+    for (const savedTeam of savedTeams) {
+      const snapshotTeamId = resolveSnapshotTeamId(savedTeam.id, savedTeams, snapshotTeams);
+      if (!snapshotTeamId) continue;
+      const current = snapshotTeams.find((team) => team.id === snapshotTeamId);
+      if (!current) continue;
+      const profileFields = [
+        ["name", savedTeam.name, current.name],
+        ["captain", savedTeam.captain || "", current.captain || ""],
+        ["logo_url", savedTeam.logoUrl || savedTeam.logo_url || "", current.logoUrl || ""],
+        ["accent_color", savedTeam.accentColor || savedTeam.accent_color || "", current.accentColor || ""],
+      ];
+      for (const [field, nextValue, prevValue] of profileFields) {
+        if (String(nextValue ?? "") === String(prevValue ?? "")) continue;
+        await client.query(
+          `UPDATE roster_snapshot_teams SET ${field === "logo_url" ? "logo_url" : field === "accent_color" ? "accent_color" : field} = $1 WHERE id = $2`,
+          [nextValue, snapshotTeamId],
+        );
+        await recordTeamProfileChange({
+          tournamentId,
+          snapshotTeamId,
+          field: field === "logo_url" ? "logo_url" : field === "accent_color" ? "accent_color" : field,
+          oldValue: prevValue,
+          newValue: nextValue,
+          adminUserId,
+          client,
+        });
+        if (field === "name") current.name = nextValue;
+        if (field === "captain") current.captain = nextValue;
+        if (field === "logo_url") current.logoUrl = nextValue;
+        if (field === "accent_color") current.accentColor = nextValue;
+      }
+    }
     const playersResult = await client.query(
       `SELECT id, source_player_id AS "sourcePlayerId", registration_id AS "registrationId", name, display_name AS "displayName",
               role, roles, mmr, steam_name AS "steamName", steam_profile AS "steamProfile", discord_handle AS "discordHandle",
@@ -1176,6 +1284,17 @@ export async function getPublishedTournamentForPublicRequest(identifier) {
 }
 
 export async function publishTournament(tournamentId, adminUserId) {
+  const pre = (await pool.query('SELECT status FROM tournaments WHERE id = $1', [tournamentId])).rows[0];
+  if (!pre) {
+    const err = new Error('Tournament not found');
+    err.status = 404;
+    throw err;
+  }
+  if (pre.status !== 'approved' && pre.status !== 'published') {
+    const err = new Error('Tournament must be approved before publishing');
+    err.status = 400;
+    throw err;
+  }
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -1193,6 +1312,7 @@ export async function publishTournament(tournamentId, adminUserId) {
     if (row) {
       const snapshot = buildPublishedSnapshotFromRow(row);
       await client.query(`UPDATE tournaments SET published_snapshot = $2::jsonb WHERE id = $1`, [tournamentId, JSON.stringify(snapshot)]);
+      await upsertSeasonForTournament(row, { client });
     }
     await client.query("COMMIT");
     return row || null;
@@ -1213,6 +1333,9 @@ export async function unpublishTournament(tournamentId) {
      RETURNING *`,
     [tournamentId],
   );
+  if (rows[0]) {
+    await upsertSeasonForTournament(rows[0]);
+  }
   return rows[0] || null;
 }
 
@@ -1291,5 +1414,126 @@ export async function replaceSchedule(tournamentId, schedule) {
         slot.notes,
       ],
     );
+  }
+  const { seedMatchLineupsForScheduledMatches } = await import("./matchLineupService.js");
+  await seedMatchLineupsForScheduledMatches(tournamentId, schedule);
+}
+
+export async function approveTournament(tournamentId, adminUserId) {
+  const row = (await pool.query("SELECT * FROM tournaments WHERE id = $1", [tournamentId])).rows[0];
+  if (!row) {
+    const err = new Error("Tournament not found");
+    err.status = 404;
+    throw err;
+  }
+  if (row.status !== "draft") {
+    const err = new Error("Only draft tournaments can be approved");
+    err.status = 400;
+    throw err;
+  }
+  if (!row.slug) {
+    const err = new Error("Slug is required before approval");
+    err.status = 400;
+    throw err;
+  }
+  const { config: engine, backfilled, errors } = resolveEngineConfigForApproval(row);
+  if (!engine) {
+    const err = new Error(
+      `Engine config invalid: ${(errors || ["Configure the tournament engine before approval"]).join("; ")}`,
+    );
+    err.status = 400;
+    throw err;
+  }
+  if (backfilled) {
+    await pool.query(`UPDATE tournaments SET engine_config = $2::jsonb, updated_at = NOW() WHERE id = $1`, [
+      tournamentId,
+      JSON.stringify(engine),
+    ]);
+  }
+  const { rows } = await pool.query(
+    `UPDATE tournaments SET status = 'approved', updated_at = NOW() WHERE id = $1 RETURNING *`,
+    [tournamentId],
+  );
+  if (rows[0]) {
+    await upsertSeasonForTournament(rows[0]);
+  }
+  return rows[0] || null;
+}
+
+export async function completeTournament(tournamentId, adminUserId, { force = false } = {}) {
+  const data = await getTournament(tournamentId);
+  if (!data?.tournament) {
+    const err = new Error("Tournament not found");
+    err.status = 404;
+    throw err;
+  }
+  const t = data.tournament;
+  if (t.status !== "published" && !t.is_published) {
+    const err = new Error("Only a published tournament can be completed");
+    err.status = 400;
+    throw err;
+  }
+  const incomplete = (data.matches || []).some((m) => m.status !== "completed" && !m.winner);
+  if (incomplete && !force) {
+    const err = new Error("Bracket has incomplete matches. Confirm to complete anyway.");
+    err.status = 409;
+    err.code = "INCOMPLETE_BRACKET";
+    throw err;
+  }
+  const snapshot = {
+    tournament: t,
+    teams: data.teams,
+    matches: data.matches,
+    honors: buildPublicHonorsPayload(data.matches, t.format, t.tournament_honors),
+    standings: buildStandings(data.approvedRoster?.teams || data.teams, data.matches, t.format),
+    completedAt: new Date().toISOString(),
+  };
+  const { rows: seasonConfigRows } = await pool.query(
+    `SELECT sponsors_config FROM seasons WHERE tournament_id = $1`,
+    [tournamentId],
+  );
+  const sponsorsConfig = seasonConfigRows[0]?.sponsors_config;
+  if (sponsorsConfig && typeof sponsorsConfig === "object" && Object.keys(sponsorsConfig).length > 0) {
+    snapshot.sponsorsConfig = sponsorsConfig;
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `UPDATE tournaments SET status = 'concluded', is_published = FALSE, completed_at = NOW(), completed_by = $2, updated_at = NOW()
+       WHERE id = $1`,
+      [tournamentId, adminUserId],
+    );
+    const slugBase = seasonSlugFromLabel(parseSeasonLabelFromName(t.name) || t.slug || "season");
+    const seasonSlug = slugBase;
+    const { rows: existingSeason } = await client.query(`SELECT id FROM seasons WHERE tournament_id = $1`, [tournamentId]);
+    if (existingSeason[0]) {
+      await client.query(
+        `UPDATE seasons SET status = 'concluded', snapshot = $2::jsonb, updated_at = NOW() WHERE id = $1`,
+        [existingSeason[0].id, JSON.stringify(snapshot)],
+      );
+    } else {
+      const { rows: maxNum } = await client.query(`SELECT COALESCE(MAX(number), 0) + 1 AS n FROM seasons`);
+      await client.query(
+        `INSERT INTO seasons (id, number, slug, theme_key, name, status, tournament_id, snapshot, trophy_engraving)
+         VALUES ($1, $2, $3, 'emerald', $4, 'concluded', $5, $6::jsonb, $7::jsonb)`,
+        [
+          randomUUID(),
+          maxNum[0].n,
+          seasonSlug,
+          t.name,
+          tournamentId,
+          JSON.stringify(snapshot),
+          JSON.stringify(t.tournament_honors || {}),
+        ],
+      );
+    }
+    await client.query("COMMIT");
+    return (await getTournament(tournamentId))?.tournament;
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
   }
 }
