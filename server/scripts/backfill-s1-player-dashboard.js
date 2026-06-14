@@ -196,7 +196,16 @@ function printReport(report) {
   } else if (report.matchCount === 0) {
     console.warn("BLOCKER: No matches on this tournament.");
   } else if ((report.rosterPlayers?.linked ?? 0) === 0) {
-    console.warn("BLOCKER: Roster players have no player_account_id — run migrate-s1-to-player-accounts.js first, then --apply here.");
+    const regOk = (report.registrations?.linked ?? 0) > 0;
+    if (regOk) {
+      console.warn(
+        "BLOCKER: Roster players have no player_account_id — registrations are linked; run: node scripts/backfill-s1-player-dashboard.js --apply",
+      );
+    } else {
+      console.warn(
+        "BLOCKER: Roster players have no player_account_id — run migrate-s1-to-player-accounts.js --apply first, then backfill-s1-player-dashboard.js --apply",
+      );
+    }
   } else if (report.unmatchedMatchTeamNames?.length) {
     console.warn("BLOCKER: Team names in matches do not match approved roster team names.");
   }
