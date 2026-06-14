@@ -1,9 +1,12 @@
+# Static sunset page for bpcleague.in (legacy domain).
+# Full React app builds on Hostinger VPS for bpcleague.com — see docs/deploy-bpcleague.md.
+
 [build]
   base = "dota"
-  command = "npm ci && npm run build"
-  publish = "dist"
+  command = "cp public/bpcl.png sunset/"
+  publish = "sunset"
 
-# SPA fallback for React Router
+# All paths serve the single sunset page
 [[redirects]]
   from = "/*"
   to = "/index.html"
