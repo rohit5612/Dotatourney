@@ -1,6 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { publicSteamOnlyProfile } from "./playerAccountRepository.js";
+import {
+  formatBpcId,
+  parseBpcIdNumber,
+  publicSteamOnlyProfile,
+} from "./playerAccountRepository.js";
+
+test("formatBpcId and parseBpcIdNumber round-trip", () => {
+  assert.equal(formatBpcId(2), "BPC-002");
+  assert.equal(formatBpcId(73), "BPC-073");
+  assert.equal(parseBpcIdNumber("bpc-073"), 73);
+  assert.equal(parseBpcIdNumber("BPC-ABC"), null);
+});
 
 test("publicSteamOnlyProfile omits email and discord", () => {
   const profile = publicSteamOnlyProfile({

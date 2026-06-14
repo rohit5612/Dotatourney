@@ -59,6 +59,16 @@ async function migrationStillNeeded(filename) {
     return rows.length === 0;
   }
 
+  if (filename === "045_roster_snapshot_player_account_id.sql") {
+    const { rows } = await pool.query(
+      `SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'roster_snapshot_players'
+         AND column_name = 'player_account_id'`,
+    );
+    return rows.length === 0;
+  }
+
   return false;
 }
 

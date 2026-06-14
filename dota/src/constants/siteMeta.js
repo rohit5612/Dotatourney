@@ -31,6 +31,7 @@ const PRIVATE_PATH_PREFIXES = [
   "/auth",
   "/verify-email",
   "/claim-account",
+  "/set-password",
   "/forgot-password",
   "/reset-password",
 ];

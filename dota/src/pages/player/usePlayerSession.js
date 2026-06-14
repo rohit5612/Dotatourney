@@ -21,7 +21,13 @@ export function usePlayerSession() {
     }
     playerApi
       .me()
-      .then(setMe)
+      .then((data) => {
+        if (!data.account?.hasPassword && !window.location.pathname.startsWith("/set-password")) {
+          navigate("/set-password", { replace: true });
+          return;
+        }
+        setMe(data);
+      })
       .catch((err) => {
         if (err.status === 401) {
           setPlayerToken("");

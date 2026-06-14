@@ -341,12 +341,30 @@ export function PlayerAuthCallbackPage() {
     if (token) {
       setPlayerToken(token);
       window.history.replaceState({}, "", "/auth/callback");
-      navigate("/dashboard", { replace: true });
+      playerApi
+        .me()
+        .then((data) => {
+          if (!data.account?.hasPassword) {
+            navigate("/set-password", { replace: true });
+            return;
+          }
+          navigate("/dashboard", { replace: true });
+        })
+        .catch(() => {
+          navigate("/dashboard", { replace: true });
+        });
       return;
     }
 
     if (getPlayerToken()) {
-      navigate("/dashboard", { replace: true });
+      playerApi
+        .me()
+        .then((data) => {
+          navigate(data.account?.hasPassword ? "/dashboard" : "/set-password", { replace: true });
+        })
+        .catch(() => {
+          navigate("/dashboard", { replace: true });
+        });
       return;
     }
 
@@ -358,6 +376,119 @@ export function PlayerAuthCallbackPage() {
       <p className="player-auth__sub" style={{ marginBottom: 0 }}>
         Completing sign-in…
       </p>
+    </AuthLayout>
+  );
+}
+
+export function PlayerSetPasswordPage() {
+  const navigate = useNavigate();
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [account, setAccount] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    if (!getPlayerToken()) {
+      navigate("/login?next=" + encodeURIComponent("/set-password"), { replace: true });
+      return;
+    }
+    playerApi
+      .me()
+      .then((data) => {
+        if (data.account?.hasPassword) {
+          navigate("/dashboard", { replace: true });
+          return;
+        }
+        setAccount(data.account);
+      })
+      .catch((err) => {
+        if (err.status === 401) {
+          setPlayerToken("");
+          navigate("/login?next=" + encodeURIComponent("/set-password"), { replace: true });
+          return;
+        }
+        setError(err.message);
+      })
+      .finally(() => setChecking(false));
+  }, [navigate]);
+
+  async function onSubmit(e) {
+    e.preventDefault();
+    setError("");
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await playerApi.changePassword({ newPassword: password });
+      navigate("/dashboard", { replace: true });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (checking) {
+    return (
+      <AuthLayout preset="signup" headline="Secure your account" description="One quick step before you continue.">
+        <p className="player-auth__sub" style={{ marginBottom: 0 }}>
+          Loading…
+        </p>
+      </AuthLayout>
+    );
+  }
+
+  return (
+    <AuthLayout
+      preset="signup"
+      headline="Secure your account"
+      description="Set a password so you can sign in with email anytime and keep your BPC League account protected."
+    >
+      <h1 className="player-auth__title">Create your password</h1>
+      <p className="player-auth__sub">
+        {account?.displayName ? (
+          <>
+            Welcome, <strong>{account.displayName}</strong>. You signed in with Google — choose a password to finish
+            setting up your account.
+          </>
+        ) : (
+          <>You signed in with Google. Choose a password to finish setting up your account.</>
+        )}
+      </p>
+      {error ? <div className="player-auth__message player-auth__message--error">{error}</div> : null}
+      <form onSubmit={onSubmit}>
+        <div className="player-auth__field">
+          <label htmlFor="setPassword">Password (min 8 characters)</label>
+          <input
+            id="setPassword"
+            type="password"
+            minLength={8}
+            required
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
+        <div className="player-auth__field">
+          <label htmlFor="setConfirmPassword">Confirm password</label>
+          <input
+            id="setConfirmPassword"
+            type="password"
+            minLength={8}
+            required
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+          />
+        </div>
+        <button type="submit" className="btn btn-primary w-full" disabled={loading}>
+          {loading ? "Saving…" : "Continue to dashboard"}
+        </button>
+      </form>
     </AuthLayout>
   );
 }

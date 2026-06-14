@@ -13,7 +13,7 @@ async function startServer() {
     await pool.query("SELECT 1");
     console.log(`[startup] Database connection: connected (${databaseTarget})`);
     const maxBpc = await syncBpcIdSequenceFromMax();
-    console.log(`[startup] BPC ID sequence synced (max existing: BPC-${String(maxBpc).padStart(3, "0")})`);
+    console.log(`[startup] BPC ID sequence synced (max in use: BPC-${String(maxBpc).padStart(3, "0")}; next: BPC-${String(maxBpc + 1).padStart(3, "0")})`);
   } catch (error) {
     console.error(`[startup] Database connection: failed (${databaseTarget})`);
     console.error(error);

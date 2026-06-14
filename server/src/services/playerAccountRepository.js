@@ -4,6 +4,52 @@ import { slugifyPlayer } from "../utils/playerSlug.js";
 import { demoAccessDisplayOverrides, isDemoAccessAccount } from "../utils/demoAccessAccount.js";
 
 const BPC_PREFIX = "BPC";
+const BPC_CODE_RE = /^BPC-(\d+)$/i;
+
+export function formatBpcId(n) {
+  return `${BPC_PREFIX}-${String(n).padStart(3, "0")}`;
+}
+
+export function parseBpcIdNumber(code) {
+  const m = String(code || "").trim().toUpperCase().match(BPC_CODE_RE);
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * Highest numeric BPC-### in use across player accounts and legacy registrations.
+ * @param {import('pg').Pool | import('pg').PoolClient} db
+ */
+export async function getMaxAssignedBpcNumber(db = pool) {
+  const query = db.query.bind(db);
+  const { rows } = await query(
+    `SELECT GREATEST(
+      COALESCE(
+        (SELECT MAX(NULLIF(regexp_replace(bpc_id, '^BPC-', ''), '')::int)
+         FROM player_accounts WHERE bpc_id ~ '^BPC-[0-9]+$'),
+        0
+      ),
+      COALESCE(
+        (SELECT MAX(NULLIF(regexp_replace(public_code, '^BPC-', ''), '')::int)
+         FROM player_registrations WHERE public_code ~ '^BPC-[0-9]+$'),
+        0
+      )
+    )::int AS max_n`,
+  );
+  return Number(rows[0]?.max_n ?? 0);
+}
+
+async function isBpcIdAssigned(client, bpcId) {
+  const normalized = String(bpcId || "").trim().toUpperCase();
+  if (!normalized) return true;
+  const { rows } = await client.query(
+    `SELECT 1 AS hit FROM player_accounts WHERE upper(bpc_id) = $1
+     UNION ALL
+     SELECT 1 FROM player_registrations WHERE upper(public_code) = $1 AND public_code IS NOT NULL
+     LIMIT 1`,
+    [normalized],
+  );
+  return rows.length > 0;
+}
 
 export function publicPlayerAccount(row) {
   if (!row) return null;
@@ -144,18 +190,20 @@ async function reserveUniqueSlug(client, baseName) {
 }
 
 export async function allocateBpcId(client) {
-  const { rows } = await client.query(`SELECT nextval('bpc_id_seq')::bigint AS n`);
-  const n = Number(rows[0]?.n ?? 1);
-  return `${BPC_PREFIX}-${String(n).padStart(3, "0")}`;
+  for (let attempt = 0; attempt < 500; attempt += 1) {
+    const { rows } = await client.query(`SELECT nextval('bpc_id_seq')::bigint AS n`);
+    const n = Number(rows[0]?.n ?? 1);
+    const candidate = formatBpcId(n);
+    const taken = await isBpcIdAssigned(client, candidate);
+    if (!taken) return candidate;
+  }
+  const err = new Error("Unable to allocate a unique BPC ID");
+  err.status = 500;
+  throw err;
 }
 
 export async function syncBpcIdSequenceFromMax() {
-  const { rows } = await pool.query(
-    `SELECT COALESCE(MAX(
-      NULLIF(regexp_replace(bpc_id, '^BPC-', ''), '')::int
-    ), 0) AS max_n FROM player_accounts WHERE bpc_id ~ '^BPC-[0-9]+$'`,
-  );
-  const maxN = Number(rows[0]?.max_n ?? 0);
+  const maxN = await getMaxAssignedBpcNumber(pool);
   await pool.query(`SELECT setval('bpc_id_seq', GREATEST($1::bigint, (SELECT last_value FROM bpc_id_seq)), true)`, [
     maxN,
   ]);
@@ -188,7 +236,19 @@ export async function createPlayerAccount(
 ) {
   const id = randomUUID();
   const normalizedEmail = email.trim().toLowerCase();
-  const assignedBpcId = bpcId || (await allocateBpcId(client));
+  let assignedBpcId = bpcId;
+  if (assignedBpcId) {
+    const normalized = String(assignedBpcId).trim().toUpperCase();
+    if (await isBpcIdAssigned(client, normalized)) {
+      const err = new Error(`BPC ID ${normalized} is already assigned`);
+      err.status = 409;
+      err.code = "BPC_ID_TAKEN";
+      throw err;
+    }
+    assignedBpcId = normalized;
+  } else {
+    assignedBpcId = await allocateBpcId(client);
+  }
   const slug = await reserveUniqueSlug(client, displayName || normalizedEmail.split("@")[0]);
   const now = emailVerifiedAt || null;
 

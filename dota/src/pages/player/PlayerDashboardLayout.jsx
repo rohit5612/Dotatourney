@@ -122,6 +122,12 @@ export function PlayerDashboardLayout() {
   const { account, coinBalance, loading, error, logout, refreshMe } = usePlayerSession();
   const onboarding = usePlayerOnboarding({ enabled: Boolean(account) && !loading });
 
+  useEffect(() => {
+    if (!loading && account && !account.hasPassword) {
+      navigate("/set-password", { replace: true });
+    }
+  }, [account, loading, navigate]);
+
   const handleShowSetupGuide = () => {
     if (pathname !== "/dashboard" && pathname !== "/dashboard/") {
       navigate("/dashboard");

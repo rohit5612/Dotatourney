@@ -43,6 +43,9 @@ const PlayerForgotPasswordPage = lazy(() =>
 const PlayerResetPasswordPage = lazy(() =>
   import("./pages/PlayerAuthPages.jsx").then((m) => ({ default: m.PlayerResetPasswordPage })),
 );
+const PlayerSetPasswordPage = lazy(() =>
+  import("./pages/PlayerAuthPages.jsx").then((m) => ({ default: m.PlayerSetPasswordPage })),
+);
 
 const PlayerDashboardLayout = lazy(() =>
   import("./pages/player/PlayerDashboardLayout.jsx").then((m) => ({ default: m.PlayerDashboardLayout })),
@@ -139,6 +142,14 @@ export default function App() {
           element={
             <PlayerAuthSuspense>
               <PlayerResetPasswordPage />
+            </PlayerAuthSuspense>
+          }
+        />
+        <Route
+          path="/set-password"
+          element={
+            <PlayerAuthSuspense>
+              <PlayerSetPasswordPage />
             </PlayerAuthSuspense>
           }
         />

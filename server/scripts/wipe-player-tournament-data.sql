@@ -13,16 +13,11 @@
 -- Run (from server/):
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/wipe-player-tournament-data.sql
 --
--- After importing data from production, sync the BPC sequence:
---   SELECT setval(
---     'bpc_id_seq',
---     COALESCE(
---       (SELECT MAX(NULLIF(regexp_replace(bpc_id, '^BPC-', ''), '')::int)
---        FROM player_accounts WHERE bpc_id ~ '^BPC-[0-9]+$'),
---       0
---     ),
---     true
---   );
+-- After importing data from production, sync the BPC sequence (accounts + registrations):
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/sync-bpc-id-sequence.sql
+--
+-- If new Google signups got low BPC IDs (e.g. BPC-002 while S1 has BPC-002), run:
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/repair-bpc-id-collisions.sql
 --
 -- Optional — also clear admin audit history:
 --   TRUNCATE audit_log;
