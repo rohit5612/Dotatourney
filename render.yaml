@@ -1,13 +1,20 @@
-# Legacy Render URL — static "we've moved" page only.
-# Point dotatourney.onrender.com here before shutting down the old full-stack deploy.
-# Official site: https://bpcleague.in (Netlify) + API on Hostinger — see docs/deploy-bpcleague.md
+# Legacy Render URL (dotatourney.onrender.com) — static "we've moved" page only.
+#
+# If configuring in the Render dashboard (not Blueprint):
+#   Service type: Static Site
+#   Root Directory: dota/sunset
+#   Build Command: (leave empty)
+#   Publish Directory: dota/sunset   ← relative to repo root, NOT "."
+#
+# Official site: https://bpcleague.in (Netlify) + API on Hostinger — docs/deploy-bpcleague.md
 
 services:
   - type: web
-    name: dotatourney-legacy
+    name: dotatourney
     runtime: static
-    buildCommand: cp dota/public/bpcl.png dota/sunset/
-    staticPublishPath: dota/sunset
+    rootDir: dota/sunset
+    buildCommand: echo "sunset static site — no build step"
+    staticPublishPath: ./dota/sunset
     routes:
       - type: rewrite
         source: /*
