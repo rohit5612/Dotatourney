@@ -18,6 +18,7 @@ import "./teams-page.css";
 import "./schedule-page.css";
 import "./registration-page.css";
 import "./general-rules-page.css";
+import "./legal-pages.css";
 import "./seasons-page.css";
 import "./news-page.css";
 import "./community-page.css";

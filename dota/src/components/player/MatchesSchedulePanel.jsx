@@ -28,7 +28,7 @@ function MatchTeamFace({ name }) {
   );
 }
 
-function MatchCard({ match, onRefresh }) {
+function MatchCard({ match, onRefresh, showResult = false }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [rostersOpen, setRostersOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -61,6 +61,10 @@ function MatchCard({ match, onRefresh }) {
   }
 
   const req = match.substitutionRequest;
+  const hasResult = Boolean(match.winner) || (match.team1Score != null && match.team2Score != null);
+  const myTeamName = match.myTeam === "team1" ? match.team1 : match.myTeam === "team2" ? match.team2 : "";
+  const didWin = Boolean(myTeamName) && Boolean(match.winner) && match.winner === myTeamName;
+  const didLose = Boolean(myTeamName) && Boolean(match.winner) && match.winner !== myTeamName;
 
   return (
     <article className="player-match-card">
@@ -81,6 +85,28 @@ function MatchCard({ match, onRefresh }) {
           <span className="player-dash__match-banner-badge">{match.scheduleStatus || match.status}</span>
         ) : null}
       </header>
+
+      {showResult && hasResult ? (
+        <div className="player-match-card__result">
+          <span
+            className={`player-match-card__result-pill ${
+              didWin ? "player-match-card__result-pill--win" : didLose ? "player-match-card__result-pill--loss" : ""
+            }`}
+          >
+            {didWin ? "W" : didLose ? "L" : "Final"}
+          </span>
+          {match.team1Score != null && match.team2Score != null ? (
+            <span className="player-match-card__score" aria-label={`Final score ${match.team1Score} to ${match.team2Score}`}>
+              <strong>{match.team1Score}</strong>
+              <span aria-hidden> - </span>
+              <strong>{match.team2Score}</strong>
+            </span>
+          ) : match.score ? (
+            <span className="player-match-card__score">{match.score}</span>
+          ) : null}
+          {match.winner ? <span className="player-match-card__winner">{match.winner} won</span> : null}
+        </div>
+      ) : null}
 
       {hasLineups ? (
         <div className="player-match-card__expand-row">
@@ -128,7 +154,7 @@ function MatchCard({ match, onRefresh }) {
         ) : match.canRequestSubstitution ? (
           <button
             type="button"
-            className="player-dash__action player-dash__action--tournaments player-dash__action--compact"
+            className="player-dash__action player-dash__action--tournaments player-dash__action--compact player-match-card__request-btn"
             onClick={() => setModalOpen(true)}
           >
             Request substitute
@@ -194,7 +220,7 @@ export function MatchesSchedulePanel({ schedule, onRefresh }) {
         {items.length ? (
           <div className="player-match-list">
             {items.map((match) => (
-              <MatchCard key={match.id} match={match} onRefresh={onRefresh} />
+              <MatchCard key={match.id} match={match} onRefresh={onRefresh} showResult={tab === "past"} />
             ))}
           </div>
         ) : (

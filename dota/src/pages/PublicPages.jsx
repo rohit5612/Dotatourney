@@ -40,8 +40,9 @@ import {
   PLAYER_RULES_REGISTRATION_NOTICE,
   PLAYER_RULES_SECTIONS,
 } from "../constants/playerRules.js";
-import { COOKIE_CONSENT_KEY, PUBLIC_CONTACT_EMAIL } from "../constants/legal.js";
-import { RULEBOOK_PDF_PATH, SITE_BRAND_FULL, SITE_BRAND_LINE, SITE_BRAND_SHORT } from "../constants/siteMeta.js";
+import { COOKIE_CONSENT_KEY, PUBLIC_CONTACT_EMAIL, TRADE_NAME } from "../constants/legal.js";
+import { RULEBOOK_PDF_PATH, SITE_BRAND_FULL, SITE_BRAND_LINE, SITE_BRAND_SHORT, SITE_ORIGIN } from "../constants/siteMeta.js";
+import { LegalLink, LegalPageLayout, LegalSection } from "../components/legal/LegalPageLayout.jsx";
 import { roles } from "../constants/tournament";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock.js";
 import { api } from "../lib/api";
@@ -108,7 +109,20 @@ const LANDING_JOURNEY_ICONS = {
 /** Primary registration flow CTA — red, full-width on small screens, prominent. */
 const REGISTRATION_CONTINUE_BTN_CLASS =
   "btn btn-destructive inline-flex min-h-12 items-center justify-center gap-2 px-8 text-base font-semibold shadow-lg hover:shadow-xl";
-const publicPaths = ["/", "/tournament", "/schedule", "/teams", "/register", "/rules", "/privacy", "/cookies"];
+const publicPaths = [
+  "/",
+  "/tournament",
+  "/schedule",
+  "/teams",
+  "/register",
+  "/rules",
+  "/privacy",
+  "/cookies",
+  "/terms",
+  "/refund-policy",
+  "/cancellation-policy",
+  "/about",
+];
 
 /** @param {Record<string, unknown> | null | undefined} tournament */
 function getLandingJourneySteps(tournament) {
@@ -330,11 +344,20 @@ export function PageContentShell({ path: _pathProp, children, registerClosedCent
     isSeasonsPage ||
     isCommunityPage ||
     isPlayerProfilePage;
+  const isLegalPage =
+    path === "/privacy" ||
+    path === "/cookies" ||
+    path === "/terms" ||
+    path === "/refund-policy" ||
+    path === "/cancellation-policy" ||
+    path === "/about";
   const contentClass =
     path === "/teams"
       ? "mx-auto max-w-7xl space-y-7 px-4 pb-12 pt-28 md:space-y-8"
         : path === "/schedule" || path === "/announcements" || path === "/rules"
         ? "relative z-10 !space-y-0 !px-0 pb-10 pt-0"
+        : isLegalPage
+          ? "relative z-10 !space-y-0 !px-0 pb-0 pt-0"
         : isSeasonsPage
           ? "relative z-10 !space-y-0 !px-0 pb-10 pt-0 min-h-[100dvh]"
           : isCommunityPage || isPlayerProfilePage
@@ -1992,93 +2015,218 @@ export function PublicSchedule({ event, message }) {
 
 export function PrivacyPolicyPage() {
   return (
-    <article className="mx-auto max-w-3xl space-y-8 text-foreground">
-      <header>
-        <h1 className="font-serif text-3xl font-semibold tracking-tight">Privacy Policy</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Last updated {new Date().getFullYear()}. For {SITE_BRAND_FULL} ({SITE_BRAND_SHORT}) public website and registration.</p>
-      </header>
-      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
-        <h2 className="font-serif text-xl font-semibold text-foreground">Who we are</h2>
+    <LegalPageLayout
+      eyebrow="Legal"
+      title="Privacy Policy"
+      subtitle={`How ${SITE_BRAND_SHORT} collects, uses, and protects your information.`}
+      meta={`Last updated ${new Date().getFullYear()}. This website is operated by ${TRADE_NAME}.`}
+      footerNote={`Privacy inquiries: ${PUBLIC_CONTACT_EMAIL}.`}
+    >
+      <LegalSection title="1. Who we are" accent>
         <p>
-          {SITE_BRAND_FULL} operates this site as a community tournament platform. This policy describes how we handle information when you use the public site or register as a player.
+          {SITE_BRAND_FULL} ({SITE_BRAND_SHORT}) is operated by <strong>{TRADE_NAME}</strong>. This
+          policy explains how we handle personal information when you browse {SITE_ORIGIN}, create a
+          player account, register for tournaments, or contact organisers.
         </p>
-      </section>
-      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
-        <h2 className="font-serif text-xl font-semibold text-foreground">Information we collect</h2>
-        <ul className="list-disc space-y-2 pl-5">
+      </LegalSection>
+
+      <LegalSection title="2. Information we collect">
+        <ul>
           <li>
-            <strong className="text-foreground">Registration:</strong> When you sign up, we collect the details you submit (such as name, email, contact information, game-related identifiers, and payment proof you choose to upload) to run the tournament and communicate with you.
+            <strong>Account &amp; registration:</strong> Name, email address, phone number (if
+            provided), Steam and Discord identifiers, in-game details, team preferences, and
+            documents you upload (such as payment screenshots).
           </li>
           <li>
-            <strong className="text-foreground">Admin access:</strong> Organizers who use the admin panel provide account credentials through that flow; those details are handled separately for access control.
+            <strong>Payment data:</strong> Transaction references and payment status from our
+            payment gateway. We do not store full card numbers or UPI PINs on our servers.
           </li>
           <li>
-            <strong className="text-foreground">Technical data:</strong> Like most websites, our host and infrastructure may process standard technical data (for example IP address, browser type, timestamps) in server or security logs.
+            <strong>Communications:</strong> Emails we send (OTPs, verification, registration
+            updates) and messages you send to support channels.
+          </li>
+          <li>
+            <strong>Technical data:</strong> IP address, browser type, device information, timestamps,
+            and security logs generated by our hosting infrastructure.
+          </li>
+          <li>
+            <strong>Admin access:</strong> Credentials and activity logs for organisers using the
+            staff portal, handled separately for access control and audit purposes.
           </li>
         </ul>
-      </section>
-      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
-        <h2 className="font-serif text-xl font-semibold text-foreground">How we use information</h2>
-        <p>We use registration and contact data to verify participants, coordinate the event, send transactional emails (such as OTPs and status updates), and meet legitimate tournament operations. We do not sell your personal information.</p>
-      </section>
-      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
-        <h2 className="font-serif text-xl font-semibold text-foreground">Storage and retention</h2>
-        <p>Data is stored for as long as needed to run the tournament and for any reasonable archival period the organizers require. Archived or deleted registrations may be handled according to admin workflow on the platform.</p>
-      </section>
-      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
-        <h2 className="font-serif text-xl font-semibold text-foreground">Third parties</h2>
+      </LegalSection>
+
+      <LegalSection title="3. How we use information">
+        <ul>
+          <li>Verify identity, eligibility, and registration payments.</li>
+          <li>Run brackets, schedules, rosters, and match-day operations.</li>
+          <li>Send transactional emails and in-app notifications about your registration status.</li>
+          <li>Respond to support requests, disputes, refunds, and cancellation requests.</li>
+          <li>Maintain platform security, prevent fraud, and enforce tournament rules.</li>
+          <li>Improve the website and keep a reasonable archive of season records.</li>
+        </ul>
+        <p>We do not sell your personal information to third parties.</p>
+      </LegalSection>
+
+      <LegalSection title="4. Legal basis and consent">
         <p>
-          We may link to external services (for example Discord). Their use is governed by their own policies. Email delivery relies on your tournament organizer&apos;s configured mail provider.
+          We process data to perform our contract with you (registration services), pursue legitimate
+          interests in running safe tournaments, and comply with legal obligations. Where required,
+          we ask for your consent—for example when you accept cookies or submit optional profile
+          information.
         </p>
-      </section>
-      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
-        <h2 className="font-serif text-xl font-semibold text-foreground">Your choices</h2>
+      </LegalSection>
+
+      <LegalSection title="5. Sharing with third parties">
+        <p>We may share limited data with:</p>
+        <ul>
+          <li>
+            <strong>Payment processors</strong> (such as Razorpay or PayU) to complete INR
+            transactions.
+          </li>
+          <li>
+            <strong>Email delivery providers</strong> configured by organisers for transactional
+            messages.
+          </li>
+          <li>
+            <strong>Hosting and infrastructure providers</strong> that operate servers and security
+            services.
+          </li>
+          <li>
+            <strong>Community platforms</strong> such as Discord when you choose to link accounts or
+            join event channels.
+          </li>
+        </ul>
+        <p>Each third party processes data under its own privacy terms where applicable.</p>
+      </LegalSection>
+
+      <LegalSection title="6. Storage, retention, and security">
         <p>
-          You may contact tournament organizers via the channels they publish (for example Discord) to ask about your registration data. Essential cookies and storage are described in the{" "}
-          <a className="text-secondary underline underline-offset-2" href="/cookies">
-            Cookie Policy
-          </a>
-          .
+          Data is stored on secure servers for as long as needed to operate the tournament, handle
+          disputes, and maintain reasonable season archives. We use access controls, encrypted
+          connections (HTTPS), and administrative safeguards. No method of transmission over the
+          internet is 100% secure, but we work to protect information appropriately.
         </p>
-      </section>
-    </article>
+      </LegalSection>
+
+      <LegalSection title="7. Your rights and choices">
+        <p>You may request to:</p>
+        <ul>
+          <li>Access or correct registration data associated with your account.</li>
+          <li>Ask questions about how your information is used.</li>
+          <li>Request deletion where retention is no longer required and no dispute is pending.</li>
+        </ul>
+        <p>
+          Contact us at{" "}
+          <a className="legal-page__link" href={`mailto:${PUBLIC_CONTACT_EMAIL}`}>
+            {PUBLIC_CONTACT_EMAIL}
+          </a>{" "}
+          or via published Discord channels. Essential cookies and browser storage are described in
+          our <LegalLink to="/cookies">Cookie Policy</LegalLink>.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="8. Children">
+        <p>
+          The platform is intended for participants who meet tournament eligibility requirements.
+          If you believe a minor has submitted data without appropriate consent, contact us so we can
+          review and remove it where appropriate.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="9. Policy updates">
+        <p>
+          We may update this policy when our services or legal requirements change. The &quot;last
+          updated&quot; date at the top will be revised accordingly. Continued use after updates
+          means you accept the revised policy.
+        </p>
+      </LegalSection>
+    </LegalPageLayout>
   );
 }
 
 export function CookiePolicyPage() {
   return (
-    <article className="mx-auto max-w-3xl space-y-8 text-foreground">
-      <header>
-        <h1 className="font-serif text-3xl font-semibold tracking-tight">Cookie Policy</h1>
-        <p className="mt-2 text-sm text-muted-foreground">How {SITE_BRAND_SHORT} uses cookies and similar technologies on this site.</p>
-      </header>
-      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
-        <h2 className="font-serif text-xl font-semibold text-foreground">What we use</h2>
+    <LegalPageLayout
+      eyebrow="Legal"
+      title="Cookie Policy"
+      subtitle={`How ${SITE_BRAND_SHORT} uses cookies and similar technologies.`}
+      meta={`Last updated ${new Date().getFullYear()}. Operated by ${TRADE_NAME}.`}
+      footerNote={`Questions? Email ${PUBLIC_CONTACT_EMAIL} or visit ${SITE_ORIGIN}/privacy.`}
+    >
+      <LegalSection title="1. What are cookies?" accent>
         <p>
-          We keep use minimal. Essential functionality may rely on <strong className="text-foreground">browser local storage</strong> (similar to cookies) for things like remembering that you accepted this notice, and for admin sign-in tokens if you use the organizer panel.
+          Cookies are small text files stored in your browser. We also use similar technologies such
+          as <strong>local storage</strong> and <strong>session storage</strong> for essential site
+          functionality.
         </p>
-      </section>
-      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
-        <h2 className="font-serif text-xl font-semibold text-foreground">Consent banner</h2>
+      </LegalSection>
+
+      <LegalSection title="2. What we use">
+        <div className="legal-page__table-wrap">
+          <table className="legal-page__table">
+            <thead>
+              <tr>
+                <th scope="col">Type</th>
+                <th scope="col">Purpose</th>
+                <th scope="col">Duration</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Consent preference</td>
+                <td>Remembers that you accepted the cookie notice so it is not shown again.</td>
+                <td>Persistent (until cleared)</td>
+              </tr>
+              <tr>
+                <td>Authentication tokens</td>
+                <td>Keeps you signed in to your player dashboard or admin session.</td>
+                <td>Session or token lifetime</td>
+              </tr>
+              <tr>
+                <td>Essential storage</td>
+                <td>Supports navigation state and basic UI preferences required for the site to work.</td>
+                <td>Varies</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </LegalSection>
+
+      <LegalSection title="3. Consent banner">
         <p>
-          When you click <strong className="text-foreground">Accept</strong> on the cookie notice, we store a small value in your browser so we do not show the banner again on future visits. You can clear site data in your browser settings to reset this.
+          When you click <strong>Accept</strong> on the cookie notice, we store a small value in
+          your browser ({COOKIE_CONSENT_KEY}) so we do not show the banner again on future visits.
+          You can clear site data in your browser settings to reset this choice.
         </p>
-      </section>
-      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
-        <h2 className="font-serif text-xl font-semibold text-foreground">Analytics and ads</h2>
-        <p>This site does not include third-party advertising or analytics cookies by default. If that changes, this policy will be updated.</p>
-      </section>
-      <section className="space-y-3 text-sm leading-relaxed text-muted-foreground">
-        <h2 className="font-serif text-xl font-semibold text-foreground">More information</h2>
+      </LegalSection>
+
+      <LegalSection title="4. Analytics and advertising">
         <p>
-          See our{" "}
-          <a className="text-secondary underline underline-offset-2" href="/privacy">
-            Privacy Policy
-          </a>{" "}
-          for how personal data from registration is handled.
+          This site does not include third-party advertising or analytics cookies by default. If we
+          add analytics in the future, this policy will be updated and consent will be requested
+          where required.
         </p>
-      </section>
-    </article>
+      </LegalSection>
+
+      <LegalSection title="5. Managing cookies">
+        <p>You can control cookies through your browser settings:</p>
+        <ul>
+          <li>Block or delete cookies and site data at any time.</li>
+          <li>Note that blocking essential storage may prevent login or registration flows from working.</li>
+          <li>Use private browsing if you do not want persistent tokens on a shared device.</li>
+        </ul>
+      </LegalSection>
+
+      <LegalSection title="6. More information">
+        <p>
+          Personal data collected through registration is covered in our{" "}
+          <LegalLink to="/privacy">Privacy Policy</LegalLink>. For payment and refund details, see{" "}
+          <LegalLink to="/terms">Terms &amp; Conditions</LegalLink> and{" "}
+          <LegalLink to="/refund-policy">Return &amp; Refund Policy</LegalLink>.
+        </p>
+      </LegalSection>
+    </LegalPageLayout>
   );
 }
 

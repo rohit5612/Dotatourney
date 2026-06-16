@@ -10,6 +10,12 @@ import { MatchPublicPage } from "./MatchPublicPage.jsx";
 import { PublicPlayerProfilePage } from "./PublicPlayerProfilePage.jsx";
 import { SeasonDetailPage } from "./SeasonDetailPage.jsx";
 import { SeasonsHubPage } from "./SeasonsHubPage.jsx";
+import {
+  AboutUsPage,
+  CancellationPolicyPage,
+  ReturnRefundPolicyPage,
+  TermsAndConditionsPage,
+} from "./LegalPolicyPages.jsx";
 
 const PublicTeamsPage = lazy(() =>
   import("../../components/teams/PublicTeamsPage.jsx").then((module) => ({ default: module.PublicTeamsPage })),
@@ -109,6 +115,38 @@ export function PublicCookiesRoute() {
   return (
     <PageContentShell path="/cookies">
       <CookiePolicyPage />
+    </PageContentShell>
+  );
+}
+
+export function PublicTermsRoute() {
+  return (
+    <PageContentShell path="/terms">
+      <TermsAndConditionsPage />
+    </PageContentShell>
+  );
+}
+
+export function PublicRefundRoute() {
+  return (
+    <PageContentShell path="/refund-policy">
+      <ReturnRefundPolicyPage />
+    </PageContentShell>
+  );
+}
+
+export function PublicCancellationRoute() {
+  return (
+    <PageContentShell path="/cancellation-policy">
+      <CancellationPolicyPage />
+    </PageContentShell>
+  );
+}
+
+export function PublicAboutRoute() {
+  return (
+    <PageContentShell path="/about">
+      <AboutUsPage />
     </PageContentShell>
   );
 }

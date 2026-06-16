@@ -100,8 +100,18 @@ async function runMigrations() {
   await bootstrapExistingDatabase(sqlFiles);
 
   for (const fileName of sqlFiles) {
-    if (await isApplied(fileName)) {
-      console.log(`Skipped migration (already applied): ${fileName}`);
+    const applied = await isApplied(fileName);
+    if (applied) {
+      // Some legacy DBs were bootstrapped with stale constraints/columns but marked applied.
+      // If a migration is still needed, run it again as a corrective migration.
+      if (await migrationStillNeeded(fileName)) {
+        const fullPath = path.join(migrationsDir, fileName);
+        const sql = await fs.readFile(fullPath, "utf8");
+        await pool.query(sql);
+        console.log(`Reapplied corrective migration: ${fileName}`);
+      } else {
+        console.log(`Skipped migration (already applied): ${fileName}`);
+      }
       continue;
     }
 

@@ -19,7 +19,11 @@ export function AppFooter({ navigate, mode = "public", className = "" }) {
   const legalLinks =
     mode === "public"
       ? [
+          ["/terms", "Terms & Conditions"],
           ["/privacy", "Privacy Policy"],
+          ["/refund-policy", "Return & Refund Policy"],
+          ["/cancellation-policy", "Cancellation Policy"],
+          ["/about", "About Us"],
           ["/cookies", "Cookie Policy"],
         ]
       : [];

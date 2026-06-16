@@ -6,18 +6,22 @@ import { PublicLayout } from "./layouts/PublicLayout.jsx";
 import { AdminConsole } from "./admin/AdminConsole.jsx";
 import {
   PublicAnnouncementsRoute,
+  PublicAboutRoute,
+  PublicCancellationRoute,
   PublicCommunityRoute,
   PublicPlayerProfileRoute,
   PublicCookiesRoute,
   PublicLandingRoute,
   PublicMatchRoute,
   PublicPrivacyRoute,
+  PublicRefundRoute,
   PublicRegisterRedirect,
   PublicRegisterRoute,
   PublicRulesRoute,
   PublicScheduleRoute,
   PublicSeasonsRoute,
   PublicSeasonDetailRoute,
+  PublicTermsRoute,
   PublicTeamsRoute,
   PublicTournamentRoute,
 } from "./pages/public/PublicRouteWrappers.jsx";
@@ -182,6 +186,10 @@ export default function App() {
           <Route path="rules" element={<PublicRulesRoute />} />
           <Route path="privacy" element={<PublicPrivacyRoute />} />
           <Route path="cookies" element={<PublicCookiesRoute />} />
+          <Route path="terms" element={<PublicTermsRoute />} />
+          <Route path="refund-policy" element={<PublicRefundRoute />} />
+          <Route path="cancellation-policy" element={<PublicCancellationRoute />} />
+          <Route path="about" element={<PublicAboutRoute />} />
           <Route path="seasons" element={<PublicSeasonsRoute />} />
           <Route path="seasons/:slug" element={<PublicSeasonDetailRoute />} />
           <Route path="announcements" element={<PublicAnnouncementsRoute />} />

@@ -3326,6 +3326,58 @@
   color: color-mix(in srgb, rgb(248 250 252) 58%, transparent);
 }
 
+.player-match-card__result {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.player-match-card__result-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  background: rgb(255 255 255 / 0.06);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: color-mix(in srgb, rgb(248 250 252) 86%, transparent);
+}
+
+.player-match-card__result-pill--win {
+  border-color: color-mix(in srgb, var(--accent) 48%, transparent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: #6ee7b7;
+}
+
+.player-match-card__result-pill--loss {
+  border-color: color-mix(in srgb, var(--destructive) 42%, transparent);
+  background: color-mix(in srgb, var(--destructive) 14%, transparent);
+  color: #fca5a5;
+}
+
+.player-match-card__score {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(0 0 0 / 0.2);
+  font-size: 0.72rem;
+  color: color-mix(in srgb, rgb(248 250 252) 80%, transparent);
+}
+
+.player-match-card__winner {
+  font-size: 0.72rem;
+  color: color-mix(in srgb, rgb(248 250 252) 62%, transparent);
+}
+
 .player-match-card__head {
   display: flex;
   justify-content: space-between;
@@ -3418,6 +3470,25 @@
   margin-top: 0.75rem;
   padding-top: 0.65rem;
   border-top: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.player-match-card__request-btn {
+  width: 100%;
+  justify-content: center;
+  padding: 0.52rem 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 38%, transparent) inset,
+    0 10px 24px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.player-match-card__request-btn:hover {
+  filter: brightness(1.1);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 52%, transparent) inset,
+    0 14px 30px color-mix(in srgb, var(--accent) 34%, transparent);
 }
 
 .player-match-card__request {

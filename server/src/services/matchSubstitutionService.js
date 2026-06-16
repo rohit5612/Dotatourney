@@ -131,6 +131,16 @@ async function buildMatchPayload(matchRow, playerAccountId, teamName) {
   const startAt = matchRow.start_at;
   const lineupRows = await getMatchLineupRows(matchRow.id);
   const lineups = groupLineupsByTeam(lineupRows, matchRow.team1, matchRow.team2);
+  let meta = {};
+  if (matchRow?.meta && typeof matchRow.meta === "object") {
+    meta = matchRow.meta;
+  } else if (typeof matchRow?.meta === "string") {
+    try {
+      meta = JSON.parse(matchRow.meta || "{}");
+    } catch {
+      meta = {};
+    }
+  }
 
   const myTeamSide =
     teamName?.toLowerCase() === matchRow.team1?.toLowerCase()
@@ -161,6 +171,18 @@ async function buildMatchPayload(matchRow, playerAccountId, teamName) {
     stream: matchRow.schedule_stream || matchRow.stream || "",
     status: matchRow.status,
     scheduleStatus: matchRow.schedule_status,
+    winner: matchRow.winner || meta.winner || "",
+    team1Score: Number.isFinite(Number(matchRow.team1_score))
+      ? Number(matchRow.team1_score)
+      : Number.isFinite(Number(meta.team1Score))
+        ? Number(meta.team1Score)
+        : null,
+    team2Score: Number.isFinite(Number(matchRow.team2_score))
+      ? Number(matchRow.team2_score)
+      : Number.isFinite(Number(meta.team2Score))
+        ? Number(meta.team2Score)
+        : null,
+    score: typeof meta.score === "string" ? meta.score : "",
     notes: matchRow.schedule_notes,
     lineups,
     substitutionRequest: mapSubstitutionRequest(subRequest, startAt),

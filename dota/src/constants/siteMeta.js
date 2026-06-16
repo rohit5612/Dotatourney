@@ -78,6 +78,22 @@ const ROUTE_META = {
     title: `Cookie Policy${TITLE_SUFFIX}`,
     description: "How BPC League uses cookies and similar technologies.",
   },
+  "/terms": {
+    title: `Terms & Conditions${TITLE_SUFFIX}`,
+    description: "Terms and conditions for services offered on the BPC League website.",
+  },
+  "/refund-policy": {
+    title: `Return & Refund Policy${TITLE_SUFFIX}`,
+    description: "Return and refund policy, including duration and refund mode details.",
+  },
+  "/cancellation-policy": {
+    title: `Cancellation Policy${TITLE_SUFFIX}`,
+    description: "Cancellation policy with request duration and eligibility details.",
+  },
+  "/about": {
+    title: `About Us${TITLE_SUFFIX}`,
+    description: "About the website operator and services offered.",
+  },
   "/register": {
     title: `Register${TITLE_SUFFIX}`,
     description: "Register for the current BPC League Dota 2 tournament.",
