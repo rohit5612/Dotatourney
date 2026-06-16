@@ -1,7 +1,7 @@
 /* Legal / policy pages — light gradient backdrop + glass document */
 
 .legal-page-layout {
-  --legal-content-max: min(48rem, calc(100vw - 2rem));
+  --legal-content-max: min(82rem, calc(100vw - 2rem));
   --legal-glass-bg: linear-gradient(
     155deg,
     rgba(255, 255, 255, 0.82) 0%,
