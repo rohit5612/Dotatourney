@@ -6,10 +6,14 @@
 
 .player-profile__hero-band {
   min-height: clamp(12rem, 28vh, 16rem);
+  position: relative;
+  overflow: hidden;
 }
 
 .player-profile__hero-inner {
   text-align: left;
+  position: relative;
+  z-index: 1;
 }
 
 .player-profile__back {
@@ -120,6 +124,243 @@
   color: var(--primary);
 }
 
+.player-profile__team-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--community-glass-border-soft);
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+.player-profile__hero-recognitions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.85rem;
+}
+
+.player-profile__honor-badge {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  min-width: min(100%, 12.5rem);
+  max-width: 16rem;
+  padding: 0.55rem 0.7rem 0.6rem;
+  border-radius: 0.8rem;
+  border: 1px solid var(--community-glass-border-soft);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--background) 78%, transparent) 0%,
+    color-mix(in srgb, var(--background) 52%, transparent) 100%
+  );
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  box-shadow:
+    0 6px 20px rgba(15, 23, 42, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+
+.player-profile__honor-badge::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(125deg, rgba(255, 255, 255, 0.14) 0%, transparent 42%, transparent 100%);
+  opacity: 0.65;
+}
+
+.player-profile__honor-badge-mark {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent);
+  background: color-mix(in srgb, var(--background) 35%, transparent);
+  color: var(--muted-foreground);
+}
+
+.player-profile__honor-badge-mark svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.player-profile__honor-badge-content {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  flex: 1;
+}
+
+.player-profile__honor-badge-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.45rem;
+}
+
+.player-profile__honor-badge-season {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.12rem 0.38rem;
+  border-radius: 0.3rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 14%, transparent);
+  background: color-mix(in srgb, var(--background) 40%, transparent);
+  color: color-mix(in srgb, var(--foreground) 78%, var(--muted-foreground));
+}
+
+.player-profile__honor-badge-title {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  color: var(--foreground);
+}
+
+.player-profile__honor-badge-sub {
+  margin: 0.28rem 0 0;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1.4;
+  color: color-mix(in srgb, var(--foreground) 68%, var(--muted-foreground));
+}
+
+.player-profile__honor-badge--champion {
+  border-color: color-mix(in srgb, #d4a017 58%, var(--community-glass-border-soft));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, #f6d68a 22%, var(--background)) 0%,
+    color-mix(in srgb, #c9782e 10%, var(--background)) 48%,
+    color-mix(in srgb, var(--background) 58%, transparent) 100%
+  );
+  box-shadow:
+    0 8px 24px color-mix(in srgb, #c9782e 22%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.player-profile__honor-badge--champion .player-profile__honor-badge-mark {
+  border-color: color-mix(in srgb, #d4a017 45%, transparent);
+  background: color-mix(in srgb, #d4a017 18%, var(--background));
+  color: #b8860b;
+}
+
+.player-profile__honor-badge--champion .player-profile__honor-badge-season {
+  border-color: color-mix(in srgb, #d4a017 40%, transparent);
+  background: color-mix(in srgb, #d4a017 14%, var(--background));
+  color: #9a7209;
+}
+
+.player-profile__honor-badge--champion .player-profile__honor-badge-title {
+  color: #9a7209;
+}
+
+.player-profile__honor-badge--mvp {
+  border-color: color-mix(in srgb, #8b5cf6 52%, var(--community-glass-border-soft));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, #c4b5fd 24%, var(--background)) 0%,
+    color-mix(in srgb, #7c3aed 12%, var(--background)) 50%,
+    color-mix(in srgb, var(--background) 58%, transparent) 100%
+  );
+  box-shadow:
+    0 8px 24px color-mix(in srgb, #7c3aed 20%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.player-profile__honor-badge--mvp .player-profile__honor-badge-mark {
+  border-color: color-mix(in srgb, #8b5cf6 42%, transparent);
+  background: color-mix(in srgb, #8b5cf6 16%, var(--background));
+  color: #7c3aed;
+}
+
+.player-profile__honor-badge--mvp .player-profile__honor-badge-season {
+  border-color: color-mix(in srgb, #8b5cf6 38%, transparent);
+  background: color-mix(in srgb, #8b5cf6 12%, var(--background));
+  color: #6d28d9;
+}
+
+.player-profile__honor-badge--mvp .player-profile__honor-badge-title {
+  color: #6d28d9;
+}
+
+.player-profile__honor-badge--custom {
+  border-color: color-mix(in srgb, var(--primary) 38%, var(--community-glass-border-soft));
+}
+
+.player-profile__honor-badge--custom .player-profile__honor-badge-mark {
+  border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+  background: color-mix(in srgb, var(--primary) 12%, var(--background));
+  color: var(--primary);
+}
+
+.player-profile__recognition-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.player-profile__recognition-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 0.85rem;
+  border: 1px solid var(--community-glass-border-soft);
+  background: color-mix(in srgb, var(--background) 24%, transparent);
+}
+
+.player-profile__recognition-pill {
+  flex-shrink: 0;
+}
+
+.player-profile__recognition-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 650;
+}
+
+.player-profile__subsection-label {
+  margin: 1rem 0 0.45rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--foreground) 62%, var(--muted-foreground));
+}
+
+.player-profile__teammates--former li {
+  opacity: 0.82;
+}
+
+.player-profile__stint-badge {
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--community-glass-border-soft);
+  background: color-mix(in srgb, var(--background) 35%, transparent);
+}
+
+.player-profile__stint-badge--active {
+  border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+  color: var(--primary);
+}
+
 .player-profile-page {
   gap: clamp(0.85rem, 2vw, 1.15rem);
 }
@@ -151,6 +392,438 @@
 
 .player-profile__card {
   width: min(100%, 15.5rem);
+}
+
+.player-profile__about {
+  position: relative;
+  min-height: 100%;
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+.player-profile__about--team {
+  border: 1px solid var(--community-glass-border-soft);
+}
+
+.player-profile__about-team-bg {
+  position: absolute;
+  right: -2%;
+  top: 50%;
+  transform: translateY(-50%);
+  width: min(50%, 280px);
+  height: 88%;
+  background-image: var(--about-team-logo);
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center right;
+  opacity: 0.58;
+  filter: saturate(1.2) brightness(1.4);
+  pointer-events: none;
+  z-index: 0;
+  -webkit-mask-image: linear-gradient(to left, rgb(0 0 0 / 1) 32%, transparent 90%);
+  mask-image: linear-gradient(to left, rgb(0 0 0 / 1) 32%, transparent 90%);
+}
+
+.player-profile__about--team::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--background) 86%, transparent) 0%,
+    color-mix(in srgb, var(--background) 52%, transparent) 38%,
+    color-mix(in srgb, var(--background) 18%, transparent) 62%,
+    transparent 84%
+  );
+}
+
+.player-profile__about-inner {
+  position: relative;
+  z-index: 1;
+  padding: clamp(0.85rem, 2vw, 1.1rem);
+}
+
+.player-profile__content-grid {
+  display: grid;
+  gap: clamp(0.85rem, 2vw, 1.15rem);
+}
+
+@media (min-width: 960px) {
+  .player-profile__content-grid {
+    grid-template-columns: minmax(0, 1.35fr) minmax(16rem, 0.85fr);
+    align-items: start;
+  }
+}
+
+.player-profile__content-col {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(0.85rem, 2vw, 1.15rem);
+  min-width: 0;
+}
+
+.player-profile__team-card--featured {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
+  border-radius: 0.85rem;
+  border: 1px solid var(--community-glass-border-soft);
+  background: color-mix(in srgb, var(--background) 28%, transparent);
+}
+
+.player-profile__team-logo--lg {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 0.65rem;
+  object-fit: contain;
+  flex-shrink: 0;
+  border: 1px solid var(--community-glass-border-soft);
+  background: color-mix(in srgb, var(--background) 55%, transparent);
+}
+
+.player-profile__team-card-copy {
+  min-width: 0;
+}
+
+.player-profile__teammate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 9.5rem), 1fr));
+  gap: 0.5rem;
+}
+
+.player-profile__teammate-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 0.65rem;
+  border: 1px solid var(--community-glass-border-soft);
+  background: color-mix(in srgb, var(--background) 32%, transparent);
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+a.player-profile__teammate-chip:hover {
+  border-color: color-mix(in srgb, var(--primary) 38%, var(--community-glass-border-soft));
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.player-profile__teammate-chip--self {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--community-glass-border-soft));
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.player-profile__teammate-chip-avatar {
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--primary) 18%, var(--background));
+  border: 1px solid var(--community-glass-border-soft);
+}
+
+.player-profile__teammate-chip-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.player-profile__teammate-chip-name {
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-profile__teammate-chip-role {
+  font-size: 0.6875rem;
+  color: color-mix(in srgb, var(--foreground) 62%, var(--muted-foreground));
+}
+
+.player-profile__teammate-chip-you {
+  margin-left: auto;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.player-profile__match-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.player-profile__match-row {
+  padding: 0.75rem 0.85rem;
+  border-radius: 0.85rem;
+  border: 1px solid var(--community-glass-border-soft);
+  background: color-mix(in srgb, var(--background) 24%, transparent);
+}
+
+.player-profile__match-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.player-profile__match-side {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.player-profile__match-side--away {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+
+.player-profile__match-side--player .player-profile__match-team {
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+.player-profile__match-logo {
+  flex-shrink: 0;
+  border-radius: 0.45rem;
+  border: 1px solid var(--community-glass-border-soft);
+  background: color-mix(in srgb, var(--background) 50%, transparent);
+}
+
+.player-profile__match-team {
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-profile__match-score-toast {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 3.5rem;
+  padding: 0.38rem 0.72rem;
+  border-radius: 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--community-glass-border-soft) 88%, transparent);
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--foreground) 6%, var(--background)) 0%,
+    color-mix(in srgb, var(--background) 72%, transparent) 48%,
+    color-mix(in srgb, var(--background) 58%, transparent) 100%
+  );
+  box-shadow:
+    0 6px 18px color-mix(in srgb, var(--foreground) 10%, transparent),
+    0 1px 0 color-mix(in srgb, var(--foreground) 10%, transparent) inset;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.player-profile__match-score-toast--win {
+  border-color: color-mix(in srgb, #16a34a 42%, var(--community-glass-border-soft));
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, #16a34a 14%, var(--background)) 0%,
+    color-mix(in srgb, var(--background) 70%, transparent) 55%,
+    color-mix(in srgb, var(--background) 58%, transparent) 100%
+  );
+  box-shadow:
+    0 8px 22px color-mix(in srgb, #16a34a 18%, transparent),
+    0 1px 0 color-mix(in srgb, #16a34a 12%, transparent) inset;
+}
+
+.player-profile__match-score-toast--loss {
+  border-color: color-mix(in srgb, #dc2626 32%, var(--community-glass-border-soft));
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, #dc2626 10%, var(--background)) 0%,
+    color-mix(in srgb, var(--background) 70%, transparent) 55%,
+    color-mix(in srgb, var(--background) 58%, transparent) 100%
+  );
+  box-shadow:
+    0 8px 22px color-mix(in srgb, #dc2626 12%, transparent),
+    0 1px 0 color-mix(in srgb, #dc2626 8%, transparent) inset;
+}
+
+.player-profile__match-score-toast--pending {
+  min-width: 2.75rem;
+  padding-block: 0.4rem;
+}
+
+.player-profile__match-score-toast-body {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.player-profile__match-score-toast-num {
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground));
+}
+
+.player-profile__match-score-toast-num--winner {
+  color: var(--primary);
+}
+
+.player-profile__match-score-toast-num--player:not(.player-profile__match-score-toast-num--winner) {
+  color: var(--foreground);
+  font-weight: 800;
+}
+
+.player-profile__match-score-toast-sep {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--foreground) 38%, var(--muted-foreground));
+  opacity: 0.85;
+}
+
+.player-profile__match-score-toast-vs {
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  line-height: 1;
+}
+
+.player-profile__match-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 0.65rem;
+  margin-top: 0.45rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid color-mix(in srgb, var(--community-glass-border-soft) 65%, transparent);
+}
+
+.player-profile__match-meta {
+  margin: 0;
+  font-size: 0.75rem;
+  color: color-mix(in srgb, var(--foreground) 62%, var(--muted-foreground));
+}
+
+.player-profile__match-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.player-profile__match-tag {
+  padding: 0.12rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: 1px solid var(--community-glass-border-soft);
+  background: color-mix(in srgb, var(--background) 40%, transparent);
+  color: var(--muted-foreground);
+}
+
+.player-profile__match-tag--win {
+  border-color: color-mix(in srgb, #16a34a 40%, transparent);
+  color: #15803d;
+}
+
+.player-profile__match-tag--loss {
+  border-color: color-mix(in srgb, #dc2626 35%, transparent);
+  color: #b91c1c;
+}
+
+.player-profile__stint-seasons {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.player-profile__stint-season-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.player-profile__stint-season-title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+a.player-profile__stint-season-title:hover {
+  color: var(--primary);
+}
+
+.player-profile__stint-season-badge {
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid var(--community-glass-border-soft);
+  color: var(--muted-foreground);
+}
+
+.player-profile__stint-season-badge--live {
+  border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+  color: var(--primary);
+}
+
+.player-profile__stint-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.player-profile__stint-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--community-glass-border-soft);
+  background: color-mix(in srgb, var(--background) 20%, transparent);
+}
+
+.player-profile__stint-team {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
 }
 
 .player-profile__section-title {
@@ -312,6 +985,38 @@
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
+}
+
+.player-profile__show-more-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.85rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--community-glass-border-soft);
+}
+
+.player-profile__show-more-btn {
+  min-height: 2.35rem;
+  padding: 0.45rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--community-glass-border-soft);
+  background: color-mix(in srgb, var(--background) 48%, transparent);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  color: var(--foreground);
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.player-profile__show-more-btn:hover {
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--community-glass-border-soft));
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--primary);
+}
+
+.player-profile__show-more-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 70%, transparent);
+  outline-offset: 2px;
 }
 
 .player-profile__history-item {

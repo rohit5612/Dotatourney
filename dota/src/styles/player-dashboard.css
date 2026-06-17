@@ -784,6 +784,37 @@
   margin-top: 0.55rem;
 }
 
+.player-dash__hero-recognitions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+}
+
+.player-dash__recognition {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  background: rgb(15 23 42 / 0.35);
+  color: rgb(248 250 252);
+}
+
+.player-dash__recognition--champion {
+  border-color: color-mix(in srgb, #d4a017 55%, transparent);
+  color: #f5d76e;
+}
+
+.player-dash__recognition--mvp {
+  border-color: color-mix(in srgb, #a78bfa 50%, transparent);
+  color: #c4b5fd;
+}
+
 .player-dash__hero-chip {
   font-size: 0.74rem;
   color: color-mix(in srgb, rgb(248 250 252) 62%, transparent);
@@ -2190,6 +2221,38 @@
   margin: 0.15rem 0 0;
   font-size: 0.76rem;
   color: color-mix(in srgb, rgb(248 250 252) 58%, transparent);
+}
+
+.player-dash__show-more-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.player-dash__show-more-btn {
+  min-height: 2.35rem;
+  padding: 0.45rem 1rem;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  background: rgb(255 255 255 / 0.05);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  color: rgb(248 250 252);
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.player-dash__show-more-btn:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, rgb(255 255 255 / 0.14));
+  background: color-mix(in srgb, var(--accent) 12%, rgb(255 255 255 / 0.05));
+  color: var(--accent);
+}
+
+.player-dash__show-more-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 2px;
 }
 
 .player-dash__team-grid {

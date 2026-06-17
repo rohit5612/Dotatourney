@@ -421,8 +421,9 @@ function SeasonPlayersTab({ participations }) {
 }
 
 function SeasonPrizesTab({ payload }) {
-  const { prizePool, prizeBreakdown } = payload;
+  const { prizePool, prizeBreakdown, honors } = payload;
   const podium = prizeBreakdown.slice(0, 3);
+  const mvp = honors?.mvp;
 
   return (
     <SeasonPanelCard>
@@ -432,11 +433,29 @@ function SeasonPrizesTab({ payload }) {
         <span className="season-detail__prize-total-label">Total pool</span>
         <p className="season-detail__prize-total">{prizePool || "To be announced"}</p>
       </div>
+      {mvp?.playerName || mvp?.prize ? (
+        <div className="season-detail__prize-mvp season-glass">
+          <span className="season-detail__prize-rank">Season MVP</span>
+          {mvp.playerName ? (
+            <p className="season-detail__prize-winner">
+              {mvp.playerName}
+              {mvp.teamName ? ` · ${mvp.teamName}` : ""}
+            </p>
+          ) : null}
+          {mvp.prize ? <span className="season-detail__prize-amount">{mvp.prize}</span> : null}
+        </div>
+      ) : null}
       {podium.length ? (
         <div className="season-detail__prize-podium">
           {podium.map((item, index) => (
             <article key={`${item.label}-${index}`} className="season-detail__prize-slot season-glass">
               <span className="season-detail__prize-rank">{prizePlacementLabel(item, index)}</span>
+              {item.winnerTeamName ? (
+                <p className="season-detail__prize-winner">{item.winnerTeamName}</p>
+              ) : null}
+              {item.winnerPlayers?.length ? (
+                <p className="season-detail__prize-roster">{item.winnerPlayers.join(" · ")}</p>
+              ) : null}
               <span className="season-detail__prize-amount">{item.amount}</span>
             </article>
           ))}
@@ -448,7 +467,12 @@ function SeasonPrizesTab({ payload }) {
         <ul className="season-detail__prize-list">
           {prizeBreakdown.slice(3).map((item, index) => (
             <li key={`rest-${index}`} className="season-detail__prize-row">
-              <span>{prizePlacementLabel(item, index + 3)}</span>
+              <div className="season-detail__prize-row-copy">
+                <span>{prizePlacementLabel(item, index + 3)}</span>
+                {item.winnerTeamName ? (
+                  <span className="season-detail__prize-row-winner">{item.winnerTeamName}</span>
+                ) : null}
+              </div>
               <span>{item.amount}</span>
             </li>
           ))}

@@ -130,6 +130,11 @@ function MatchCard({ match, onRefresh, showResult = false }) {
       {actionError ? <div className="player-auth__message player-auth__message--error">{actionError}</div> : null}
 
       <footer className="player-match-card__foot">
+        {match.playingAsSubstitute ? (
+          <span className="player-dash__tourney-badge player-dash__tourney-badge--success">
+            Playing as substitute{myTeamName ? ` for ${myTeamName}` : ""}
+          </span>
+        ) : null}
         {req ? (
           <div className="player-match-card__request">
             <span className={`player-dash__tourney-badge player-dash__tourney-badge--${req.status === "approved" ? "success" : "warm"}`}>
@@ -192,7 +197,7 @@ export function MatchesSchedulePanel({ schedule, onRefresh }) {
       <header className="player-dash__card-head player-dash__card-head--compact">
         <div>
           <h2 className="player-dash__card-title">Matches</h2>
-          <p className="player-dash__card-sub">Upcoming and past matches for your team</p>
+          <p className="player-dash__card-sub">Upcoming and past matches for your team or sub assignments</p>
         </div>
         <div className="player-match-tabs" role="tablist" aria-label="Match filter">
           <button

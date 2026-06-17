@@ -343,6 +343,54 @@ export function prizePlacementLabel(item, index) {
   return `${n}th Place`;
 }
 
+/** Attach podium winner team names to prize rows by placement. */
+export function enrichPrizeBreakdownWithWinners(prizeBreakdown, honors) {
+  const podiumByPlacement = new Map(
+    (honors?.podiumTeams || []).map((entry) => [Number(entry.placement), entry]),
+  );
+
+  return (prizeBreakdown || []).map((item, index) => {
+    const placement = Number(item.placement ?? index + 1);
+    const podium = podiumByPlacement.get(placement);
+    const winnerTeamName =
+      String(item.winnerTeamName || item.teamName || podium?.teamName || "").trim() || null;
+    const winnerPlayers =
+      Array.isArray(item.winnerPlayers) && item.winnerPlayers.length
+        ? item.winnerPlayers
+        : null;
+
+    return {
+      ...item,
+      winnerTeamName,
+      winnerRole: podium?.role || item.winnerRole || null,
+      winnerPlayers,
+    };
+  });
+}
+
+function rosterPlayerLabels(players = []) {
+  return players
+    .map((player) => {
+      if (typeof player === "string") return player.trim();
+      return String(player.displayName || player.display_name || player.name || "").trim();
+    })
+    .filter(Boolean);
+}
+
+/** Add roster player names to top prize rows when teams carry players. */
+export function attachRosterNamesToPrizes(prizeBreakdown, teams, honors) {
+  const teamLookup = buildTeamNameLookup(teams || []);
+  const enriched = enrichPrizeBreakdownWithWinners(prizeBreakdown, honors);
+
+  return enriched.map((item) => {
+    if (item.winnerPlayers?.length) return item;
+    if (!item.winnerTeamName) return item;
+    const team = teamLookup.get(item.winnerTeamName.toLowerCase());
+    const labels = rosterPlayerLabels(team?.players);
+    return labels.length ? { ...item, winnerPlayers: labels } : item;
+  });
+}
+
 /** Normalize GET /public/seasons/:slug payload for UI sections. */
 export function normalizeSeasonPayload(data) {
   if (!data?.season) return null;
@@ -378,7 +426,11 @@ export function normalizeSeasonPayload(data) {
     hasHonors: hasPublicHonorsContent(honors),
     championName: trophy.teamName,
     prizePool: tournament?.prize_pool || "",
-    prizeBreakdown: normalizePrizeBreakdown(tournament?.prize_pool_breakdown),
+    prizeBreakdown: attachRosterNamesToPrizes(
+      normalizePrizeBreakdown(tournament?.prize_pool_breakdown),
+      teams,
+      honors,
+    ),
   };
 }
 

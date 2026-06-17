@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { DashboardNavIcon } from "../../components/player/DashboardNavIcon.jsx";
+import { useShowMoreList } from "../../hooks/useShowMoreList.js";
 import { playerApi } from "../../lib/playerApi";
 
 function formatDate(value) {
@@ -50,6 +51,13 @@ export function PlayerHistoryPage() {
   const regCount = data?.registrations?.length ?? 0;
   const matchCount = data?.matchAppearances?.length ?? 0;
   const approvedCount = data?.career?.approvedRegistrations ?? 0;
+  const {
+    visible: visibleMatchAppearances,
+    hasMore: hasMoreMatchAppearances,
+    canCollapse: canCollapseMatchAppearances,
+    showMore: showMoreMatchAppearances,
+    showLess: showLessMatchAppearances,
+  } = useShowMoreList(data?.matchAppearances, { resetKey: matchCount });
 
   return (
     <div className="player-dash__history">
@@ -110,6 +118,7 @@ export function PlayerHistoryPage() {
                       <p className="player-dash__timeline-title">{season.seasonName}</p>
                       <p className="player-dash__timeline-meta">
                         {season.teamName ? `Team ${season.teamName}` : "No team recorded"}
+                        {season.highestStage ? ` · ${season.highestStage}` : ""}
                         {season.role ? ` · ${season.role}` : ""}
                       </p>
                     </div>
@@ -144,7 +153,7 @@ export function PlayerHistoryPage() {
             {data?.teamHistory?.length ? (
               <div className="player-dash__team-grid">
                 {data.teamHistory.map((team) => (
-                  <article key={team.rosterSnapshotId} className="player-dash__team-history-card">
+                  <article key={team.membershipId || team.rosterSnapshotId} className="player-dash__team-history-card">
                     {team.logoUrl ? (
                       <img src={team.logoUrl} alt="" className="player-dash__team-history-logo" />
                     ) : (
@@ -155,7 +164,13 @@ export function PlayerHistoryPage() {
                     <div className="player-dash__team-history-copy">
                       <p className="player-dash__team-name">{team.teamName}</p>
                       <p className="player-dash__card-sub">{team.tournamentName}</p>
-                      {team.approvedAt ? (
+                      <p className="player-dash__team-history-date">
+                        {team.status === "active" ? "Active" : team.wasReplaced ? "Replaced before playing" : "Former"}
+                        {team.matchesPlayed != null ? ` · ${team.matchesPlayed} match${team.matchesPlayed === 1 ? "" : "es"}` : ""}
+                      </p>
+                      {team.startedAt ? (
+                        <p className="player-dash__team-history-date">{formatDate(team.startedAt)}</p>
+                      ) : team.approvedAt ? (
                         <p className="player-dash__team-history-date">{formatDate(team.approvedAt)}</p>
                       ) : null}
                     </div>
@@ -180,26 +195,50 @@ export function PlayerHistoryPage() {
             </header>
 
             {data?.matchAppearances?.length ? (
-              <ul className="player-dash__timeline">
-                {data.matchAppearances.map((row) => (
-                  <li key={`${row.matchId}-${row.teamName}-${row.displayName}`} className="player-dash__timeline-item">
-                    <span className="player-dash__timeline-dot" aria-hidden="true" />
-                    <div className="player-dash__timeline-copy">
-                      <p className="player-dash__timeline-title">
-                        {row.team1} vs {row.team2}
-                      </p>
-                      <p className="player-dash__timeline-meta">
-                        {row.tournamentName}
-                        {row.startAt ? ` · ${formatDate(row.startAt)}` : ""}
-                        {row.teamName ? ` · ${row.teamName}` : ""}
-                      </p>
-                    </div>
-                    <span className={`player-dash__tourney-badge player-dash__tourney-badge--${row.playedAsSub ? "secondary" : row.wasReplaced ? "warm" : "muted"}`}>
-                      {row.playedAsSub ? "Subbed in" : row.wasReplaced ? "Replaced" : "Played"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <ul className="player-dash__timeline">
+                  {visibleMatchAppearances.map((row) => {
+                    const score =
+                      row.score ||
+                      (row.team1Score != null && row.team2Score != null ? `${row.team1Score}–${row.team2Score}` : "");
+                    return (
+                      <li key={`${row.matchId}-${row.teamName}-${row.displayName}`} className="player-dash__timeline-item">
+                        <span className="player-dash__timeline-dot" aria-hidden="true" />
+                        <div className="player-dash__timeline-copy">
+                          <p className="player-dash__timeline-title">
+                            {row.team1} vs {row.team2}
+                          </p>
+                          <p className="player-dash__timeline-meta">
+                            {row.seasonNumber ? `S${row.seasonNumber}` : row.tournamentName}
+                            {row.stageLabel ? ` · ${row.stageLabel}` : ""}
+                            {row.startAt ? ` · ${formatDate(row.startAt)}` : ""}
+                            {row.teamName ? ` · ${row.teamName}` : ""}
+                            {score ? ` · ${score}` : ""}
+                            {row.won === true ? " · W" : row.won === false ? " · L" : ""}
+                          </p>
+                        </div>
+                        <span className={`player-dash__tourney-badge player-dash__tourney-badge--${row.playedAsSub ? "secondary" : row.wasReplaced ? "warm" : "muted"}`}>
+                          {row.appearanceLabel || (row.playedAsSub ? "Subbed in" : row.wasReplaced ? "Replaced" : "Played")}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {hasMoreMatchAppearances || canCollapseMatchAppearances ? (
+                  <div className="player-dash__show-more-wrap">
+                    {hasMoreMatchAppearances ? (
+                      <button type="button" className="player-dash__show-more-btn" onClick={showMoreMatchAppearances}>
+                        Show more
+                      </button>
+                    ) : null}
+                    {canCollapseMatchAppearances ? (
+                      <button type="button" className="player-dash__show-more-btn" onClick={showLessMatchAppearances}>
+                        Show less
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </>
             ) : (
               <EmptyBlock title="No match appearances yet" hint="Lineup history appears after scheduled matches and substitutions." />
             )}

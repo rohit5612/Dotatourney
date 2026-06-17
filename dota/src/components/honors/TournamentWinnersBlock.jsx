@@ -1,5 +1,5 @@
 import { SITE_BRAND_SHORT } from "../../constants/siteMeta.js";
-import { WinnerTeamCardGrid } from "./WinnerTeamCard.jsx";
+import { WinnersPodiumShowcase } from "./WinnersPodiumShowcase.jsx";
 import { MvpShowcaseCard } from "./MvpShowcaseCard.jsx";
 import { hasPublicHonorsContent, honorsSeasonTitle } from "../../utils/tournamentHonors.js";
 import { TeamHonorBadge } from "./TournamentHonorsPanel.jsx";
@@ -41,7 +41,11 @@ export function TournamentWinnersBlock({
         ) : null}
       </div>
 
-      <WinnerTeamCardGrid podiumTeams={podiumTeams} teamLookup={teamLookup} variant={compact ? "compact" : "full"} />
+      <WinnersPodiumShowcase
+        podiumTeams={podiumTeams}
+        teamLookup={teamLookup}
+        variant={compact ? "compact" : "full"}
+      />
 
       {honors?.mvp ? (
         <MvpShowcaseCard mvp={honors.mvp} teams={teams} teamLookup={teamLookup} variant={compact ? "compact" : "full"} />

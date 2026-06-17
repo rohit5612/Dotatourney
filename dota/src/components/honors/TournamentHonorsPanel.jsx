@@ -11,4 +11,5 @@ export function TeamHonorBadge({ badge, className = "" }) {
 
 export { TournamentWinnersBlock, TournamentHonorsSection, ChampionStrip } from "./TournamentWinnersBlock.jsx";
 export { WinnerTeamCard, WinnerTeamCardGrid } from "./WinnerTeamCard.jsx";
+export { WinnersPodiumShowcase } from "./WinnersPodiumShowcase.jsx";
 export { MvpShowcaseCard } from "./MvpShowcaseCard.jsx";

@@ -107,13 +107,31 @@ export async function notifySubstitutionAssigned({
   recipientAccountIds,
   substitutionRequestId,
 }) {
-  const title = "Lineup substitution";
-  const body = `${substituteName} will sub in for ${requesterName} (${teamName}) in ${match.team1} vs ${match.team2}.`;
+  const title = "Substitution approved";
+  const body = `${substituteName} will sub in for ${requesterName} on ${teamName} for ${match.team1} vs ${match.team2}.`;
   return createNotificationsForAccounts(recipientAccountIds, {
     type: "substitution_assigned",
     title,
     body,
-    payload: { matchId: match.id, teamName, substitutionRequestId },
+    payload: { matchId: match.id, teamName, substitutionRequestId, audience: "team" },
+  });
+}
+
+export async function notifySubstitutionOpponentLineupChange({
+  match,
+  teamName,
+  requesterName,
+  substituteName,
+  recipientAccountIds,
+  substitutionRequestId,
+}) {
+  const title = "Opponent lineup update";
+  const body = `${teamName} has an approved substitute: ${substituteName} will play instead of ${requesterName} in ${match.team1} vs ${match.team2}.`;
+  return createNotificationsForAccounts(recipientAccountIds, {
+    type: "substitution_opponent_update",
+    title,
+    body,
+    payload: { matchId: match.id, teamName, substitutionRequestId, audience: "opponent" },
   });
 }
 

@@ -7,6 +7,7 @@ import { resolveSeasonStatusFromTournament } from "./seasonUpsert.js";
 import { buildMatchRosterCards } from "./cardManifestService.js";
 import { buildPublicHonorsPayload } from "./bracketHonorsEngine.js";
 import { buildGroupedStandings, buildStandings } from "./standingsEngine.js";
+import { buildTeamsWithActivePlayers, mergeSnapshotTeamsWithRoster } from "./rosterMembershipService.js";
 
 function parseSponsorsConfig(raw) {
   if (!raw || typeof raw !== "object") return { section: {}, sponsors: [] };
@@ -284,6 +285,21 @@ export async function getSeasonBySlug(slug) {
   if (season.status === "concluded" && season.snapshot) {
     tournamentPayload = typeof season.snapshot === "object" ? season.snapshot : JSON.parse(season.snapshot || "{}");
     const format = tournamentPayload?.tournament?.format;
+    if (season.tournament_id) {
+      const data = await getTournament(season.tournament_id);
+      const rosterTeams = buildTeamsWithActivePlayers(data?.approvedRoster);
+      if (rosterTeams.length) {
+        tournamentPayload.teams = mergeSnapshotTeamsWithRoster(tournamentPayload.teams, rosterTeams);
+      }
+      if (!tournamentPayload.honors && data?.tournament) {
+        const matches = (tournamentPayload.matches || data.matches || []).map(hydrateMatchRow);
+        tournamentPayload.honors = buildPublicHonorsPayload(
+          matches,
+          format,
+          data.tournament.tournament_honors,
+        );
+      }
+    }
     if (format && tournamentPayload?.teams?.length && tournamentPayload?.matches?.length && !tournamentPayload.groupedStandings?.length) {
       tournamentPayload.groupedStandings = buildGroupedStandings(
         tournamentPayload.teams,
@@ -298,7 +314,9 @@ export async function getSeasonBySlug(slug) {
       const visibilityMode = tournament.visibility_mode || "demo";
       const format = tournament.format;
       const teams =
-        data.approvedRoster?.teams?.length > 0 ? data.approvedRoster.teams : data.teams || [];
+        data.approvedRoster?.teams?.length > 0
+          ? buildTeamsWithActivePlayers(data.approvedRoster)
+          : data.teams || [];
       let matches = (data.matches || []).map(hydrateMatchRow);
       if (format === "blast" && visibilityMode !== "demo" && teams.length > 0) {
         matches = applyBlastGroupSeeding(teams, matches).matches;

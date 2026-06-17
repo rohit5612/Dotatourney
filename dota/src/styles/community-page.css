@@ -380,13 +380,21 @@ a.community-page__stat:hover {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 13.5rem), 1fr));
 }
 
+.community-page__grid-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-height: 17.5rem;
+}
+
 .community-page__card-link {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.65rem;
+  flex: 1;
   min-height: 15.5rem;
-  padding: clamp(1rem, 2.2vw, 1.25rem) clamp(0.75rem, 2vw, 1rem) clamp(1.05rem, 2.2vw, 1.2rem);
+  padding: clamp(1rem, 2.2vw, 1.25rem) clamp(0.75rem, 2vw, 1rem) clamp(0.85rem, 2vw, 1rem);
   border-radius: 1.15rem;
   border: 1px solid var(--community-glass-border-soft);
   background: linear-gradient(
@@ -430,6 +438,51 @@ a.community-page__stat:hover {
 .community-page__card-link .bpcl-card--sm .bpcl-card__avatar {
   width: 3.75rem;
   height: 3.75rem;
+}
+
+.community-page__card-slot {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.community-page__card-caption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.12rem;
+}
+
+.community-page__honor-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.3rem 0.5rem;
+  min-height: 1.15rem;
+  padding: 0 0.35rem 0.15rem;
+}
+
+.community-page__honor-badges--empty {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.community-page__honor-badge {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  line-height: 1.3;
+  color: color-mix(in srgb, var(--muted-foreground) 90%, transparent);
+}
+
+.community-page__honor-badge--champion {
+  color: color-mix(in srgb, #b8860b 72%, var(--muted-foreground));
+}
+
+.community-page__honor-badge--mvp {
+  color: color-mix(in srgb, #7c3aed 72%, var(--muted-foreground));
 }
 
 .community-page__card-name {

@@ -8,6 +8,7 @@ import { upsertSeasonForTournament } from "./seasonUpsert.js";
 import { buildPublicHonorsPayload } from "./bracketHonorsEngine.js";
 import { buildStandings } from "./standingsEngine.js";
 import { parseSeasonLabelFromName, seasonSlugFromLabel } from "../utils/tournamentNaming.js";
+import { buildTeamsWithActivePlayers, reseedFutureMatchLineups } from "./rosterMembershipService.js";
 
 function parseMeta(raw) {
   if (raw == null) return {};
@@ -580,7 +581,8 @@ export async function getRosterSnapshot(tournamentId, rosterId) {
     [rosterId],
   );
   const playersResult = await pool.query(
-    `SELECT id, source_player_id AS "sourcePlayerId", registration_id AS "registrationId", name, display_name AS "displayName", role, roles, mmr,
+    `SELECT id, source_player_id AS "sourcePlayerId", registration_id AS "registrationId",
+            player_account_id AS "playerAccountId", name, display_name AS "displayName", role, roles, mmr,
             steam_name AS "steamName", steam_profile AS "steamProfile", discord_handle AS "discordHandle",
             location, is_captain AS "isCaptain"
      FROM roster_snapshot_players
@@ -1103,6 +1105,7 @@ export async function syncApprovedRosterFromTeamSave(tournamentId, rosterId, adm
       rosterId,
     ]);
     await client.query("COMMIT");
+    await reseedFutureMatchLineups(tournamentId);
     return { approvedRoster: await getRosterSnapshot(tournamentId, rosterId) };
   } catch (error) {
     await client.query("ROLLBACK");
@@ -1242,6 +1245,7 @@ export async function adjustApprovedRoster(tournamentId, rosterId, operations, a
       rosterId,
     ]);
     await client.query("COMMIT");
+    await reseedFutureMatchLineups(tournamentId);
     return { approvedRoster: await getRosterSnapshot(tournamentId, rosterId) };
   } catch (error) {
     await client.query("ROLLBACK");
@@ -1480,11 +1484,23 @@ export async function completeTournament(tournamentId, adminUserId, { force = fa
     err.code = "INCOMPLETE_BRACKET";
     throw err;
   }
+  const snapshotTeams = buildTeamsWithActivePlayers(data.approvedRoster)?.length
+    ? buildTeamsWithActivePlayers(data.approvedRoster)
+    : data.teams;
+  const honors = buildPublicHonorsPayload(data.matches, t.format, t.tournament_honors);
+  const championTeamName = honors.podiumTeams?.[0]?.teamName || honors.champion?.teamName || "";
+  const mvp = honors.mvp;
+  const trophyEngraving = {
+    ...(t.tournament_honors && typeof t.tournament_honors === "object" ? t.tournament_honors : {}),
+    teamName: championTeamName,
+    mvp: mvp || null,
+    mvpLabel: mvp?.playerName && mvp?.teamName ? `${mvp.playerName} · ${mvp.teamName}` : mvp?.playerName || "",
+  };
   const snapshot = {
     tournament: t,
-    teams: data.teams,
+    teams: snapshotTeams,
     matches: data.matches,
-    honors: buildPublicHonorsPayload(data.matches, t.format, t.tournament_honors),
+    honors,
     standings: buildStandings(data.approvedRoster?.teams || data.teams, data.matches, t.format),
     completedAt: new Date().toISOString(),
   };
@@ -1509,8 +1525,8 @@ export async function completeTournament(tournamentId, adminUserId, { force = fa
     const { rows: existingSeason } = await client.query(`SELECT id FROM seasons WHERE tournament_id = $1`, [tournamentId]);
     if (existingSeason[0]) {
       await client.query(
-        `UPDATE seasons SET status = 'concluded', snapshot = $2::jsonb, updated_at = NOW() WHERE id = $1`,
-        [existingSeason[0].id, JSON.stringify(snapshot)],
+        `UPDATE seasons SET status = 'concluded', snapshot = $2::jsonb, trophy_engraving = $3::jsonb, updated_at = NOW() WHERE id = $1`,
+        [existingSeason[0].id, JSON.stringify(snapshot), JSON.stringify(trophyEngraving)],
       );
     } else {
       const { rows: maxNum } = await client.query(`SELECT COALESCE(MAX(number), 0) + 1 AS n FROM seasons`);
@@ -1524,7 +1540,7 @@ export async function completeTournament(tournamentId, adminUserId, { force = fa
           t.name,
           tournamentId,
           JSON.stringify(snapshot),
-          JSON.stringify(t.tournament_honors || {}),
+          JSON.stringify(trophyEngraving),
         ],
       );
     }

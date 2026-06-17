@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { pool } from "../db/pool.js";
+import { loadActiveTeamPlayersByName } from "./rosterMembershipService.js";
 
 async function getApprovedRosterId(tournamentId) {
   const { rows } = await pool.query(
@@ -13,17 +14,14 @@ async function getApprovedRosterId(tournamentId) {
 }
 
 async function loadTeamLineupFromSnapshot(rosterId, teamName) {
-  const { rows } = await pool.query(
-    `SELECT rsp.player_account_id, rsp.display_name, rsp.name, rsp.roles, rsp.mmr
-     FROM roster_snapshot_teams rst
-     JOIN roster_snapshot_team_players rstp ON rstp.team_id = rst.id
-     JOIN roster_snapshot_players rsp ON rsp.id = rstp.player_id
-     WHERE rst.roster_snapshot_id = $1 AND lower(rst.name) = lower($2)
-       AND rsp.player_account_id IS NOT NULL
-     ORDER BY rsp.is_captain DESC, rsp.display_name ASC NULLS LAST, rsp.name ASC`,
-    [rosterId, teamName],
-  );
-  return rows;
+  const players = await loadActiveTeamPlayersByName(rosterId, teamName);
+  return players.map((p) => ({
+    player_account_id: p.player_account_id,
+    display_name: p.display_name,
+    name: p.name,
+    roles: p.roles,
+    mmr: p.mmr,
+  }));
 }
 
 export async function seedMatchLineupsForTournament(tournamentId, matchIds = null) {
@@ -192,6 +190,20 @@ export async function getLineupPlayerAccountIdsForMatch(matchId) {
   const { rows } = await pool.query(
     `SELECT DISTINCT player_account_id FROM match_lineup_players WHERE match_id = $1 AND player_account_id IS NOT NULL`,
     [matchId],
+  );
+  return rows.map((r) => r.player_account_id);
+}
+
+/** Lineup player account IDs for one team in a match (excludes opponent side). */
+export async function getLineupPlayerAccountIdsForMatchTeam(matchId, teamName) {
+  if (!teamName?.trim()) return [];
+  const { rows } = await pool.query(
+    `SELECT DISTINCT player_account_id
+     FROM match_lineup_players
+     WHERE match_id = $1
+       AND player_account_id IS NOT NULL
+       AND lower(team_name) = lower($2)`,
+    [matchId, teamName],
   );
   return rows.map((r) => r.player_account_id);
 }

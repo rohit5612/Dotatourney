@@ -19,6 +19,7 @@ import { getPublishedTournament, getPublishedTournamentForPublicRequest } from "
 import { applyBlastGroupSeeding } from "../services/blastSeeding.js";
 import { buildPublicHonorsPayload } from "../services/bracketHonorsEngine.js";
 import { buildGroupedStandings, buildStandings } from "../services/standingsEngine.js";
+import { buildTeamsWithActivePlayers } from "../services/rosterMembershipService.js";
 import { stageTabsForFormat } from "../services/formatGenerator.js";
 import { engineBracketTabs } from "../services/tournamentEngineService.js";
 import {
@@ -227,12 +228,7 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
     accentColor: resolveTeamAccent(team),
   });
   const publicTeams = data.approvedRoster
-    ? data.approvedRoster.teams.map((team) => ({
-        ...mapPublicTeam(team),
-        players: data.approvedRoster.players.filter((player) =>
-          data.approvedRoster.teamPlayers.some((record) => record.team_id === team.id && record.player_id === player.id),
-        ),
-      }))
+    ? buildTeamsWithActivePlayers(data.approvedRoster).map((team) => mapPublicTeam(team))
     : (data.teams || []).map((team) => mapPublicTeam(team));
   const standingsTeams =
     visibilityMode === "demo"

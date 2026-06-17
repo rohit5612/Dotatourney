@@ -214,8 +214,23 @@ export function normalizeTournamentHonors(raw) {
   };
 }
 
+export function normalizeMatchForHonors(row) {
+  if (!row) return row;
+  return {
+    ...row,
+    stageKey: row.stageKey ?? row.stage_key ?? "",
+    roundIndex: row.roundIndex ?? row.round_index ?? 0,
+    matchIndex: row.matchIndex ?? row.match_index ?? 0,
+    team1: row.team1,
+    team2: row.team2,
+    winner: row.winner,
+    status: row.status,
+  };
+}
+
 export function buildPublicHonorsPayload(matches, format, tournamentHonors) {
-  const derived = buildBlastBracketHonors(matches, format);
+  const normalized = (matches || []).map(normalizeMatchForHonors);
+  const derived = buildBlastBracketHonors(normalized, format);
   const settings = normalizeTournamentHonors(tournamentHonors);
   const maxPodium = derived.placementTeams?.length || 0;
   const displayPodiumCount = maxPodium ? Math.min(settings.displayPodiumCount, maxPodium) : settings.displayPodiumCount;

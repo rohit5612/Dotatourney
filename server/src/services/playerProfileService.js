@@ -9,11 +9,63 @@ import {
 import { buildCardManifest } from "./cardManifestService.js";
 import { getOrCreateCommerceConfig, publicCommerceConfig } from "./commerceConfigRepository.js";
 import { getPlayerMatchAppearances, getPlayerMatchSchedule } from "./matchSubstitutionService.js";
+import { findActivePlayerTeamOnTournament } from "./rosterMembershipService.js";
+import {
+  buildPlayerRecognitions,
+  buildGlobalRecognitionIndex,
+  buildPublicMatchHistory,
+  buildTeamStintHistory,
+  resolveTeamHighestStage,
+} from "./playerRecognitionService.js";
 
 export async function getPublicPlayerProfileSteamOnly(slug) {
   const account = await findAccountBySlug(slug);
   if (!account) return null;
   return { profile: publicSteamOnlyProfile(account) };
+}
+
+export async function findPlayerTeamOnTournament(playerAccountId, tournamentId) {
+  return findActivePlayerTeamOnTournament(playerAccountId, tournamentId);
+}
+
+async function enrichSeasonHistory(participations) {
+  const enriched = [];
+  for (const row of participations) {
+    let highestStage = null;
+    let teamLogoUrl = "";
+    if (row.tournament_id && row.team_name) {
+      const { rows: tourRows } = await pool.query(`SELECT format FROM tournaments WHERE id = $1`, [
+        row.tournament_id,
+      ]);
+      highestStage = await resolveTeamHighestStage(row.tournament_id, row.team_name, tourRows[0]?.format);
+
+      const { rows: logoRows } = await pool.query(
+        `SELECT rst.logo_url
+         FROM roster_snapshot_teams rst
+         JOIN roster_snapshots rs ON rs.id = rst.roster_snapshot_id AND rs.status = 'approved'
+         WHERE rs.tournament_id = $1 AND lower(rst.name) = lower($2)
+         ORDER BY rs.approved_at DESC NULLS LAST
+         LIMIT 1`,
+        [row.tournament_id, row.team_name],
+      );
+      teamLogoUrl = logoRows[0]?.logo_url || "";
+    }
+
+    enriched.push({
+      seasonSlug: row.season_slug,
+      seasonName: row.season_name,
+      seasonNumber: row.season_number,
+      seasonStatus: row.season_status,
+      teamName: row.team_name,
+      teamLogoUrl,
+      placement: row.placement,
+      highestStage,
+      role: row.role,
+      honors: row.honors,
+      stats: row.stats,
+    });
+  }
+  return enriched;
 }
 
 export async function getPublicPlayerProfile(slug) {
@@ -46,29 +98,16 @@ export async function getPublicPlayerProfile(slug) {
   );
   const season = activeSeason.rows[0];
   if (season?.tournament_id) {
-    currentTeam = await findPlayerTeamOnTournament(account.id, season.tournament_id);
+    currentTeam = await findActivePlayerTeamOnTournament(account.id, season.tournament_id);
   }
 
-  const teamHistory = await pool.query(
-    `SELECT DISTINCT ON (rs.id)
-        rs.id AS roster_snapshot_id,
-        rs.name AS roster_name,
-        rs.approved_at,
-        rst.name AS team_name,
-        rst.logo_url,
-        t.name AS tournament_name,
-        t.slug AS tournament_slug
-     FROM roster_snapshot_players rsp
-     JOIN roster_snapshots rs ON rs.id = rsp.roster_snapshot_id AND rs.status = 'approved'
-     JOIN roster_snapshot_team_players rstp ON rstp.player_id = rsp.id
-     JOIN roster_snapshot_teams rst ON rst.id = rstp.team_id
-     JOIN tournaments t ON t.id = rs.tournament_id
-     WHERE rsp.player_account_id = $1
-     ORDER BY rs.id, rs.approved_at DESC`,
-    [account.id],
-  );
+  const teamHistory = await buildTeamStintHistory(account.id);
+  const matchHistory = await buildPublicMatchHistory(account.id);
+  const recognitions = await buildPlayerRecognitions(account.id);
+  const seasonHistory = await enrichSeasonHistory(participations);
 
   const approvedCount = registrations.filter((r) => r.registration_status === "approved").length;
+  const substituteAppearances = matchHistory.filter((entry) => entry.playedAsSub).length;
 
   return {
     account: publicPlayerProfileAccount(account),
@@ -77,27 +116,13 @@ export async function getPublicPlayerProfile(slug) {
     career: {
       approvedRegistrations: approvedCount,
       totalRegistrations: registrations.length,
+      substituteAppearances,
+      matchesPlayed: matchHistory.filter((entry) => !entry.wasReplaced).length,
     },
-    seasonHistory: participations.map((row) => ({
-      seasonSlug: row.season_slug,
-      seasonName: row.season_name,
-      seasonNumber: row.season_number,
-      seasonStatus: row.season_status,
-      teamName: row.team_name,
-      placement: row.placement,
-      role: row.role,
-      honors: row.honors,
-      stats: row.stats,
-    })),
-    teamHistory: teamHistory.rows.map((row) => ({
-      rosterSnapshotId: row.roster_snapshot_id,
-      rosterName: row.roster_name,
-      teamName: row.team_name,
-      logoUrl: row.logo_url,
-      tournamentName: row.tournament_name,
-      tournamentSlug: row.tournament_slug,
-      approvedAt: row.approved_at,
-    })),
+    seasonHistory,
+    teamHistory,
+    matchHistory,
+    recognitions,
     registrations: registrations.map((r) => ({
       id: r.id,
       tournamentName: r.tournament_name,
@@ -113,55 +138,6 @@ export async function getPublicPlayerProfile(slug) {
   };
 }
 
-export async function findPlayerTeamOnTournament(playerAccountId, tournamentId) {
-  const { rows } = await pool.query(
-    `SELECT rsp.id AS player_id, rsp.name, rsp.display_name, rsp.role, rsp.roles, rsp.mmr,
-            rst.id AS team_id, rst.name AS team_name, rst.logo_url, rst.accent_color, rst.captain
-     FROM roster_snapshot_players rsp
-     JOIN roster_snapshots rs ON rs.id = rsp.roster_snapshot_id AND rs.status = 'approved'
-     JOIN roster_snapshot_team_players rstp ON rstp.player_id = rsp.id
-     JOIN roster_snapshot_teams rst ON rst.id = rstp.team_id
-     WHERE rs.tournament_id = $1 AND rsp.player_account_id = $2
-     ORDER BY rs.approved_at DESC NULLS LAST
-     LIMIT 1`,
-    [tournamentId, playerAccountId],
-  );
-  const row = rows[0];
-  if (!row) return null;
-
-  const { rows: teammates } = await pool.query(
-    `SELECT rsp.id, rsp.display_name, rsp.name, rsp.role, rsp.player_account_id
-     FROM roster_snapshot_team_players rstp
-     JOIN roster_snapshot_players rsp ON rsp.id = rstp.player_id
-     WHERE rstp.team_id = $1
-     ORDER BY rsp.is_captain DESC, rsp.display_name ASC NULLS LAST, rsp.name ASC`,
-    [row.team_id],
-  );
-
-  return {
-    tournamentId,
-    team: {
-      id: row.team_id,
-      name: row.team_name,
-      logoUrl: row.logo_url || "",
-      accentColor: row.accent_color || "",
-      captain: row.captain || "",
-    },
-    player: {
-      id: row.player_id,
-      name: row.display_name || row.name,
-      role: row.role,
-      mmr: row.mmr,
-    },
-    teammates: teammates.map((p) => ({
-      id: p.id,
-      name: p.display_name || p.name,
-      role: p.role,
-      playerAccountId: p.player_account_id,
-    })),
-  };
-}
-
 export async function getPlayerTeamForAccount(playerAccountId) {
   const { rows } = await pool.query(
     `SELECT tournament_id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1`,
@@ -174,7 +150,7 @@ export async function getPlayerTeamForAccount(playerAccountId) {
     tournamentId = pub.rows[0]?.id;
   }
   if (!tournamentId) return { team: null };
-  const team = await findPlayerTeamOnTournament(playerAccountId, tournamentId);
+  const team = await findActivePlayerTeamOnTournament(playerAccountId, tournamentId);
   return { team, tournamentId };
 }
 
@@ -230,6 +206,7 @@ export async function getCommunityDirectory({ search = "", limit = 48, offset = 
     params,
   );
 
+  const recognitionIndex = await buildGlobalRecognitionIndex();
   const players = [];
   for (const account of rows) {
     const directoryTier = account.directory_card_tier || "default";
@@ -237,6 +214,7 @@ export async function getCommunityDirectory({ search = "", limit = 48, offset = 
       cardTier: directoryTier,
       registration: { card_tier: directoryTier },
     });
+    const recognitions = recognitionIndex.get(String(account.id)) || [];
     players.push({
       slug: account.slug,
       bpcId: account.bpc_id,
@@ -244,6 +222,7 @@ export async function getCommunityDirectory({ search = "", limit = 48, offset = 
       avatarUrl: account.steam_avatar_url || account.avatar_url || "",
       cardTier: card?.tier || directoryTier,
       card,
+      badges: recognitions.map(({ label, kind }) => ({ label, kind })),
     });
   }
   return { players, total, limit: safeLimit, offset: safeOffset };
@@ -264,6 +243,8 @@ export async function getPlayerDashboardHistory(playerAccountId) {
     registrations: full.registrations,
     career: full.career,
     matchAppearances,
+    matchHistory: full.matchHistory,
+    recognitions: full.recognitions,
   };
 }
 

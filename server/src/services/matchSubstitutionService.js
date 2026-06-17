@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { pool } from "../db/pool.js";
+import { formatPublicMatchStageLabel } from "../utils/matchStageLabel.js";
 import {
   applySubstituteToLineup,
-  getLineupPlayerAccountIdsForMatch,
+  getLineupPlayerAccountIdsForMatchTeam,
   getMatchLineupRows,
   groupLineupsByTeam,
   seedMatchLineupsForTournament,
@@ -11,27 +12,18 @@ import {
   notifySubstitutionAssigned,
   notifySubstitutionCancelled,
   notifySubstitutionFiled,
+  notifySubstitutionOpponentLineupChange,
 } from "./playerNotificationService.js";
+import { findActivePlayerTeamOnTournament } from "./rosterMembershipService.js";
 
 const CANCEL_HOURS_MS = 4 * 60 * 60 * 1000;
 
 async function findPlayerTeamOnTournament(playerAccountId, tournamentId) {
-  const { rows } = await pool.query(
-    `SELECT rsp.display_name, rsp.name, rst.name AS team_name
-     FROM roster_snapshot_players rsp
-     JOIN roster_snapshots rs ON rs.id = rsp.roster_snapshot_id AND rs.status = 'approved'
-     JOIN roster_snapshot_team_players rstp ON rstp.player_id = rsp.id
-     JOIN roster_snapshot_teams rst ON rst.id = rstp.team_id
-     WHERE rs.tournament_id = $1 AND rsp.player_account_id = $2
-     ORDER BY rs.approved_at DESC NULLS LAST
-     LIMIT 1`,
-    [tournamentId, playerAccountId],
-  );
-  const row = rows[0];
-  if (!row) return null;
+  const result = await findActivePlayerTeamOnTournament(playerAccountId, tournamentId);
+  if (!result) return null;
   return {
-    team: { name: row.team_name },
-    player: { name: row.display_name || row.name },
+    team: { name: result.team.name },
+    player: { name: result.player.name },
   };
 }
 
@@ -73,11 +65,15 @@ function canCancelRequest(startAt) {
 }
 
 function formatStageLabel(match) {
-  const parts = [];
-  if (match.stage_key) parts.push(match.stage_key.replace(/-/g, " "));
-  if (match.round_index != null) parts.push(`R${Number(match.round_index) + 1}`);
-  if (match.match_index != null) parts.push(`M${Number(match.match_index) + 1}`);
-  return parts.join(" · ") || "Match";
+  return formatPublicMatchStageLabel(match);
+}
+
+function getOpponentTeamName(match, teamName) {
+  if (!teamName?.trim() || !match) return null;
+  const normalized = teamName.toLowerCase();
+  if (match.team1?.toLowerCase() === normalized) return match.team2 || null;
+  if (match.team2?.toLowerCase() === normalized) return match.team1 || null;
+  return null;
 }
 
 async function loadMatchContext(matchId) {
@@ -127,7 +123,73 @@ function mapSubstitutionRequest(row, startAt) {
   };
 }
 
-async function buildMatchPayload(matchRow, playerAccountId, teamName) {
+async function resolvePlayerMatchContext(playerAccountId, matchRow, rosterTeamName) {
+  const { rows } = await pool.query(
+    `SELECT team_name, is_substitute
+     FROM match_lineup_players
+     WHERE match_id = $1 AND player_account_id = $2
+     LIMIT 1`,
+    [matchRow.id, playerAccountId],
+  );
+  const lineup = rows[0];
+  if (lineup?.team_name) {
+    return {
+      teamName: lineup.team_name,
+      isSubstitute: lineup.is_substitute === true,
+    };
+  }
+
+  if (rosterTeamName) {
+    const normalized = rosterTeamName.toLowerCase();
+    const playsInMatch =
+      matchRow.team1?.toLowerCase() === normalized || matchRow.team2?.toLowerCase() === normalized;
+    if (playsInMatch) {
+      return { teamName: rosterTeamName, isSubstitute: false };
+    }
+  }
+
+  return { teamName: null, isSubstitute: false };
+}
+
+async function loadPlayerMatchRows(playerAccountId, tournamentId, rosterTeamName) {
+  const matchIds = new Set();
+
+  if (rosterTeamName) {
+    const { rows } = await pool.query(
+      `SELECT m.id
+       FROM matches m
+       WHERE m.tournament_id = $1
+         AND (lower(m.team1) = lower($2) OR lower(m.team2) = lower($2))`,
+      [tournamentId, rosterTeamName],
+    );
+    for (const row of rows) matchIds.add(row.id);
+  }
+
+  const { rows: lineupRows } = await pool.query(
+    `SELECT DISTINCT mlp.match_id
+     FROM match_lineup_players mlp
+     JOIN matches m ON m.id = mlp.match_id
+     WHERE mlp.player_account_id = $1
+       AND m.tournament_id = $2`,
+    [playerAccountId, tournamentId],
+  );
+  for (const row of lineupRows) matchIds.add(row.match_id);
+
+  if (!matchIds.size) return [];
+
+  const ids = [...matchIds];
+  const { rows: matchRows } = await pool.query(
+    `SELECT m.*, ss.start_at, ss.stream AS schedule_stream, ss.status AS schedule_status, ss.notes AS schedule_notes
+     FROM matches m
+     LEFT JOIN schedule_slots ss ON ss.match_id = m.id
+     WHERE m.id = ANY($1::uuid[])
+     ORDER BY ss.start_at ASC NULLS LAST, m.round_index ASC, m.match_index ASC`,
+    [ids],
+  );
+  return matchRows;
+}
+
+async function buildMatchPayload(matchRow, playerAccountId, teamName, { isSubstitute = false } = {}) {
   const startAt = matchRow.start_at;
   const lineupRows = await getMatchLineupRows(matchRow.id);
   const lineups = groupLineupsByTeam(lineupRows, matchRow.team1, matchRow.team2);
@@ -185,28 +247,30 @@ async function buildMatchPayload(matchRow, playerAccountId, teamName) {
     score: typeof meta.score === "string" ? meta.score : "",
     notes: matchRow.schedule_notes,
     lineups,
+    playingAsSubstitute: isSubstitute,
     substitutionRequest: mapSubstitutionRequest(subRequest, startAt),
     canRequestSubstitution:
-      onLineup && isFuture && !completed && !subRequest && Boolean(startAt),
+      onLineup && !isSubstitute && isFuture && !completed && !subRequest && Boolean(startAt),
   };
 }
 
 export async function getPlayerMatchSchedule(playerAccountId) {
   const { team: teamInfo, tournamentId } = await getPlayerTeamForAccount(playerAccountId);
-  if (!teamInfo?.team?.name || !tournamentId) {
-    return { teamName: null, tournamentId: null, upcoming: [], past: [] };
+  if (!tournamentId) {
+    return { teamName: null, tournamentId: null, upcoming: [], past: [], matches: [] };
   }
 
-  const teamName = teamInfo.team.name;
-  const { rows: matchRows } = await pool.query(
-    `SELECT m.*, ss.start_at, ss.stream AS schedule_stream, ss.status AS schedule_status, ss.notes AS schedule_notes
-     FROM matches m
-     LEFT JOIN schedule_slots ss ON ss.match_id = m.id
-     WHERE m.tournament_id = $1
-       AND (lower(m.team1) = lower($2) OR lower(m.team2) = lower($2))
-     ORDER BY ss.start_at ASC NULLS LAST, m.round_index ASC, m.match_index ASC`,
-    [tournamentId, teamName],
-  );
+  const rosterTeamName = teamInfo?.team?.name || null;
+  const matchRows = await loadPlayerMatchRows(playerAccountId, tournamentId, rosterTeamName);
+  if (!matchRows.length) {
+    return {
+      teamName: rosterTeamName,
+      tournamentId,
+      upcoming: [],
+      past: [],
+      matches: [],
+    };
+  }
 
   const upcoming = [];
   const past = [];
@@ -214,7 +278,10 @@ export async function getPlayerMatchSchedule(playerAccountId) {
 
   for (const row of matchRows) {
     await ensureLineupsSeeded(tournamentId, row.id);
-    const match = await buildMatchPayload(row, playerAccountId, teamName);
+    const context = await resolvePlayerMatchContext(playerAccountId, row, rosterTeamName);
+    const match = await buildMatchPayload(row, playerAccountId, context.teamName, {
+      isSubstitute: context.isSubstitute,
+    });
     const startMs = row.start_at ? new Date(row.start_at).getTime() : null;
     const completed = isMatchCompleted(row.status) || row.schedule_status === "finished";
     if (completed || (startMs && startMs < now)) {
@@ -230,7 +297,13 @@ export async function getPlayerMatchSchedule(playerAccountId) {
     return tb - ta;
   });
 
-  return { teamName, tournamentId, upcoming, past, matches: [...upcoming, ...past] };
+  return {
+    teamName: rosterTeamName,
+    tournamentId,
+    upcoming,
+    past,
+    matches: [...upcoming, ...past],
+  };
 }
 
 export async function createSubstitutionRequest(playerAccountId, matchId, reason) {
@@ -293,7 +366,7 @@ export async function createSubstitutionRequest(playerAccountId, matchId, reason
   );
 
   const requesterName = teamInfo.player?.name || "A player";
-  const recipientIds = await getLineupPlayerAccountIdsForMatch(matchId);
+  const recipientIds = await getLineupPlayerAccountIdsForMatchTeam(matchId, teamName);
   await notifySubstitutionFiled({
     match,
     teamName,
@@ -332,7 +405,11 @@ export async function cancelSubstitutionRequest(playerAccountId, matchId) {
     `SELECT display_name FROM player_accounts WHERE id = $1`,
     [playerAccountId],
   );
-  const recipientIds = await getLineupPlayerAccountIdsForMatch(matchId);
+  const teamInfo = await findPlayerTeamOnTournament(playerAccountId, match.tournament_id);
+  const teamName = teamInfo?.team?.name;
+  const recipientIds = teamName
+    ? await getLineupPlayerAccountIdsForMatchTeam(matchId, teamName)
+    : [];
   await notifySubstitutionCancelled({
     match,
     requesterName: accountRows[0]?.display_name || "A player",
@@ -482,15 +559,37 @@ export async function assignSubstitutionRequest(
       team1: request.team1,
       team2: request.team2,
     };
-    const recipientIds = await getLineupPlayerAccountIdsForMatch(request.match_id);
+    const requestingTeamIds = await getLineupPlayerAccountIdsForMatchTeam(request.match_id, teamName);
+    const opponentTeamName = getOpponentTeamName(match, teamName);
+    const opponentTeamIds = opponentTeamName
+      ? await getLineupPlayerAccountIdsForMatchTeam(request.match_id, opponentTeamName)
+      : [];
+
     await notifySubstitutionAssigned({
       match,
       teamName,
       requesterName: request.requester_name || "A player",
       substituteName,
-      recipientAccountIds: [...recipientIds, assigneeAccountId],
+      recipientAccountIds: [
+        ...new Set([
+          ...requestingTeamIds,
+          request.requesting_player_account_id,
+          assigneeAccountId,
+        ]),
+      ],
       substitutionRequestId: requestId,
     });
+
+    if (opponentTeamIds.length) {
+      await notifySubstitutionOpponentLineupChange({
+        match,
+        teamName,
+        requesterName: request.requester_name || "A player",
+        substituteName,
+        recipientAccountIds: opponentTeamIds,
+        substitutionRequestId: requestId,
+      });
+    }
 
     return { request: updated[0], adminUserId };
   } catch (error) {
@@ -504,30 +603,72 @@ export async function assignSubstitutionRequest(
 export async function getPlayerMatchAppearances(playerAccountId) {
   const { rows } = await pool.query(
     `SELECT mlp.*, m.team1, m.team2, m.stage_key, m.round_index, m.match_index,
-            ss.start_at, t.name AS tournament_name
+            m.status, m.winner, m.team1_score, m.team2_score, m.meta,
+            ss.start_at, ss.status AS schedule_status,
+            t.name AS tournament_name, t.slug AS tournament_slug,
+            s.number AS season_number, s.slug AS season_slug
      FROM match_lineup_players mlp
      JOIN matches m ON m.id = mlp.match_id
      JOIN tournaments t ON t.id = mlp.tournament_id
      LEFT JOIN schedule_slots ss ON ss.match_id = m.id
+     LEFT JOIN seasons s ON s.tournament_id = t.id
      WHERE mlp.player_account_id = $1
         OR mlp.replaces_player_account_id = $1
      ORDER BY ss.start_at DESC NULLS LAST, mlp.created_at DESC`,
     [playerAccountId],
   );
 
-  return rows.map((row) => ({
-    matchId: row.match_id,
-    tournamentName: row.tournament_name,
-    team1: row.team1,
-    team2: row.team2,
-    stageKey: row.stage_key,
-    roundIndex: row.round_index,
-    matchIndex: row.match_index,
-    startAt: row.start_at,
-    teamName: row.team_name,
-    displayName: row.display_name,
-    isSubstitute: row.is_substitute === true,
-    wasReplaced: row.replaces_player_account_id === playerAccountId,
-    playedAsSub: row.is_substitute === true && row.player_account_id === playerAccountId,
-  }));
+  return rows.map((row) => {
+    let meta = {};
+    if (row.meta && typeof row.meta === "object") meta = row.meta;
+    else if (typeof row.meta === "string") {
+      try {
+        meta = JSON.parse(row.meta || "{}");
+      } catch {
+        meta = {};
+      }
+    }
+    const winner = row.winner || meta.winner || "";
+    const team1Score = Number.isFinite(Number(row.team1_score))
+      ? Number(row.team1_score)
+      : Number.isFinite(Number(meta.team1Score))
+        ? Number(meta.team1Score)
+        : null;
+    const team2Score = Number.isFinite(Number(row.team2_score))
+      ? Number(row.team2_score)
+      : Number.isFinite(Number(meta.team2Score))
+        ? Number(meta.team2Score)
+        : null;
+    const playedAsSub = row.is_substitute === true && row.player_account_id === playerAccountId;
+    const wasReplaced = row.replaces_player_account_id === playerAccountId;
+    const appearanceLabel = wasReplaced ? "Replaced" : playedAsSub ? "Subbed in" : "Played";
+    const playerTeam = row.team_name || "";
+    const won = winner && playerTeam ? winner.toLowerCase() === playerTeam.toLowerCase() : null;
+
+    return {
+      matchId: row.match_id,
+      tournamentName: row.tournament_name,
+      tournamentSlug: row.tournament_slug,
+      seasonNumber: row.season_number,
+      seasonSlug: row.season_slug,
+      team1: row.team1,
+      team2: row.team2,
+      stageKey: row.stage_key,
+      stageLabel: formatStageLabel(row),
+      roundIndex: row.round_index,
+      matchIndex: row.match_index,
+      startAt: row.start_at,
+      teamName: playerTeam,
+      displayName: row.display_name,
+      winner,
+      team1Score,
+      team2Score,
+      score: typeof meta.score === "string" ? meta.score : "",
+      won,
+      isSubstitute: row.is_substitute === true,
+      wasReplaced,
+      playedAsSub,
+      appearanceLabel,
+    };
+  });
 }

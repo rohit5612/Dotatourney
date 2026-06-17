@@ -23,6 +23,12 @@ function tierBadgeClass(tier) {
   return "community-page__tier-badge";
 }
 
+function honorBadgeClass(kind) {
+  if (kind === "champion") return "community-page__honor-badge community-page__honor-badge--champion";
+  if (kind === "mvp") return "community-page__honor-badge community-page__honor-badge--mvp";
+  return "community-page__honor-badge";
+}
+
 export function CommunityPage() {
   const { event } = usePublicTournament();
   const discordUrl = event?.tournament?.discord_url || "https://discord.gg/sV2PhYc6A3";
@@ -91,7 +97,7 @@ export function CommunityPage() {
             Community
           </h1>
           <p className="community-page__hero-lead">
-            Verified BPC League players with linked Steam profiles — collectible cards, public profiles, and league history.
+            Verified BPC League players — collectible cards, public profiles, and league history.
           </p>
           <div className="community-page__hero-meta">
             <span className="community-page__stat">
@@ -163,25 +169,38 @@ export function CommunityPage() {
             <ul className="community-page__grid">
               {players.map((player) => {
                 const cardTier = player.cardTier || player.card?.tier || "default";
+                const badges = player.badges || [];
                 return (
-                  <li key={player.slug}>
+                  <li key={player.slug} className="community-page__grid-item">
                     <Link to={`/player/${player.slug}`} className="community-page__card-link">
-                      <BpclCardMini
-                        manifest={
-                          player.card || {
-                            tier: cardTier,
-                            displayName: player.displayName,
-                            bpcId: player.bpcId,
-                            steamAvatar: player.avatarUrl,
+                      <div className="community-page__card-slot">
+                        <BpclCardMini
+                          manifest={
+                            player.card || {
+                              tier: cardTier,
+                              displayName: player.displayName,
+                              bpcId: player.bpcId,
+                              steamAvatar: player.avatarUrl,
+                            }
                           }
-                        }
-                      />
-                      <div>
+                        />
+                      </div>
+                      <div className="community-page__card-caption">
                         <p className="community-page__card-name">{player.displayName}</p>
                         <p className="community-page__card-id">{player.bpcId}</p>
+                        <span className={tierBadgeClass(cardTier)}>{TIER_LABELS[cardTier] || "Standard"}</span>
                       </div>
-                      <span className={tierBadgeClass(cardTier)}>{TIER_LABELS[cardTier] || "Standard"}</span>
                     </Link>
+                    <div
+                      className={`community-page__honor-badges${badges.length ? "" : " community-page__honor-badges--empty"}`}
+                      aria-label={badges.length ? "Season honors" : undefined}
+                    >
+                      {badges.map((badge) => (
+                        <span key={`${player.slug}-${badge.label}`} className={honorBadgeClass(badge.kind)}>
+                          {badge.label}
+                        </span>
+                      ))}
+                    </div>
                   </li>
                 );
               })}
