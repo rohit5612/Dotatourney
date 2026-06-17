@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation } from "react-router-dom";
+import { HiOutlineArrowRightOnRectangle } from "react-icons/hi2";
 import { SITE_BRAND_FULL, SITE_BRAND_SHORT } from "../../constants/siteMeta.js";
 import { useBodyScrollLock } from "../../hooks/useBodyScrollLock.js";
 import { useSiteNavLinks } from "../../hooks/useSiteNavLinks.js";
@@ -229,6 +230,11 @@ export function SiteNavbar() {
               Login / Register
             </Link>
           )}
+          {!loggedIn && !authPending ? (
+            <Link to="/login" className="site-navbar__cta site-navbar__login-btn" aria-label="Login">
+              <HiOutlineArrowRightOnRectangle aria-hidden="true" />
+            </Link>
+          ) : null}
           <button
             type="button"
             className="site-navbar-icon-btn site-navbar__menu-btn"

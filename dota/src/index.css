@@ -1221,7 +1221,7 @@ textarea.input:focus {
 }
 
 @media (min-width: 768px) {
-  .site-navbar__cta {
+  .site-navbar__cta:not(.site-navbar__login-btn) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1304,6 +1304,27 @@ textarea.input:focus {
 
 .site-navbar__menu-btn {
   display: inline-flex;
+}
+
+.site-navbar__login-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+@media (max-width: 767px) {
+  .site-navbar__cta.site-navbar__login-btn {
+    display: inline-flex;
+  }
+}
+
+.site-navbar__login-btn svg {
+  width: 1.125rem;
+  height: 1.125rem;
 }
 
 @media (min-width: 768px) {
