@@ -1,0 +1,231 @@
+@import url("https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@600;700;800&display=swap");
+
+/* Layout matches offline generator canvas: 400×600 */
+.bpcl-gold-card {
+  --gold-card-width: 17rem;
+  --gold-canvas-w: 400;
+  --gold-canvas-h: 600;
+  width: var(--gold-card-width);
+  max-width: 100%;
+  aspect-ratio: 400 / 600;
+  line-height: 0;
+}
+
+.bpcl-gold-card--sm {
+  --gold-card-width: 13rem;
+}
+
+.bpcl-gold-card--lg {
+  --gold-card-width: 21rem;
+}
+
+.bpcl-gold-card--xl {
+  --gold-card-width: min(92vw, 24rem);
+}
+
+.bpcl-gold-card__tilt {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.12s ease-out;
+}
+
+.bpcl-gold-card__glow {
+  position: absolute;
+  inset: 0;
+  filter: drop-shadow(0 0 1.35rem rgba(255, 174, 0, 0.34));
+  pointer-events: none;
+}
+
+.bpcl-gold-card__frame-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  container-type: inline-size;
+}
+
+.bpcl-gold-card__frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Portrait slot — generator: left 102, top 184, 196×205 on 400×600 */
+.bpcl-gold-card__portrait-slot {
+  position: absolute;
+  left: 25.5%;
+  top: 30.67%;
+  width: 49%;
+  height: 34.17%;
+  overflow: hidden;
+  z-index: 1;
+  background: linear-gradient(180deg, #130900 0%, #231205 52%, #120700 100%);
+  box-shadow: inset 0 0 1.1rem rgba(0, 0, 0, 0.7);
+}
+
+.bpcl-gold-card__portrait {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  display: block;
+}
+
+.bpcl-gold-card__portrait--empty {
+  background: radial-gradient(circle at 50% 35%, #3a2208, #120700);
+}
+
+.bpcl-gold-card__portrait-shine {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 80% 78% at 50% 45%, transparent 68%, rgba(0, 0, 0, 0.24) 100%),
+    linear-gradient(120deg, rgba(255, 255, 255, 0.08), transparent 28%, transparent 72%, rgba(0, 0, 0, 0.1));
+  box-shadow: inset 0 0 0.65rem rgba(0, 0, 0, 0.38);
+}
+
+.bpcl-gold-card__shimmer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  mix-blend-mode: screen;
+}
+
+/* Name plate — generator: left 42, top 416, 316×64 */
+.bpcl-gold-card__name-plate {
+  position: absolute;
+  left: 10.5%;
+  top: 69.33%;
+  width: 79%;
+  height: 10.67%;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding-top: 0.25rem;
+}
+
+.bpcl-gold-card__name {
+  margin: 0;
+  font-family: "Bebas Neue", "Rajdhani", Impact, sans-serif;
+  font-size: clamp(1.1rem, 12.5cqi, 3.1rem);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 0.9;
+  text-align: center;
+  white-space: nowrap;
+  text-transform: uppercase;
+  color: #5b3100;
+  text-shadow:
+    0 1px 0 rgba(255, 228, 96, 0.72),
+    0 4px 9px rgba(86, 43, 0, 0.22);
+}
+
+/* Stats — generator: left 72, top 502, 256×47 (wider + spaced columns) */
+.bpcl-gold-card__stats {
+  position: absolute;
+  left: 17%;
+  top: 83.67%;
+  width: 66%;
+  height: 7.83%;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: 1.14fr 0.95fr 0.95fr 0.96fr;
+  align-items: center;
+  column-gap: 0.2rem;
+  margin: 0;
+  padding: 1.15% 0.5% 1%;
+}
+
+.bpcl-gold-card__stat {
+  text-align: center;
+  min-width: 0;
+  padding: 0;
+}
+
+.bpcl-gold-card__stat dt {
+  margin: 0;
+  font-family: "Rajdhani", sans-serif;
+  font-size: clamp(0.5rem, 2.35cqi, 0.68rem);
+  font-weight: 800;
+  letter-spacing: 0.035em;
+  line-height: 1.08;
+  text-transform: uppercase;
+  color: rgba(72, 38, 0, 0.76);
+}
+
+.bpcl-gold-card__stat dd {
+  margin: 0;
+  font-family: "Bebas Neue", "Rajdhani", Impact, sans-serif;
+  font-size: clamp(0.8rem, 6cqi, 1.5rem);
+  font-weight: 700;
+  line-height: 1.02;
+  color: #4e2c00;
+  text-shadow:
+    0 1px 0 rgba(255, 217, 76, 0.42),
+    0 3px 6px rgba(88, 42, 0, 0.12);
+  white-space: nowrap;
+}
+
+.bpcl-gold-card__stat-value--compact {
+  font-size: clamp(0.7rem, 5.2cqi, 1.25rem);
+}
+
+.bpcl-gold-card__stat-value--kda-ratio {
+  font-size: clamp(0.5rem, 4cqi, 0.95rem);
+  letter-spacing: -0.025em;
+}
+
+.bpcl-gold-card__stat-value--kda-ratio-sm {
+  font-size: clamp(0.44rem, 3.35cqi, 0.82rem);
+  letter-spacing: -0.03em;
+}
+
+.bpcl-gold-card__stat-value--kda-ratio-xs {
+  font-size: clamp(0.38rem, 2.85cqi, 0.72rem);
+  letter-spacing: -0.035em;
+}
+
+.bpcl-gold-card__stat-value--kda-decimal {
+  font-size: clamp(0.78rem, 6cqi, 1.5rem);
+  font-variant-numeric: tabular-nums;
+}
+
+.bpcl-gold-card__stat-value--kda-decimal-sm {
+  font-size: clamp(0.68rem, 5.2cqi, 1.2rem);
+  font-variant-numeric: tabular-nums;
+}
+
+.bpcl-card--pending .bpcl-card__frame,
+.bpcl-gold-card--pending .bpcl-gold-card__tilt {
+  opacity: 0.72;
+  filter: grayscale(0.25);
+}
+
+.bpcl-card__pending-banner {
+  margin-top: 0.45rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.4rem;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  text-align: center;
+  color: color-mix(in srgb, var(--foreground) 88%, var(--accent));
+  background: color-mix(in srgb, var(--accent) 12%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+}
+
+.bpcl-card__season-note {
+  margin: 0.35rem 0 0;
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  text-align: center;
+}

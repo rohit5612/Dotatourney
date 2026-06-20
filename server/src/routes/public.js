@@ -28,6 +28,7 @@ import {
   sendPlayerRegistrationVerifiedEmail,
 } from "../services/emailService.js";
 import { resolvePublicTeamLogo } from "../utils/teamLogoUrl.js";
+import { getOrCreateCommerceConfig, publicCommerceConfig } from "../services/commerceConfigRepository.js";
 import { getPublicPlayerProfile, getCommunityDirectory } from "../services/playerProfileService.js";
 import {
   isSeasonPubliclyVisible,
@@ -183,6 +184,8 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
     data.tournament.registrations_open = false;
   }
   const substitutePoolOpen = substitutePoolIsOpen(capState);
+  const commerceRow = await getOrCreateCommerceConfig(data.tournament.id);
+  const commerce = publicCommerceConfig(commerceRow);
   const [archiveEmbeds, sponsorsConfig] = await Promise.all([
     getArchiveEmbedsForTournament(data.tournament.id),
     getLandingSponsorsConfig(),
@@ -268,6 +271,7 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
     groupedStandings: buildGroupedStandings(standingsTeams, matches, format),
     approvedRegistrationCount,
     substitutePoolOpen,
+    commerce,
     archiveEmbeds,
     sponsorsConfig,
   };

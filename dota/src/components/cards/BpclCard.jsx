@@ -7,6 +7,9 @@ const TIER_LABELS = {
   holo: "Holo Card",
 };
 
+export { BpclCardRenderer, BpclCardMini } from "./BpclCardRenderer.jsx";
+export { BpclDefaultCard } from "./BpclDefaultCard.jsx";
+
 export function BpclCard({ manifest, size = "md", className = "" }) {
   if (!manifest) return null;
   const tier = manifest.tier || "default";
@@ -46,10 +49,9 @@ export function BpclCard({ manifest, size = "md", className = "" }) {
           {manifest.tagline ? <p className="bpcl-card__tagline">{manifest.tagline}</p> : null}
         </div>
       </div>
+      {manifest.seasonValidity?.label ? (
+        <p className="bpcl-card__season-note">{manifest.seasonValidity.label}</p>
+      ) : null}
     </article>
   );
-}
-
-export function BpclCardMini({ manifest, className = "" }) {
-  return <BpclCard manifest={manifest} size="sm" className={className} />;
 }

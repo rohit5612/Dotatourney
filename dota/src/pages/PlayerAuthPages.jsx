@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { PlayerAreaLayout } from "../components/layout/PlayerAreaLayout.jsx";
 import { GoogleIcon } from "../components/icons/GoogleIcon.jsx";
 import { PlayerAuthShell } from "../components/player/PlayerAuthShell.jsx";
-import { BpclCard } from "../components/cards/BpclCard.jsx";
+import { BpclCardRenderer } from "../components/cards/BpclCardRenderer.jsx";
 import { BpcCoin } from "../components/coins/BpcCoin.jsx";
 import { DashboardCheckout } from "../components/player/DashboardCheckout.jsx";
 import { playerApi, googleAuthStartUrl, getPlayerToken, setPlayerToken } from "../lib/playerApi";
@@ -911,7 +911,7 @@ export function PlayerDashboardPage() {
               <div className="mt-8">
                 <h2 style={{ fontSize: "1.1rem" }}>My card</h2>
                 <div className="mt-3">
-                  <BpclCard manifest={cardManifest} />
+                  <BpclCardRenderer manifest={cardManifest} showMeta={false} />
                 </div>
               </div>
             ) : null}

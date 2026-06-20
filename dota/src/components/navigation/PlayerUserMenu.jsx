@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { BpcCoin } from "../coins/BpcCoin.jsx";
 import { useFloatingDropdownPosition } from "../../hooks/useFloatingDropdownPosition.js";
 import { getPlayerToken, playerApi, setPlayerToken } from "../../lib/playerApi";
+import { resolveAccountAvatarUrl } from "../../utils/resolvePlayerAvatar.js";
 
 const ICONS = {
   dashboard: (
@@ -28,7 +29,7 @@ const ICONS = {
 };
 
 function UserAvatar({ account, size = 32 }) {
-  const src = account?.steamAvatarUrl || account?.avatarUrl;
+  const src = resolveAccountAvatarUrl(account);
   const label = account?.displayName || account?.bpcId || "Player";
 
   if (src) {

@@ -102,13 +102,13 @@ Includes card manifest, current team, season history, registrations, clips, and 
 
 ## Webhook (payments — not overlay)
 
-Razorpay payment webhooks use a separate route:
+Cashfree payment webhooks use a separate route:
 
 ```
-POST /api/webhooks/razorpay
+POST /api/webhooks/cashfree
 ```
 
-See Phase 3 commerce docs in `season2-implementation-phases.md`. Requires raw body + `X-Razorpay-Signature`.
+Requires raw body + `x-webhook-signature` + `x-webhook-timestamp` (verified with Client Secret).
 
 ## Integration notes
 

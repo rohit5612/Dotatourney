@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
-import { BpclCard } from "../../components/cards/BpclCard.jsx";
+import { BpclCardRenderer } from "../../components/cards/BpclCardRenderer.jsx";
 import { BpcCoin } from "../../components/coins/BpcCoin.jsx";
 import { DashboardActionIcon } from "../../components/player/DashboardActionIcon.jsx";
 import { MatchesSchedulePanel } from "../../components/player/MatchesSchedulePanel.jsx";
@@ -71,13 +71,10 @@ export function PlayerOverviewPage() {
             data-tour="card-pedestal"
           >
             {cardManifest ? (
-              <BpclCard manifest={cardManifest} className="bpcl-card--pedestal" />
+              <BpclCardRenderer manifest={cardManifest} className="bpcl-card--pedestal" />
             ) : (
               <div className="player-dash__card-pedestal-empty">
-                <p>Your season card unlocks after registration.</p>
-                <Link to="/dashboard/tournaments" className="player-dash__empty-link">
-                  Register now →
-                </Link>
+                <p>Loading your season card…</p>
               </div>
             )}
           </div>

@@ -12,11 +12,18 @@ const sampleCommerce = {
   cardTiers: DEFAULT_CARD_TIERS,
 };
 
-test("buildCheckoutLineItems uses commerce config", () => {
-  const items = buildCheckoutLineItems(sampleCommerce, "player", { bundled: true });
-  assert.equal(items.length, 2);
-  assert.equal(items[0].amount, 300);
-  assert.equal(items[1].amount, 240);
+test("buildCheckoutLineItems uses single bundle line per tier", () => {
+  const items = buildCheckoutLineItems(sampleCommerce, "player");
+  assert.equal(items.length, 1);
+  assert.equal(items[0].key, "bundle_player");
+  assert.equal(items[0].amount, 540);
+  assert.equal(items[0].label, "Basic Card Bundle");
+});
+
+test("buildCheckoutLineItems gold bundle total", () => {
+  const items = buildCheckoutLineItems(sampleCommerce, "gold");
+  assert.equal(items.length, 1);
+  assert.equal(items[0].amount, 540);
 });
 
 test("computeCheckoutTotals exposes maxCoinsApplicable", () => {

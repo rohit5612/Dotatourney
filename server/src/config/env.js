@@ -71,9 +71,10 @@ export const env = {
   discordClientSecret: process.env.DISCORD_CLIENT_SECRET?.trim() || "",
   steamApiKey: process.env.STEAM_API_KEY?.trim() || "",
   nodeEnv: process.env.NODE_ENV || "development",
-  razorpayKeyId: process.env.RAZORPAY_KEY_ID?.trim() || "",
-  razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET?.trim() || "",
-  razorpayWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET?.trim() || "",
+  cashfreeClientId: process.env.CASHFREE_CLIENT_ID?.trim() || "",
+  cashfreeClientSecret: process.env.CASHFREE_CLIENT_SECRET?.trim() || "",
+  /** sandbox | production */
+  cashfreeEnv: process.env.CASHFREE_ENV?.trim().toLowerCase() === "production" ? "production" : "sandbox",
   /** Service account JSON (minified one-line). Or use GOOGLE_SERVICE_ACCOUNT_JSON_B64 / GOOGLE_APPLICATION_CREDENTIALS. */
   googleServiceAccountJson: process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim() || "",
   googleServiceAccountJsonB64: process.env.GOOGLE_SERVICE_ACCOUNT_JSON_B64?.trim() || "",
@@ -86,6 +87,13 @@ export const env = {
   publicCacheL1TtlMs: toNumber(process.env.PUBLIC_CACHE_L1_TTL_MS, 8_000),
   /** L2 Redis TTL for public JSON (ms). */
   publicCacheRedisTtlMs: toNumber(process.env.PUBLIC_CACHE_REDIS_TTL_MS, 45_000),
+  /** Writable directory for hosted holo portrait GIFs (default: dota/public/cards/gifs). */
+  portraitGifDir: process.env.PORTRAIT_GIF_DIR?.trim() || "",
+  /**
+   * Public URL base for hosted GIFs, no trailing slash.
+   * Dev default: site-relative /cards/gifs. Production default: API_PUBLIC_URL/cards/gifs.
+   */
+  portraitGifUrlBase: process.env.PORTRAIT_GIF_URL_BASE?.trim() || "",
 };
 
 if (!env.apiPublicUrl) {

@@ -189,7 +189,7 @@ export async function getCommunityDirectory({ search = "", limit = 48, offset = 
   params.push(safeLimit);
   params.push(safeOffset);
 
-  const tierRank = cardTierRankSql("best_card.card_tier");
+  const tierRank = cardTierRankSql("COALESCE(NULLIF(TRIM(pa.card_tier_override), ''), best_card.card_tier)");
   const { rows } = await pool.query(
     `SELECT pa.*, best_card.card_tier AS directory_card_tier
      FROM player_accounts pa
@@ -209,18 +209,17 @@ export async function getCommunityDirectory({ search = "", limit = 48, offset = 
   const recognitionIndex = await buildGlobalRecognitionIndex();
   const players = [];
   for (const account of rows) {
-    const directoryTier = account.directory_card_tier || "default";
+    const registrationTier = account.directory_card_tier || "default";
     const card = await buildCardManifest(account, {
-      cardTier: directoryTier,
-      registration: { card_tier: directoryTier },
+      registration: { card_tier: registrationTier },
     });
     const recognitions = recognitionIndex.get(String(account.id)) || [];
     players.push({
       slug: account.slug,
       bpcId: account.bpc_id,
       displayName: account.display_name || account.slug,
-      avatarUrl: account.steam_avatar_url || account.avatar_url || "",
-      cardTier: card?.tier || directoryTier,
+      avatarUrl: account.avatar_url || account.steam_avatar_url || "",
+      cardTier: card?.tier || registrationTier,
       card,
       badges: recognitions.map(({ label, kind }) => ({ label, kind })),
     });

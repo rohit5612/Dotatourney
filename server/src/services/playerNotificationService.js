@@ -145,3 +145,50 @@ export async function notifySubstitutionCancelled({ match, requesterName, recipi
     payload: { matchId: match.id, substitutionRequestId },
   });
 }
+
+/**
+ * In-app alert when admin approves, rejects, or waitlists a player registration.
+ */
+export async function notifyRegistrationDecision({
+  playerAccountId,
+  tournamentName,
+  tournamentId,
+  registrationId,
+  registrationStatus,
+  publicCode,
+}) {
+  if (!playerAccountId) return null;
+
+  const tour = tournamentName || "BPC League";
+  const code = publicCode ? ` (${publicCode})` : "";
+  const payload = { tournamentId, registrationId, registrationStatus };
+
+  if (registrationStatus === "approved") {
+    return createNotification(playerAccountId, {
+      type: "registration_approved",
+      title: "Registration approved",
+      body: `Your registration${code} for ${tour} has been approved.`,
+      payload,
+    });
+  }
+
+  if (registrationStatus === "rejected") {
+    return createNotification(playerAccountId, {
+      type: "registration_rejected",
+      title: "Registration not approved",
+      body: `Your registration${code} for ${tour} was not approved.`,
+      payload,
+    });
+  }
+
+  if (registrationStatus === "waitlisted") {
+    return createNotification(playerAccountId, {
+      type: "registration_waitlisted",
+      title: "Registration waitlisted",
+      body: `Your registration${code} for ${tour} is on the waitlist. We'll notify you if a spot opens.`,
+      payload,
+    });
+  }
+
+  return null;
+}

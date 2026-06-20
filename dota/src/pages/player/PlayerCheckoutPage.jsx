@@ -1,26 +1,31 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
-import { BpclCard } from "../../components/cards/BpclCard.jsx";
+import { CardTierPreviewImage } from "../../components/cards/CardTierPreviewImage.jsx";
 import { BpcCoin, BpcCoinIcon } from "../../components/coins/BpcCoin.jsx";
 import { BpcCoinSlider } from "../../components/coins/BpcCoinSlider.jsx";
 import { DashboardActionIcon } from "../../components/player/DashboardActionIcon.jsx";
 import { DashboardNavIcon } from "../../components/player/DashboardNavIcon.jsx";
 import {
-  buildCardManifest,
   RegistrationBody,
   RegistrationHero,
   RegistrationStepper,
   useRegistrationTournament,
 } from "../../components/player/RegistrationFlow.jsx";
-import { loadRazorpayScript, playerApi } from "../../lib/playerApi";
+import { CARD_TIER_ORDER } from "../../constants/cardTierPreviews.js";
+import { pollCheckoutPaid, playerApi } from "../../lib/playerApi";
+import { bundleTotalForTier, formatDiscountLabel } from "../../utils/commerceBundle.js";
 
-const TIER_ORDER = ["default", "player", "gold", "holo"];
+const CashfreeGatewayModal = lazy(() =>
+  import("../../components/payment/CashfreeGatewayModal.jsx").then((m) => ({
+    default: m.CashfreeGatewayModal,
+  })),
+);
 
 const TIER_HINTS = {
-  default: "Grey frame — included with registration",
-  player: "Dark frame with MMR and role stats",
-  gold: "Gold trim with custom logo slot",
-  holo: "Full avatar showcase with tagline",
+  default: "Standard season registration",
+  player: "Dark frame + stats",
+  gold: "Gold frame + Custom logo slot",
+  holo: "Holo frame, Custom Avatar slot + privileges*",
 };
 
 export function PlayerCheckoutPage() {
@@ -35,7 +40,13 @@ export function PlayerCheckoutPage() {
   const [step, setStep] = useState("select");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [gateway, setGateway] = useState(null);
+  const [confirmingPayment, setConfirmingPayment] = useState(false);
   const previewHardKey = useRef("");
+
+  useEffect(() => {
+    import("../../lib/cashfreeCheckout.js").then((m) => m.loadCashfreeScript()).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!slug) return;
@@ -66,7 +77,7 @@ export function PlayerCheckoutPage() {
   }, [preview, coinSliderMax]);
 
   const tiers = preview?.commerce?.cardTiers || {};
-  const cardManifest = buildCardManifest(account, cardTier);
+  const standardReg = preview?.commerce?.registrationFeeRupees ?? 300;
 
   async function pay() {
     setBusy(true);
@@ -78,20 +89,14 @@ export function PlayerCheckoutPage() {
         setStep("done");
         return;
       }
-      const Razorpay = await loadRazorpayScript();
-      const rzp = new Razorpay({
-        key: result.keyId,
-        amount: result.amount,
-        currency: result.currency || "INR",
-        order_id: result.razorpayOrderId || result.orderId,
-        name: "BPC League",
-        description: "Tournament registration",
-        handler: async () => {
-          const status = await playerApi.checkoutStatus(result.orderId);
-          if (status.status === "paid") setStep("done");
-        },
+      if (!result.paymentSessionId) {
+        throw new Error("Payment session unavailable. Try again.");
+      }
+      setGateway({
+        orderId: result.orderId,
+        paymentSessionId: result.paymentSessionId,
+        cashfreeMode: result.cashfreeMode || "sandbox",
       });
-      rzp.open();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -99,8 +104,34 @@ export function PlayerCheckoutPage() {
     }
   }
 
+  async function handleGatewaySettled(result) {
+    const orderId = gateway?.orderId;
+    setGateway(null);
+    if (result?.error) {
+      setError("Payment was not completed. You can try again when ready.");
+      return;
+    }
+    if (!orderId) return;
+    setConfirmingPayment(true);
+    setError("");
+    try {
+      const status = await pollCheckoutPaid(orderId);
+      if (status?.status === "paid") setStep("done");
+      else {
+        setError(
+          "We could not confirm your payment yet. If money was deducted, wait a minute and refresh — or check your email.",
+        );
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setConfirmingPayment(false);
+    }
+  }
+
   if (step === "done") {
     const tierLabel = tiers[cardTier]?.label || cardTier;
+    const isPremiumCard = cardTier !== "default";
 
     return (
       <div className="player-reg">
@@ -117,11 +148,15 @@ export function PlayerCheckoutPage() {
             Payment confirmed for <strong>{preview?.tournament?.name || tournament?.name || "this tournament"}</strong>.
             Your card tier: <strong>{tierLabel}</strong>.
           </p>
-          {cardManifest ? (
-            <div className="player-reg__success-card">
-              <BpclCard manifest={cardManifest} size="sm" />
-            </div>
+          {isPremiumCard ? (
+            <p className="player-auth__sub mt-3">
+              Our admins will process and upload your custom card within <strong>48 hours</strong>. Until then, your
+              default season card appears on your profile and in the community directory.
+            </p>
           ) : null}
+          <div className="player-reg__success-card">
+            <CardTierPreviewImage tier={cardTier} size="sm" />
+          </div>
           <div className="player-reg__form-actions player-reg__form-actions--center">
             <Link to="/dashboard" className="player-dash__action player-dash__action--tournaments player-dash__action--lead">
               <DashboardNavIcon name="overview" />
@@ -144,6 +179,12 @@ export function PlayerCheckoutPage() {
       <RegistrationStepper step={2} />
 
       {error ? <div className="player-auth__message player-auth__message--error">{error}</div> : null}
+      {confirmingPayment ? (
+        <div className="player-dash__loading player-dash__loading--inline" style={{ marginBottom: "1rem" }}>
+          <span className="player-dash__loading-pulse" aria-hidden="true" />
+          <p className="player-auth__sub">Confirming your payment with Cashfree…</p>
+        </div>
+      ) : null}
 
       <div className="player-reg__layout player-reg__layout--checkout">
         <section className="player-dash__card player-dash__section-card">
@@ -160,11 +201,12 @@ export function PlayerCheckoutPage() {
           </header>
 
           <div className="player-reg__tier-grid">
-            {TIER_ORDER.map((id) => {
+            {CARD_TIER_ORDER.map((id) => {
               const t = tiers[id];
               if (t && t.enabled === false) return null;
-              const price =
-                id === "default" ? "Included" : `+₹${t?.bundledPriceRupees ?? 0}`;
+              const bundleTotal =
+                t?.bundleTotalRupees ?? bundleTotalForTier(t, id, standardReg);
+              const discountLabel = formatDiscountLabel(t?.discountPercent);
               return (
                 <button
                   key={id}
@@ -174,28 +216,27 @@ export function PlayerCheckoutPage() {
                   aria-pressed={cardTier === id}
                 >
                   <span className="player-reg__tier-card-label">{t?.label || id}</span>
-                  <span className="player-reg__tier-card-price">{price}</span>
+                  <span className="player-reg__tier-card-price">₹{bundleTotal}</span>
                   <span className="player-reg__tier-card-desc">
                     {t?.description || TIER_HINTS[id] || ""}
                   </span>
-                  {cardTier === id ? (
-                    <span className="player-reg__tier-card-check" aria-hidden="true">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <path d="M20 6 9 17l-5-5" />
-                      </svg>
-                    </span>
+                  {discountLabel ? (
+                    <span className="player-reg__tier-card-discount">{discountLabel}</span>
                   ) : null}
+                  <span className="player-reg__tier-card-check" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75">
+                      <path d="M20 6 9 17l-5-5" />
+                    </svg>
+                  </span>
                 </button>
               );
             })}
           </div>
 
-          {cardManifest ? (
-            <div className="player-reg__card-preview">
-              <p className="player-reg__card-preview-label">Live preview</p>
-              <BpclCard manifest={cardManifest} size="md" className="player-reg__card-preview-art" />
-            </div>
-          ) : null}
+          <div className="player-reg__card-preview">
+            <p className="player-reg__card-preview-label">Card preview</p>
+            <CardTierPreviewImage tier={cardTier} size="md" className="player-reg__card-preview-art" />
+          </div>
         </section>
 
         <aside className="player-reg__aside player-reg__aside--sticky">
@@ -215,12 +256,12 @@ export function PlayerCheckoutPage() {
             ) : preview ? (
               <>
                 <ul className="player-reg__line-items">
-                  {preview.lineItems?.map((item) => (
-                    <li key={item.key} className="player-reg__line-item">
-                      <span>{item.label}</span>
-                      <span>₹{item.amount}</span>
+                  {preview.lineItems?.length ? (
+                    <li className="player-reg__line-item">
+                      <span>{preview.lineItems[0]?.label || tiers[cardTier]?.label || "Bundle"}</span>
+                      <span>₹{preview.lineItems[0]?.amount ?? preview.subtotal}</span>
                     </li>
-                  ))}
+                  ) : null}
                 </ul>
 
                 {preview.subtotal != null ? (
@@ -263,10 +304,12 @@ export function PlayerCheckoutPage() {
                   type="button"
                   className="player-dash__action player-dash__action--tournaments player-dash__action--lead player-reg__pay-btn"
                   onClick={pay}
-                  disabled={busy || !preview}
+                  disabled={busy || confirmingPayment || !preview}
                 >
                   <DashboardActionIcon name="tournaments" />
-                  <span>{busy ? "Processing…" : "Pay & register"}</span>
+                  <span>
+                    {busy ? "Processing…" : confirmingPayment ? "Confirming payment…" : "Pay & register"}
+                  </span>
                 </button>
 
                 <Link
@@ -281,6 +324,17 @@ export function PlayerCheckoutPage() {
         </aside>
       </div>
       </RegistrationBody>
+      {gateway ? (
+        <Suspense fallback={null}>
+          <CashfreeGatewayModal
+            open
+            paymentSessionId={gateway.paymentSessionId}
+            mode={gateway.cashfreeMode}
+            onClose={() => setGateway(null)}
+            onSettled={handleGatewaySettled}
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

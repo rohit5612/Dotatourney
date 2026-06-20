@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Basic Player Card Engine</title>
+<style>
+  :root {
+    --page: #090a0c;
+    --panel: #111318;
+    --line: #2d323b;
+    --text: #f4f4f4;
+    --muted: #a7adb7;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    color: var(--text);
+    background:
+      radial-gradient(circle at 22% 12%, rgba(255, 255, 255, .06), transparent 24%),
+      linear-gradient(135deg, #06070a, #15171c 48%, #08090b);
+    font-family: Inter, "Segoe UI", Arial, sans-serif;
+  }
+
+  button, input { font: inherit; }
+
+  .app {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 320px minmax(0, 1fr);
+  }
+
+  .controls {
+    overflow: auto;
+    max-height: 100vh;
+    border-right: 1px solid var(--line);
+    background: linear-gradient(180deg, rgba(18, 20, 26, .98), rgba(10, 11, 14, .98));
+    padding: 22px;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .brand-mark {
+    width: 42px;
+    height: 42px;
+    clip-path: polygon(18% 0, 82% 0, 100% 18%, 100% 82%, 82% 100%, 18% 100%, 0 82%, 0 18%);
+    background: linear-gradient(135deg, #f2f3f5, #6f7681 45%, #f6f7f8);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .42);
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 18px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+
+  .subtitle {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+  }
+
+  .group {
+    padding: 16px 0;
+    border-top: 1px solid rgba(255, 255, 255, .1);
+  }
+
+  .group-title {
+    color: #c4c8cf;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+  }
+
+  label {
+    display: block;
+    margin: 12px 0 6px;
+    color: #c9cdd5;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+
+  input {
+    width: 100%;
+    min-height: 38px;
+    border: 1px solid rgba(255, 255, 255, .15);
+    border-radius: 7px;
+    outline: 0;
+    color: var(--text);
+    background: rgba(255, 255, 255, .06);
+    padding: 9px 11px;
+  }
+
+  input:focus {
+    border-color: rgba(140, 199, 255, .65);
+    box-shadow: 0 0 0 2px rgba(140, 199, 255, .18);
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .btn {
+    width: 100%;
+    min-height: 40px;
+    border: 1px solid rgba(255, 255, 255, .18);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, .06);
+    color: var(--text);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .btn:hover { background: rgba(255, 255, 255, .1); }
+
+  .btn.primary {
+    border-color: rgba(213, 216, 221, .45);
+    background: linear-gradient(180deg, rgba(255, 255, 255, .14), rgba(255, 255, 255, .04));
+  }
+
+  .button-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .hint {
+    margin: 12px 0 0;
+    font-size: 10px;
+    line-height: 1.45;
+    color: var(--muted);
+  }
+
+  .preview {
+    display: grid;
+    place-items: center;
+    padding: 28px 16px;
+    min-height: 100vh;
+  }
+
+  /* Card preview — 400×600 display, slots from frame-base.png (1200×1800) analysis */
+  .player-card {
+    --slot-top-y: 6%;
+    --slot-basic-y: 17.5%;
+    --slot-circle-y: 41.83%;
+    --slot-circle-size: 45.33%;
+    --slot-name-y: 73.17%;
+    --slot-stats-y: 86%;
+    width: 400px;
+    height: 600px;
+    max-width: min(94vw, 400px);
+    line-height: 0;
+    filter: drop-shadow(0 26px 56px rgba(0, 0, 0, .55));
+  }
+
+  .player-card__frame-wrap {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  .player-card__frame {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .player-card__art {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none;
+  }
+
+  /* Top hex — BPCL + league */
+  .player-card__top-plaque {
+    position: absolute;
+    left: 50%;
+    top: var(--slot-top-y);
+    width: 75%;
+    height: 7%;
+    transform: translate(-50%, -50%);
+    z-index: 4;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    text-align: center;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .player-card__bpcl-logo {
+    margin: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 26px;
+    font-style: italic;
+    font-weight: 900;
+    line-height: 0.92;
+    letter-spacing: 0.03em;
+    color: #eceef1;
+    text-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.82),
+      0 -1px 0 rgba(0, 0, 0, 0.55),
+      0 2px 6px rgba(0, 0, 0, 0.75);
+  }
+
+  .player-card__bpcl-league {
+    margin: 0;
+    padding-left: 0.16em;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 7px;
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #c8ccd2;
+    white-space: nowrap;
+    text-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.45),
+      0 -1px 0 rgba(0, 0, 0, 0.5);
+  }
+
+  /* Basic hex badge */
+  .player-card__tier-badge {
+    position: absolute;
+    left: 50%;
+    top: var(--slot-basic-y);
+    width: 33.6%;
+    height: 4.2%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.08em;
+    text-align: center;
+    text-transform: uppercase;
+    color: #d2d6db;
+    pointer-events: none;
+    overflow: hidden;
+    text-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.5),
+      0 -1px 0 rgba(0, 0, 0, 0.52);
+  }
+
+  /* Portrait — inner circle hole */
+  .player-card__portrait-slot {
+    position: absolute;
+    left: 50%;
+    top: var(--slot-circle-y);
+    width: var(--slot-circle-size);
+    aspect-ratio: 1;
+    height: auto;
+    transform: translate(-50%, -50%);
+    overflow: hidden;
+    z-index: 1;
+    border-radius: 50%;
+  }
+
+  .player-card__portrait {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-width: 100%;
+    min-height: 100%;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    object-fit: cover;
+    object-position: center center;
+    display: block;
+    z-index: 1;
+  }
+
+  .player-card__portrait--empty {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background: radial-gradient(circle at 50% 38%, #1a1c20 0%, #08090b 72%, #030405 100%);
+  }
+
+  .player-card__portrait-shine {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: 50%;
+    z-index: 6;
+    background:
+      radial-gradient(circle at 50% 42%, transparent 58%, rgba(0, 0, 0, 0.28) 100%),
+      linear-gradient(120deg, rgba(255, 255, 255, 0.07), transparent 30%, transparent 70%, rgba(0, 0, 0, 0.12));
+    box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.42);
+  }
+
+  /* Name — between diamond lines */
+  .player-card__name-plate {
+    position: absolute;
+    left: 51%;
+    top: var(--slot-name-y);
+    width: 72%;
+    height: 7%;
+    transform: translate(-50%, -50%);
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .player-card__name {
+    margin: 0;
+    width: 100%;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 34px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
+    color: #eceef1;
+    text-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.55),
+      0 3px 8px rgba(0, 0, 0, 0.82);
+  }
+
+  /* Stats panel */
+  .player-card__stats {
+    position: absolute;
+    left: 50%;
+    top: var(--slot-stats-y);
+    width: 80%;
+    height: 17%;
+    transform: translate(-50%, -50%);
+    z-index: 4;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    align-items: center;
+    margin: 0;
+    padding: 14% 6% 5%;
+    box-sizing: border-box;
+  }
+
+  .player-card__stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-width: 0;
+    height: 100%;
+    text-align: center;
+  }
+
+  .player-card__stat dt {
+    margin: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 8px;
+    font-weight: 600;
+    letter-spacing: 0.035em;
+    line-height: 1.08;
+    text-transform: uppercase;
+    color: #e8eaed;
+    text-shadow: 0 2px 5px rgba(0, 0, 0, 0.88);
+  }
+
+  .player-card__stat dd {
+    margin: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.02;
+    color: #f1f2f4;
+    text-shadow: 0 2px 5px rgba(0, 0, 0, 0.88);
+    white-space: nowrap;
+  }
+
+  @media (max-width: 860px) {
+    .app { grid-template-columns: 1fr; }
+    .controls { max-height: none; border-right: 0; border-bottom: 1px solid var(--line); }
+    .preview { min-height: auto; }
+  }
+</style>
+</head>
+<body>
+  <main class="app">
+    <aside class="controls">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"></div>
+        <div>
+          <h1>BPCL Engine</h1>
+          <div class="subtitle">Basic player card</div>
+        </div>
+      </div>
+
+      <section class="group">
+        <div class="group-title">Player</div>
+        <label for="playerName">Name</label>
+        <input id="playerName" type="text" value="Burning - M" maxlength="26">
+
+        <label for="avatarUrl">Avatar URL</label>
+        <input id="avatarUrl" type="url" placeholder="https://…">
+
+        <label for="avatar">Avatar upload</label>
+        <input id="avatar" type="file" accept="image/*">
+      </section>
+
+      <section class="group">
+        <div class="group-title">Stats</div>
+        <div class="row">
+          <div>
+            <label for="statKda">KDA</label>
+            <input id="statKda" type="text" value="--" maxlength="12">
+          </div>
+          <div>
+            <label for="statGpm">AVG GPM</label>
+            <input id="statGpm" type="text" value="--" maxlength="10">
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="statXpm">AVG XPM</label>
+            <input id="statXpm" type="text" value="--" maxlength="10">
+          </div>
+          <div>
+            <label for="statWinrate">WINRATE</label>
+            <input id="statWinrate" type="text" value="--" maxlength="10">
+          </div>
+        </div>
+      </section>
+
+      <section class="group">
+        <div class="group-title">Output</div>
+        <div class="button-row">
+          <button class="btn primary" id="downloadPng" type="button">Export PNG</button>
+          <button class="btn" id="exportJson" type="button">Export JSON</button>
+        </div>
+        <p class="hint">Frame source: 1200×1800 PNG scaled to 400×600 preview. Upload JSON in admin Player CRM.</p>
+      </section>
+    </aside>
+
+    <section class="preview" aria-label="Card preview">
+      <article class="player-card" id="cardPreview">
+        <div class="player-card__frame-wrap" id="captureTarget">
+          <div class="player-card__portrait-slot">
+            <img id="portraitImg" class="player-card__portrait" alt="" hidden>
+            <div id="portraitEmpty" class="player-card__portrait player-card__portrait--empty" aria-hidden="true"></div>
+            <div class="player-card__portrait-shine" aria-hidden="true"></div>
+          </div>
+          <img src="../dota/public/cards/player/frame-base.png" alt="" class="player-card__frame" id="frameImg" width="1200" height="1800">
+          <div class="player-card__art">
+            <div class="player-card__top-plaque" aria-hidden="true">
+              <p class="player-card__bpcl-logo">BPCL</p>
+              <p class="player-card__bpcl-league">Bharat Pro Circuit League</p>
+            </div>
+            <span class="player-card__tier-badge" aria-hidden="true">Basic</span>
+            <div class="player-card__name-plate">
+              <p class="player-card__name" id="nameDisplay">Burning - M</p>
+            </div>
+            <dl class="player-card__stats">
+              <div class="player-card__stat"><dt>KDA</dt><dd id="statKdaDisplay">--</dd></div>
+              <div class="player-card__stat"><dt>AVG GPM</dt><dd id="statGpmDisplay">--</dd></div>
+              <div class="player-card__stat"><dt>AVG XPM</dt><dd id="statXpmDisplay">--</dd></div>
+              <div class="player-card__stat"><dt>WINRATE</dt><dd id="statWinrateDisplay">--</dd></div>
+            </dl>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
+
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script>
+(() => {
+  const els = {
+    playerName: document.getElementById("playerName"),
+    avatarUrl: document.getElementById("avatarUrl"),
+    avatar: document.getElementById("avatar"),
+    statKda: document.getElementById("statKda"),
+    statGpm: document.getElementById("statGpm"),
+    statXpm: document.getElementById("statXpm"),
+    statWinrate: document.getElementById("statWinrate"),
+    nameDisplay: document.getElementById("nameDisplay"),
+    portraitImg: document.getElementById("portraitImg"),
+    portraitEmpty: document.getElementById("portraitEmpty"),
+    statKdaDisplay: document.getElementById("statKdaDisplay"),
+    statGpmDisplay: document.getElementById("statGpmDisplay"),
+    statXpmDisplay: document.getElementById("statXpmDisplay"),
+    statWinrateDisplay: document.getElementById("statWinrateDisplay"),
+    captureTarget: document.getElementById("captureTarget"),
+    downloadPng: document.getElementById("downloadPng"),
+    exportJson: document.getElementById("exportJson"),
+    frameImg: document.getElementById("frameImg"),
+  };
+
+  let avatarDataUrl = "";
+
+  function fileSlug(name) {
+    return (name || "Player").replace(/[^\w\-]+/g, "_").replace(/^_|_$/g, "") || "Player";
+  }
+
+  function setPortrait(url) {
+    avatarDataUrl = url || "";
+    if (url) {
+      els.portraitImg.src = url;
+      els.portraitImg.hidden = false;
+      els.portraitEmpty.hidden = true;
+    } else {
+      els.portraitImg.removeAttribute("src");
+      els.portraitImg.hidden = true;
+      els.portraitEmpty.hidden = false;
+    }
+  }
+
+  function render() {
+    const name = els.playerName.value.trim() || "Player";
+    els.nameDisplay.textContent = name;
+    els.statKdaDisplay.textContent = els.statKda.value.trim() || "--";
+    els.statGpmDisplay.textContent = els.statGpm.value.trim() || "--";
+    els.statXpmDisplay.textContent = els.statXpm.value.trim() || "--";
+    els.statWinrateDisplay.textContent = els.statWinrate.value.trim() || "--";
+  }
+
+  function buildPayload() {
+    return {
+      version: 1,
+      template: "player",
+      tier: "player",
+      playerName: els.playerName.value.trim() || "Player",
+      avatarUrl: avatarDataUrl || els.avatarUrl.value.trim(),
+      stats: {
+        kda: els.statKda.value.trim() || "--",
+        gpm: els.statGpm.value.trim() || "--",
+        xpm: els.statXpm.value.trim() || "--",
+        winrate: els.statWinrate.value.trim() || "--",
+      },
+    };
+  }
+
+  els.playerName.addEventListener("input", render);
+  ["statKda", "statGpm", "statXpm", "statWinrate"].forEach((id) => {
+    document.getElementById(id).addEventListener("input", render);
+  });
+
+  els.avatarUrl.addEventListener("input", () => {
+    const url = els.avatarUrl.value.trim();
+    if (url) setPortrait(url);
+    else if (!els.avatar.files?.length) setPortrait("");
+  });
+
+  els.avatar.addEventListener("change", () => {
+    const file = els.avatar.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      els.avatarUrl.value = "";
+      setPortrait(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
+
+  els.exportJson.addEventListener("click", () => {
+    const payload = buildPayload();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `BPCL_${fileSlug(payload.playerName)}_PLAYER.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  els.downloadPng.addEventListener("click", async () => {
+    if (!window.html2canvas) {
+      alert("html2canvas failed to load.");
+      return;
+    }
+    els.downloadPng.disabled = true;
+    els.downloadPng.textContent = "Capturing…";
+    try {
+      await els.frameImg.decode().catch(() => {});
+      const canvas = await html2canvas(els.captureTarget, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: null,
+        logging: false,
+        width: 400,
+        height: 600,
+      });
+      const a = document.createElement("a");
+      a.href = canvas.toDataURL("image/png");
+      a.download = `BPCL_${fileSlug(els.playerName.value)}_PLAYER.png`;
+      a.click();
+    } finally {
+      els.downloadPng.disabled = false;
+      els.downloadPng.textContent = "Export PNG";
+    }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

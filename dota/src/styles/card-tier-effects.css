@@ -1,0 +1,323 @@
+/* Gold (and future holo) premium card tier visual effects */
+
+@keyframes bpcl-tier-fx-shine-sweep {
+  0%,
+  28% {
+    background-position: 130% 50%;
+  }
+  58%,
+  100% {
+    background-position: -30% 50%;
+  }
+}
+
+@keyframes bpcl-tier-fx-panel-aura {
+  0%,
+  100% {
+    opacity: 0.68;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes bpcl-tier-fx-about-sweep {
+  0%,
+  70%,
+  100% {
+    transform: translateX(-125%) skewX(-16deg);
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.65;
+  }
+  38% {
+    opacity: 0.88;
+  }
+  48% {
+    opacity: 0;
+  }
+  50% {
+    transform: translateX(125%) skewX(-16deg);
+  }
+}
+
+@keyframes bpcl-tier-fx-panel-sweep {
+  0%,
+  70%,
+  100% {
+    transform: translateX(-130%) skewX(-16deg);
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.72;
+  }
+  38% {
+    opacity: 0.95;
+  }
+  48% {
+    opacity: 0;
+  }
+  50% {
+    transform: translateX(130%) skewX(-16deg);
+  }
+}
+
+/* —— Community directory: soft gold card glow —— */
+.bpcl-tier-fx__card-glow {
+  position: relative;
+  border-radius: 0.35rem;
+  filter:
+    drop-shadow(0 0 0.45rem rgba(255, 196, 72, 0.38))
+    drop-shadow(0 0 1.1rem rgba(255, 174, 0, 0.24))
+    drop-shadow(0 0 1.75rem rgba(255, 150, 0, 0.12));
+}
+
+.bpcl-tier-fx__card-glow::after {
+  content: "";
+  position: absolute;
+  inset: 4% 6% 8%;
+  border-radius: 0.25rem;
+  pointer-events: none;
+  box-shadow: inset 0 0 1.25rem rgba(255, 212, 96, 0.1);
+}
+
+/* —— Gold text with white shine swipe —— */
+.bpcl-tier-fx__shine-text {
+  --bpcl-shine-base: var(--card-tier-gold, #d4af37);
+  --bpcl-shine-white-soft: rgba(255, 255, 255, 0.72);
+  --bpcl-shine-white-bright: #ffffff;
+  display: inline-block;
+  max-width: 100%;
+  background-image: linear-gradient(
+    90deg,
+    var(--bpcl-shine-base) 0%,
+    var(--bpcl-shine-base) 36%,
+    var(--bpcl-shine-white-soft) 46%,
+    var(--bpcl-shine-white-bright) 50%,
+    var(--bpcl-shine-white-soft) 54%,
+    var(--bpcl-shine-base) 64%,
+    var(--bpcl-shine-base) 100%
+  );
+  background-size: 260% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: bpcl-tier-fx-shine-sweep 6.8s ease-in-out infinite;
+}
+
+.bpcl-tier-fx__shine-text--id {
+  --bpcl-shine-base: color-mix(in srgb, var(--card-tier-gold, #d4af37) 88%, #a8841f);
+}
+
+.bpcl-tier-fx__shine-text--hero {
+  --bpcl-shine-base: #e8c04a;
+}
+
+/* —— Public profile: neon gold panel glow —— */
+.bpcl-tier-fx__panel.community-glass {
+  border-color: color-mix(in srgb, #ffc84d 44%, var(--community-glass-border));
+  box-shadow:
+    var(--community-glass-shadow),
+    0 0 0 1px color-mix(in srgb, #ffd978 32%, transparent),
+    0 0 1.35rem rgba(255, 196, 72, 0.32),
+    0 0 2.75rem rgba(255, 174, 0, 0.2),
+    0 0 4.25rem rgba(255, 150, 0, 0.12),
+    inset 0 0 2.8rem rgba(255, 212, 96, 0.1);
+}
+
+.bpcl-tier-fx__panel.community-glass::before {
+  opacity: 0.9;
+  background: linear-gradient(
+    125deg,
+    rgba(255, 228, 140, 0.26) 0%,
+    transparent 36%,
+    transparent 60%,
+    rgba(255, 196, 72, 0.2) 100%
+  );
+  animation: bpcl-tier-fx-panel-aura 4.8s ease-in-out infinite;
+}
+
+.bpcl-tier-fx__panel.community-glass:not(.community-glass--liquid)::after {
+  content: "";
+  position: absolute;
+  top: -35%;
+  left: 0;
+  width: 46%;
+  height: 170%;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 34%,
+    rgba(255, 244, 200, 0.14) 44%,
+    rgba(255, 210, 96, 0.38) 50%,
+    rgba(255, 244, 200, 0.14) 56%,
+    transparent 66%
+  );
+  animation: bpcl-tier-fx-panel-sweep 6.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  z-index: 0;
+}
+
+.bpcl-tier-fx__panel.community-glass--liquid::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 1px 0 rgba(255, 212, 96, 0.22),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 2.5rem rgba(255, 196, 72, 0.08);
+  z-index: 0;
+}
+
+.player-profile-layout--gold-fx .bpcl-tier-fx__hero-band {
+  box-shadow:
+    inset 0 -2px 0 rgba(255, 212, 96, 0.26),
+    inset 0 0 1.75rem rgba(255, 196, 72, 0.05),
+    0 0 1.35rem rgba(255, 196, 72, 0.12),
+    0 0 2.5rem rgba(255, 174, 0, 0.06);
+}
+
+.player-profile-layout--gold-fx .bpcl-tier-fx__hero-band::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 196, 72, 0.02) 0%,
+    rgba(255, 212, 96, 0.05) 72%,
+    rgba(255, 196, 72, 0.1) 100%
+  );
+}
+
+.player-profile-layout--gold-fx .bpcl-tier-fx__hero-band .community-page__hero-overlay {
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--background) 46%, transparent) 0%,
+    color-mix(in srgb, rgba(255, 196, 72, 0.07) 38%, var(--background) 18%) 52%,
+    transparent 100%
+  );
+}
+
+.player-profile-layout--gold-fx .bpcl-tier-fx__hero-band .player-profile__hero-inner {
+  z-index: 1;
+}
+
+/* Hero panel shell stays quiet so card glow stays isolated */
+.bpcl-tier-fx__panel.player-profile__panel--hero.community-glass {
+  border-color: color-mix(in srgb, #ffc84d 22%, var(--community-glass-border));
+  box-shadow:
+    var(--community-glass-shadow),
+    0 0 0 1px color-mix(in srgb, #ffd978 12%, transparent);
+}
+
+.bpcl-tier-fx__panel.player-profile__panel--hero.community-glass::before {
+  opacity: 0.32;
+  animation: none;
+  background: linear-gradient(
+    125deg,
+    rgba(255, 228, 140, 0.07) 0%,
+    transparent 44%,
+    transparent 100%
+  );
+}
+
+.bpcl-tier-fx__panel.player-profile__panel--hero.community-glass--liquid::after {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 1px 0 rgba(255, 212, 96, 0.06),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.player-profile__hero-grid .player-profile__card-wrap {
+  position: relative;
+  z-index: 2;
+  isolation: isolate;
+}
+
+/* About column — neon gold, clipped to the right column only */
+.player-profile__about.bpcl-tier-fx__about {
+  border: 1px solid color-mix(in srgb, #ffc84d 42%, var(--community-glass-border-soft));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #ffd978 26%, transparent),
+    0 0 1.2rem rgba(255, 196, 72, 0.28),
+    0 0 2.4rem rgba(255, 174, 0, 0.15),
+    inset 0 0 2.2rem rgba(255, 212, 96, 0.09);
+}
+
+.player-profile__about.bpcl-tier-fx__about::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.88;
+  background: linear-gradient(
+    125deg,
+    rgba(255, 228, 140, 0.24) 0%,
+    transparent 40%,
+    transparent 58%,
+    rgba(255, 196, 72, 0.18) 100%
+  );
+  animation: bpcl-tier-fx-panel-aura 4.8s ease-in-out infinite;
+}
+
+.player-profile__about.bpcl-tier-fx__about .player-profile__about-inner {
+  z-index: 2;
+  overflow: hidden;
+}
+
+.player-profile__about.bpcl-tier-fx__about .player-profile__about-inner::before {
+  content: "";
+  position: absolute;
+  top: -25%;
+  left: 0;
+  width: 46%;
+  height: 150%;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 34%,
+    rgba(255, 244, 200, 0.14) 44%,
+    rgba(255, 210, 96, 0.4) 50%,
+    rgba(255, 244, 200, 0.14) 56%,
+    transparent 66%
+  );
+  animation: bpcl-tier-fx-about-sweep 6.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.player-profile__about.bpcl-tier-fx__about .player-profile__about-inner > * {
+  position: relative;
+  z-index: 1;
+}
+
+.player-profile__about--team.bpcl-tier-fx__about::after {
+  z-index: 1;
+}
+
+.player-profile-layout--gold-fx .player-profile__card-wrap .bpcl-tier-fx__card-glow {
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bpcl-tier-fx__shine-text,
+  .bpcl-tier-fx__panel.community-glass::before,
+  .bpcl-tier-fx__panel.community-glass:not(.community-glass--liquid)::after,
+  .player-profile__about.bpcl-tier-fx__about::before,
+  .player-profile__about.bpcl-tier-fx__about .player-profile__about-inner::before {
+    animation: none;
+  }
+
+  .bpcl-tier-fx__shine-text {
+    background-image: none;
+    color: var(--bpcl-shine-base, var(--card-tier-gold, #d4af37));
+    -webkit-text-fill-color: currentColor;
+  }
+}

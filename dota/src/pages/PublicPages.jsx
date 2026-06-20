@@ -316,6 +316,7 @@ export function PageContentShell({ path: _pathProp, children, registerClosedCent
   const path = resolvePageShellPath(pathname);
   const isSeasonsPage = path === "/seasons";
   const isCommunityPage = path === "/community";
+  const isWhatsNewPage = path === "/whats-new";
   const isPlayerProfilePage = path === "/player";
   const isFullBleedBg =
     path === "/schedule" ||
@@ -325,6 +326,7 @@ export function PageContentShell({ path: _pathProp, children, registerClosedCent
     path === "/announcements" ||
     isSeasonsPage ||
     isCommunityPage ||
+    isWhatsNewPage ||
     isPlayerProfilePage;
   const isLegalPage =
     path === "/privacy" ||
@@ -342,7 +344,7 @@ export function PageContentShell({ path: _pathProp, children, registerClosedCent
           ? "relative z-10 !space-y-0 !px-0 pb-0 pt-0"
         : isSeasonsPage
           ? "relative z-10 !space-y-0 !px-0 pb-10 pt-0 min-h-[100dvh]"
-          : isCommunityPage || isPlayerProfilePage
+          : isCommunityPage || isWhatsNewPage || isPlayerProfilePage
             ? "relative z-10 !space-y-0 !px-0 pb-10 pt-0 min-h-[100dvh]"
             : "mx-auto max-w-6xl space-y-6 px-4 pb-10 pt-28";
   const fullBleedImage =
@@ -358,7 +360,7 @@ export function PageContentShell({ path: _pathProp, children, registerClosedCent
               ? images.newsBg
               : path === "/seasons"
                 ? images.seasonsBg
-                : path === "/community" || path === "/player"
+                : path === "/community" || path === "/whats-new" || path === "/player"
                   ? images.communityBg
                   : null;
   const fullBleedGradientClass =
@@ -374,7 +376,7 @@ export function PageContentShell({ path: _pathProp, children, registerClosedCent
               ? "bg-gradient-to-b from-background/52 via-background/38 to-background/44"
               : path === "/seasons"
                 ? "bg-gradient-to-b from-background/68 via-background/52 to-background/62"
-                : path === "/community" || path === "/player"
+                : path === "/community" || path === "/whats-new" || path === "/player"
                   ? "bg-gradient-to-b from-background/32 via-background/18 to-background/24"
                   : "bg-gradient-to-br from-background/87 via-background/78 to-background/80";
 
@@ -1721,7 +1723,7 @@ export function PrivacyPolicyPage() {
         <p>We may share limited data with:</p>
         <ul>
           <li>
-            <strong>Payment processors</strong> (such as Razorpay or PayU) to complete INR
+            <strong>Payment processors</strong> (such as Cashfree) to complete INR
             transactions.
           </li>
           <li>

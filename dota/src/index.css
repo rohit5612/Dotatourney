@@ -1150,6 +1150,19 @@ textarea.input:focus {
   white-space: nowrap;
 }
 
+.site-navbar__link--highlight:not(.site-navbar__link--active) {
+  border-color: color-mix(in srgb, var(--primary) 48%, transparent);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: color-mix(in srgb, var(--primary) 88%, rgb(248 250 252));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.site-navbar__link--highlight:not(.site-navbar__link--active):hover {
+  border-color: color-mix(in srgb, var(--primary) 58%, transparent);
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+  color: rgb(248 250 252);
+}
+
 .site-navbar__link:hover:not(.site-navbar__link--active) {
   border-color: color-mix(in srgb, rgb(255 255 255) 16%, transparent);
   background: color-mix(in srgb, rgb(255 255 255) 10%, transparent);
@@ -1446,6 +1459,12 @@ textarea.input:focus {
 .site-navbar-drawer__link.site-navbar-drawer__link--active:hover {
   border-color: color-mix(in srgb, var(--primary) 82%, var(--border));
   background: var(--primary);
+}
+
+.site-navbar-drawer__link--highlight:not(.site-navbar-drawer__link--active) {
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
+  background: color-mix(in srgb, var(--primary) 10%, var(--muted));
+  color: color-mix(in srgb, var(--primary) 88%, var(--foreground));
 }
 
 .site-navbar-drawer__cta {

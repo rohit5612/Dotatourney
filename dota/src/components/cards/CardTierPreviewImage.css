@@ -1,0 +1,18 @@
+.card-tier-preview-img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 5 / 7;
+  object-fit: contain;
+  border-radius: 0.5rem;
+  filter: drop-shadow(0 12px 28px rgb(0 0 0 / 0.45));
+}
+
+.card-tier-preview-img--md {
+  max-width: 14rem;
+}
+
+.card-tier-preview-img--sm {
+  max-width: 10rem;
+}

@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../../lib/api.js";
 import { AdminGlassPanel } from "../components/AdminGlassPanel.jsx";
-import { BpclCardMini } from "../../components/cards/BpclCard.jsx";
+import { BpclCardRenderer, BpclCardMini } from "../../components/cards/BpclCardRenderer.jsx";
+import { readPortraitUploadFile, isHostedPortraitGifUrl } from "../../utils/readPortraitUploadFile.js";
+import { resolveAccountAvatarUrl } from "../../utils/resolvePlayerAvatar.js";
+import { PortraitGifPickerModal } from "./PortraitGifPickerModal.jsx";
 import "../../components/cards/CardTierStyles.css";
 import "../../styles/player-crm.css";
 
@@ -36,8 +39,52 @@ function DetailField({ label, value, mono = false }) {
   );
 }
 
-function PlayerAccountDetailModal({ detail, loading, adminNotes, onAdminNotesChange, onClose, onSaveNotes, savingNotes, coinDelta, coinReason, onCoinDeltaChange, onCoinReasonChange, onGrantCoins, grantingCoins, canWrite = true }) {
+function PlayerAccountDetailModal({
+  detail,
+  loading,
+  adminNotes,
+  onAdminNotesChange,
+  onClose,
+  onSaveNotes,
+  savingNotes,
+  coinDelta,
+  coinReason,
+  onCoinDeltaChange,
+  onCoinReasonChange,
+  onGrantCoins,
+  grantingCoins,
+  cardJson,
+  cardTierUpload,
+  applyProfileTier,
+  onCardJsonChange,
+  onCardTierUploadChange,
+  onApplyProfileTierChange,
+  onUploadCard,
+  uploadingCard,
+  onCardPortraitFileSelect,
+  onOpenGifPicker,
+  cardPortraitBusy,
+  avatarUrlDraft,
+  onAvatarUrlDraftChange,
+  onAvatarFileSelect,
+  avatarUploadBusy,
+  onSaveAvatar,
+  onClearAvatar,
+  savingAvatar,
+  canWrite = true,
+}) {
   const account = detail?.account;
+  const accountAvatar = resolveAccountAvatarUrl(account);
+  const avatarPreview = avatarUrlDraft || accountAvatar;
+  const avatarSource = avatarUrlDraft || account?.avatarUrl ? "custom" : account?.steamAvatarUrl ? "steam" : "none";
+  let cardPortraitUrl = "";
+  if (cardJson.trim()) {
+    try {
+      cardPortraitUrl = String(JSON.parse(cardJson).avatarUrl || "").trim();
+    } catch {
+      cardPortraitUrl = "";
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="player-crm-modal-title">
@@ -45,8 +92,8 @@ function PlayerAccountDetailModal({ detail, loading, adminNotes, onAdminNotesCha
       <div className="player-crm__modal relative z-10 flex max-h-[92dvh] w-full max-w-4xl flex-col overflow-hidden rounded-t-2xl border border-border bg-card shadow-2xl sm:rounded-2xl">
         <header className="flex shrink-0 items-start justify-between gap-3 border-b border-border/60 px-4 py-4 sm:px-5">
           <div className="flex min-w-0 items-center gap-3">
-            {account?.steamAvatarUrl || account?.avatarUrl ? (
-              <img src={account.steamAvatarUrl || account.avatarUrl} alt="" className="player-crm__modal-avatar" />
+            {accountAvatar ? (
+              <img src={accountAvatar} alt="" className="player-crm__modal-avatar" />
             ) : (
               <div className="player-crm__modal-avatar player-crm__modal-avatar--fallback" aria-hidden="true">
                 {(account?.displayName || "?")[0]}
@@ -75,7 +122,83 @@ function PlayerAccountDetailModal({ detail, loading, adminNotes, onAdminNotesCha
             <div className="player-crm__modal-grid">
               <section className="player-crm__modal-section">
                 <h4 className="player-crm__section-title">Account</h4>
-                <div className="player-crm__field-grid">
+                <div className="player-crm__avatar-override">
+                  <div className="player-crm__avatar-override-preview-wrap">
+                    {avatarPreview ? (
+                      <img src={avatarPreview} alt="" className="player-crm__avatar-override-preview" />
+                    ) : (
+                      <div className="player-crm__avatar-override-preview player-crm__avatar-override-preview--empty" aria-hidden="true">
+                        {(account?.displayName || "?")[0]}
+                      </div>
+                    )}
+                    <span className="player-crm__avatar-override-source">
+                      {avatarSource === "custom" ? "Custom override" : avatarSource === "steam" ? "Steam avatar" : "No avatar"}
+                    </span>
+                  </div>
+                  <div className="player-crm__avatar-override-form">
+                    <label className="player-crm__field-label" htmlFor="player-crm-avatar-url">
+                      Custom avatar URL
+                    </label>
+                    <input
+                      id="player-crm-avatar-url"
+                      className="player-crm__avatar-url-input"
+                      type="url"
+                      placeholder="https://… or upload an image / GIF"
+                      value={avatarUrlDraft}
+                      disabled={!canWrite || avatarUploadBusy}
+                      onChange={(event) => onAvatarUrlDraftChange(event.target.value)}
+                    />
+                    <div className="player-crm__avatar-override-actions">
+                      <label className="btn btn-outline btn-sm player-crm__avatar-upload-btn">
+                        {avatarUploadBusy ? "Processing…" : "Upload image or GIF"}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
+                          className="sr-only"
+                          disabled={!canWrite || avatarUploadBusy}
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (file) onAvatarFileSelect(file);
+                            event.target.value = "";
+                          }}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        disabled={!canWrite || avatarUploadBusy}
+                        onClick={() => onOpenGifPicker("avatar")}
+                      >
+                        {isHostedPortraitGifUrl(avatarUrlDraft) ? "Change hosted GIF" : "Choose hosted GIF"}
+                      </button>
+                      {avatarUrlDraft || account?.avatarUrl ? (
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          disabled={!canWrite || savingAvatar || avatarUploadBusy}
+                          onClick={onClearAvatar}
+                        >
+                          Clear custom
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        disabled={!canWrite || savingAvatar || avatarUploadBusy}
+                        onClick={onSaveAvatar}
+                      >
+                        {savingAvatar ? "Saving…" : "Save avatar"}
+                      </button>
+                    </div>
+                    <p className="player-crm__avatar-override-hint">
+                      Custom avatar overrides Steam on player cards and public profile. Use{" "}
+                      <strong>Choose hosted GIF</strong> to pick from{" "}
+                      <code className="text-[0.7rem]">/cards/gifs</code> (faster than inline data URLs).
+                      Static images can use inline upload; very large GIFs should be hosted.
+                    </p>
+                  </div>
+                </div>
+                <div className="player-crm__field-grid mt-4">
                   <DetailField label="Email" value={account.email} />
                   <DetailField label="Phone" value={account.phoneNumber} />
                   <DetailField label="BPC ID" value={account.bpcId} mono />
@@ -103,44 +226,172 @@ function PlayerAccountDetailModal({ detail, loading, adminNotes, onAdminNotesCha
                 </div>
               </section>
 
-              <section className="player-crm__modal-section">
-                <h4 className="player-crm__section-title">Profile data</h4>
-                <div className="player-crm__profile-layout">
+              <section className="player-crm__modal-section player-crm__modal-section--card">
+                <h4 className="player-crm__section-title">Player card</h4>
+                <div className="player-crm__card-layout">
                   {detail.card ? (
                     <div className="player-crm__card-preview">
                       <BpclCardMini manifest={detail.card} />
+                      {detail.card.cardPending ? (
+                        <p className="player-crm__card-pending" title="Admins will upload the custom card within 48 hours">
+                          <span className="player-crm__card-pending-dot" aria-hidden="true" />
+                          {detail.card.tier} card pending upload
+                        </p>
+                      ) : null}
                     </div>
                   ) : null}
-                  <div className="player-crm__field-grid">
-                    <DetailField label="Display name" value={account.displayName} />
+                  <div className="player-crm__card-meta">
+                    <div className="player-crm__field-grid player-crm__field-grid--card">
+                      <DetailField label="Purchased tier" value={detail.card?.purchasedTier || detail.card?.tier || "default"} />
+                      <DetailField label="Profile tier" value={detail.card?.tier || "default"} />
+                      <DetailField
+                        label="Admin override"
+                        value={detail.card?.tierOverride || detail.account?.cardTierOverride || null}
+                      />
+                      <DetailField label="Rendered as" value={detail.card?.renderTier || detail.card?.tier || "default"} />
+                      <DetailField
+                        label="Season"
+                        value={detail.card?.seasonValidity?.label || detail.card?.seasonBadge || null}
+                      />
+                      <DetailField
+                        label="Asset status"
+                        value={detail.card?.assetStatus || (detail.card?.cardPending ? "pending upload" : "default")}
+                      />
+                      <DetailField label="Display name" value={account.displayName} />
+                      <DetailField label="MMR" value={account.mmr != null ? String(account.mmr) : null} />
+                    </div>
+                  </div>
+                </div>
+                {detail.cardAssets?.length ? (
+                  <ul className="player-crm__list player-crm__list--rows mt-3">
+                    {detail.cardAssets.map((asset) => (
+                      <li key={asset.id}>
+                        <span className="capitalize">{asset.tier}</span>
+                        <span className="text-muted-foreground">
+                          {asset.status}
+                          {asset.approvedAt ? ` · approved ${formatDate(asset.approvedAt)}` : ""}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                <div className="mt-4 space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    Paste JSON from the offline card builder. Choose any tier — it does not have to match what the
+                    player purchased. Uploading sets their profile card and premium status to the selected tier.
+                    {cardTierUpload === "holo" ? (
+                      <>
+                        {" "}
+                        Holo cards support animated GIF portraits — use{" "}
+                        <strong>Choose hosted GIF</strong> or embed{" "}
+                        <code className="text-[0.7rem]">avatarUrl</code> in JSON.
+                      </>
+                    ) : null}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="text-xs text-muted-foreground" htmlFor="player-crm-card-tier">
+                      Card tier
+                    </label>
+                    <select
+                      id="player-crm-card-tier"
+                      className="rounded border border-input bg-background p-2 text-sm"
+                      value={cardTierUpload}
+                      disabled={!canWrite}
+                      onChange={(event) => onCardTierUploadChange(event.target.value)}
+                    >
+                      <option value="gold">Gold</option>
+                      <option value="player">Player</option>
+                      <option value="holo">Holo</option>
+                    </select>
+                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={applyProfileTier}
+                        disabled={!canWrite}
+                        onChange={(event) => onApplyProfileTierChange(event.target.checked)}
+                      />
+                      Apply tier to profile &amp; community
+                    </label>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={!canWrite || uploadingCard || !cardJson.trim()}
+                      onClick={onUploadCard}
+                    >
+                      {uploadingCard ? "Uploading…" : "Upload card JSON"}
+                    </button>
+                    {cardTierUpload === "holo" ? (
+                      <>
+                        <label className="btn btn-outline btn-sm">
+                          {cardPortraitBusy ? "Processing…" : "Add portrait to JSON"}
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/gif"
+                            className="sr-only"
+                            disabled={!canWrite || cardPortraitBusy || uploadingCard}
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              if (file) onCardPortraitFileSelect(file);
+                              event.target.value = "";
+                            }}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          disabled={!canWrite || cardPortraitBusy || uploadingCard}
+                          onClick={() => onOpenGifPicker("cardJson")}
+                        >
+                          {isHostedPortraitGifUrl(cardPortraitUrl) ? "Change hosted GIF" : "Choose hosted GIF"}
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                  <textarea
+                    className="min-h-32 w-full rounded-md border border-input bg-background p-3 font-mono text-xs"
+                    placeholder='{"version":1,"template":"player","playerName":"...","avatarUrl":"...","stats":{...}}'
+                    value={cardJson}
+                    disabled={!canWrite}
+                    onChange={(event) => onCardJsonChange(event.target.value)}
+                  />
+                </div>
+              </section>
+
+              {(account.bio ||
+                account.achievements?.length ||
+                account.steamPersona ||
+                account.discordUsername ||
+                account.preferredRoles?.length ||
+                account.location) ? (
+                <section className="player-crm__modal-section">
+                  <h4 className="player-crm__section-title">Profile</h4>
+                  {account.bio ? (
+                    <div className="player-crm__bio">
+                      <span className="player-crm__field-label">Bio</span>
+                      <p>{account.bio}</p>
+                    </div>
+                  ) : null}
+                  {account.achievements?.length ? (
+                    <div className={account.bio ? "mt-3" : ""}>
+                      <span className="player-crm__field-label">Achievements</span>
+                      <ul className="player-crm__list">
+                        {account.achievements.map((item, index) => (
+                          <li key={item.id || index}>{typeof item === "string" ? item : item.title || item.label}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  <div className="player-crm__field-grid mt-3">
                     <DetailField label="Steam persona" value={account.steamPersona} />
                     <DetailField label="Discord" value={account.discordUsername} />
-                    <DetailField label="MMR" value={account.mmr != null ? String(account.mmr) : null} />
                     <DetailField
                       label="Roles"
                       value={account.preferredRoles?.length ? account.preferredRoles.join(", ") : null}
                     />
                     <DetailField label="Location" value={account.location} />
-                    <DetailField label="Card tier" value={detail.card?.tier || "default"} />
                   </div>
-                </div>
-                {account.bio ? (
-                  <div className="player-crm__bio">
-                    <span className="player-crm__field-label">Bio</span>
-                    <p>{account.bio}</p>
-                  </div>
-                ) : null}
-                {account.achievements?.length ? (
-                  <div className="mt-3">
-                    <span className="player-crm__field-label">Achievements</span>
-                    <ul className="player-crm__list">
-                      {account.achievements.map((item, index) => (
-                        <li key={item.id || index}>{typeof item === "string" ? item : item.title || item.label}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </section>
+                </section>
+              ) : null}
 
               {detail.profile?.currentTeam?.team ? (
                 <section className="player-crm__modal-section">
@@ -287,6 +538,15 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
   const [coinDelta, setCoinDelta] = useState("");
   const [coinReason, setCoinReason] = useState("Admin grant");
   const [grantingCoins, setGrantingCoins] = useState(false);
+  const [cardJson, setCardJson] = useState("");
+  const [cardTierUpload, setCardTierUpload] = useState("gold");
+  const [applyProfileTier, setApplyProfileTier] = useState(true);
+  const [uploadingCard, setUploadingCard] = useState(false);
+  const [avatarUrlDraft, setAvatarUrlDraft] = useState("");
+  const [savingAvatar, setSavingAvatar] = useState(false);
+  const [avatarUploadBusy, setAvatarUploadBusy] = useState(false);
+  const [cardPortraitBusy, setCardPortraitBusy] = useState(false);
+  const [gifPickerTarget, setGifPickerTarget] = useState(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -337,6 +597,15 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
       const data = await api.getPlayerAccount(id);
       setDetail(data);
       setAdminNotes(data.account?.adminNotes || "");
+      setAvatarUrlDraft(data.account?.avatarUrl || "");
+      const preferredTier =
+        data.card?.tierOverride ||
+        data.account?.cardTierOverride ||
+        data.card?.purchasedTier ||
+        data.registrations?.find((r) => r.cardTier && r.cardTier !== "default")?.cardTier ||
+        "gold";
+      setCardTierUpload(["player", "gold", "holo"].includes(preferredTier) ? preferredTier : "gold");
+      setApplyProfileTier(true);
     } catch (error) {
       setMessage?.(error.message);
       setSelectedId(null);
@@ -350,6 +619,9 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
     setDetail(null);
     setAdminNotes("");
     setCoinDelta("");
+    setCardJson("");
+    setCardTierUpload("gold");
+    setAvatarUrlDraft("");
   }
 
   async function saveAdminNotes() {
@@ -382,6 +654,142 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
       setMessage?.(error.message);
     } finally {
       setGrantingCoins(false);
+    }
+  }
+
+  async function uploadCardJson() {
+    if (!selectedId || !cardJson.trim()) return;
+    setUploadingCard(true);
+    try {
+      const manifestJson = JSON.parse(cardJson);
+      await api.uploadPlayerCard(selectedId, {
+        tier: cardTierUpload,
+        manifestJson,
+        approve: true,
+        applyProfileTier,
+      });
+      const data = await api.getPlayerAccount(selectedId);
+      setDetail(data);
+      setMessage?.(
+        applyProfileTier
+          ? `Player card uploaded as ${cardTierUpload} — profile tier updated.`
+          : "Player card uploaded (profile tier unchanged).",
+      );
+    } catch (error) {
+      setMessage?.(error.message || "Could not upload card JSON.");
+    } finally {
+      setUploadingCard(false);
+    }
+  }
+
+  function openGifPicker(target) {
+    setGifPickerTarget(target);
+  }
+
+  function closeGifPicker() {
+    setGifPickerTarget(null);
+  }
+
+  function resolveGifPickerSelectedUrl() {
+    if (gifPickerTarget === "avatar") return avatarUrlDraft;
+    if (gifPickerTarget === "cardJson") {
+      if (!cardJson.trim()) return "";
+      try {
+        return String(JSON.parse(cardJson).avatarUrl || "").trim();
+      } catch {
+        return "";
+      }
+    }
+    return "";
+  }
+
+  function handleGifPickerSelect(url) {
+    if (gifPickerTarget === "avatar") {
+      setAvatarUrlDraft(url);
+      setMessage?.("Hosted GIF selected. Click Save avatar to apply.");
+    } else if (gifPickerTarget === "cardJson") {
+      let manifest = {};
+      if (cardJson.trim()) {
+        manifest = JSON.parse(cardJson);
+      }
+      manifest.version = manifest.version || 1;
+      manifest.template = manifest.template || cardTierUpload;
+      manifest.avatarUrl = url;
+      if (!manifest.playerName && detail?.account?.displayName) {
+        manifest.playerName = detail.account.displayName;
+      }
+      setCardJson(JSON.stringify(manifest, null, 2));
+      setMessage?.("Hosted GIF selected in card JSON — review and upload when ready.");
+    }
+    closeGifPicker();
+  }
+
+  async function handleCardPortraitFileSelect(file) {
+    setCardPortraitBusy(true);
+    try {
+      const dataUrl = await readPortraitUploadFile(file, { maxEdge: 512, quality: 0.88 });
+      let manifest = {};
+      if (cardJson.trim()) {
+        manifest = JSON.parse(cardJson);
+      }
+      manifest.version = manifest.version || 1;
+      manifest.template = manifest.template || cardTierUpload;
+      manifest.avatarUrl = dataUrl;
+      if (!manifest.playerName && detail?.account?.displayName) {
+        manifest.playerName = detail.account.displayName;
+      }
+      setCardJson(JSON.stringify(manifest, null, 2));
+      setMessage?.("Portrait embedded in card JSON — review and upload when ready.");
+    } catch (error) {
+      setMessage?.(error.message || "Could not add portrait to card JSON.");
+    } finally {
+      setCardPortraitBusy(false);
+    }
+  }
+
+  async function handleAvatarFileSelect(file) {
+    setAvatarUploadBusy(true);
+    try {
+      const dataUrl = await readPortraitUploadFile(file, { maxEdge: 512, quality: 0.88 });
+      setAvatarUrlDraft(dataUrl);
+    } catch (error) {
+      setMessage?.(error.message || "Could not process image.");
+    } finally {
+      setAvatarUploadBusy(false);
+    }
+  }
+
+  async function saveAvatarOverride() {
+    if (!selectedId) return;
+    setSavingAvatar(true);
+    try {
+      await api.patchPlayerAccount(selectedId, { avatarUrl: avatarUrlDraft });
+      const data = await api.getPlayerAccount(selectedId);
+      setDetail(data);
+      setAvatarUrlDraft(data.account?.avatarUrl || "");
+      setMessage?.("Avatar saved.");
+      await loadList();
+    } catch (error) {
+      setMessage?.(error.message || "Could not save avatar.");
+    } finally {
+      setSavingAvatar(false);
+    }
+  }
+
+  async function clearAvatarOverride() {
+    if (!selectedId) return;
+    setSavingAvatar(true);
+    try {
+      await api.patchPlayerAccount(selectedId, { avatarUrl: "" });
+      setAvatarUrlDraft("");
+      const data = await api.getPlayerAccount(selectedId);
+      setDetail(data);
+      setMessage?.("Custom avatar cleared.");
+      await loadList();
+    } catch (error) {
+      setMessage?.(error.message || "Could not clear avatar.");
+    } finally {
+      setSavingAvatar(false);
     }
   }
 
@@ -424,8 +832,8 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
                   <td className="font-mono text-xs">{account.bpcId}</td>
                   <td>
                     <div className="player-crm__name-cell">
-                      {account.steamAvatarUrl ? (
-                        <img src={account.steamAvatarUrl} alt="" className="player-crm__row-avatar" />
+                      {(account.avatarUrl || account.steamAvatarUrl) ? (
+                        <img src={resolveAccountAvatarUrl(account)} alt="" className="player-crm__row-avatar" />
                       ) : null}
                       <span>{account.displayName || "—"}</span>
                     </div>
@@ -525,9 +933,40 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
           onCoinReasonChange={setCoinReason}
           onGrantCoins={grantCoins}
           grantingCoins={grantingCoins}
+          cardJson={cardJson}
+          cardTierUpload={cardTierUpload}
+          applyProfileTier={applyProfileTier}
+          onCardJsonChange={setCardJson}
+          onCardTierUploadChange={setCardTierUpload}
+          onApplyProfileTierChange={setApplyProfileTier}
+          onUploadCard={uploadCardJson}
+          uploadingCard={uploadingCard}
+          onCardPortraitFileSelect={handleCardPortraitFileSelect}
+          onOpenGifPicker={openGifPicker}
+          cardPortraitBusy={cardPortraitBusy}
+          avatarUrlDraft={avatarUrlDraft}
+          onAvatarUrlDraftChange={setAvatarUrlDraft}
+          onAvatarFileSelect={handleAvatarFileSelect}
+          avatarUploadBusy={avatarUploadBusy}
+          onSaveAvatar={saveAvatarOverride}
+          onClearAvatar={clearAvatarOverride}
+          savingAvatar={savingAvatar}
           canWrite={canWrite}
         />
       ) : null}
+
+      <PortraitGifPickerModal
+        open={Boolean(gifPickerTarget)}
+        onClose={closeGifPicker}
+        title={
+          gifPickerTarget === "cardJson"
+            ? `Choose holo portrait GIF${detail?.account?.displayName ? ` for ${detail.account.displayName}` : ""}`
+            : `Choose avatar GIF${detail?.account?.displayName ? ` for ${detail.account.displayName}` : ""}`
+        }
+        selectedUrl={resolveGifPickerSelectedUrl()}
+        onSelect={handleGifPickerSelect}
+        canWrite={canWrite}
+      />
     </div>
   );
 }

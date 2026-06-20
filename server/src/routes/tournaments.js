@@ -10,6 +10,7 @@ import { buildPublicHonorsPayload } from "../services/bracketHonorsEngine.js";
 import { applySeriesRulesToMatches } from "../services/seriesRulesEngine.js";
 import { archivePlayerRegistration, getPlayerRegistrationById, listPlayerRegistrations, updatePlayerRegistration } from "../services/registrationRepository.js";
 import { sendPlayerRegistrationDecisionEmail } from "../services/emailService.js";
+import { notifyRegistrationDecision } from "../services/playerNotificationService.js";
 import { buildGroupedStandings, buildStandings } from "../services/standingsEngine.js";
 import { requireAdmin, requirePermission } from "../services/authService.js";
 import { syncCrmRegistrationsToGoogleSheet } from "../services/googleSheetsSync.js";
@@ -1043,25 +1044,43 @@ router.patch("/:id/registrations/:registrationId", requirePermission("playerCrm.
       ["approved", "rejected", "waitlisted"].includes(payload.registrationStatus);
     const shouldNotifyPayment =
       paymentStatusChanged && ["paid", "unpaid", "refunded"].includes(payload.paymentStatus);
-    if (
-      prev &&
-      registration.email &&
-      !registration.email.includes("@migrated.") &&
-      (shouldNotifyRegistration || shouldNotifyPayment)
-    ) {
+    if (prev && (shouldNotifyRegistration || shouldNotifyPayment)) {
+      let tournamentName = "BPC League — Bharat Pro Circuit League";
       try {
         const tour = await getTournament(req.params.id);
-        const tournamentName = tour?.tournament?.name || "BPC League — Bharat Pro Circuit League";
-        await sendPlayerRegistrationDecisionEmail({
-          to: registration.email,
-          name: registration.name,
-          tournamentName,
-          publicCode: registration.publicCode || registration.id?.slice(0, 8) || "",
-          registrationStatus: registration.registrationStatus,
-          paymentStatus: registration.paymentStatus,
-        });
+        tournamentName = tour?.tournament?.name || tournamentName;
       } catch (err) {
-        console.error("[email] player registration status update failed:", err?.message || err);
+        console.error("[tournament] load for registration notify failed:", err?.message || err);
+      }
+
+      if (registration.email && !registration.email.includes("@migrated.")) {
+        try {
+          await sendPlayerRegistrationDecisionEmail({
+            to: registration.email,
+            name: registration.name,
+            tournamentName,
+            publicCode: registration.publicCode || registration.id?.slice(0, 8) || "",
+            registrationStatus: registration.registrationStatus,
+            paymentStatus: registration.paymentStatus,
+          });
+        } catch (err) {
+          console.error("[email] player registration status update failed:", err?.message || err);
+        }
+      }
+
+      if (shouldNotifyRegistration && registration.playerAccountId) {
+        try {
+          await notifyRegistrationDecision({
+            playerAccountId: registration.playerAccountId,
+            tournamentName,
+            tournamentId: req.params.id,
+            registrationId: registration.id,
+            registrationStatus: registration.registrationStatus,
+            publicCode: registration.publicCode,
+          });
+        } catch (err) {
+          console.error("[notifications] registration decision failed:", err?.message || err);
+        }
       }
     }
     return res.json({ registration });

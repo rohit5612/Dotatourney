@@ -328,12 +328,14 @@ a.community-page__stat:hover {
 .community-page__loading {
   display: grid;
   gap: clamp(1rem, 2vw, 1.35rem);
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 13.5rem), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16.5rem), 1fr));
 }
 
 .community-page__skeleton {
-  aspect-ratio: 3 / 4.2;
-  min-height: 14rem;
+  aspect-ratio: 400 / 600;
+  width: 100%;
+  max-width: 15.5rem;
+  min-height: 0;
   border-radius: 1.15rem;
   border: 1px solid var(--community-glass-border-soft);
   background: linear-gradient(
@@ -377,14 +379,113 @@ a.community-page__stat:hover {
   padding: 0;
   display: grid;
   gap: clamp(1rem, 2.2vw, 1.35rem);
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 13.5rem), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16.5rem), 1fr));
 }
 
 .community-page__grid-item {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  min-height: 17.5rem;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.community-page__card-entry {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.55rem;
+  width: min(100%, 15.5rem);
+  max-width: 100%;
+  margin-inline: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-decoration: none;
+  color: inherit;
+  transition: transform 180ms ease;
+}
+
+.community-page__card-entry:hover {
+  transform: translateY(-3px);
+}
+
+.community-page__card-entry:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 70%, transparent);
+  outline-offset: 4px;
+  border-radius: 0.35rem;
+}
+
+.community-page__card-slot {
+  width: min(100%, 15.5rem);
+  max-width: 100%;
+  aspect-ratio: 340 / 520;
+}
+
+.community-page__card-slot .bpcl-card-renderer,
+.community-page__card-slot .bpcl-gold-card,
+.community-page__card-slot .bpcl-holo-card,
+.community-page__card-slot .bpcl-player-card,
+.community-page__card-slot .bpcl-default-card,
+.community-page__card-slot .bpcl-card {
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  --gold-card-width: 100%;
+  --holo-card-width: 100%;
+  --player-card-width: 100%;
+  --default-card-width: 100%;
+  line-height: 0;
+}
+
+.community-page__card-slot .bpcl-card-renderer {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.community-page__card-slot .bpcl-gold-card,
+.community-page__card-slot .bpcl-holo-card,
+.community-page__card-slot .bpcl-player-card {
+  height: 100%;
+  aspect-ratio: 400 / 600;
+}
+
+.community-page__card-slot .bpcl-default-card {
+  aspect-ratio: 340 / 520;
+}
+
+.community-page__card-slot .bpcl-card__header,
+.community-page__card-slot .bpcl-card__season-note {
+  display: none;
+}
+
+.community-page__card-slot .bpcl-card__frame {
+  margin: 0;
+  height: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: clamp(0.65rem, 5%, 0.9rem);
+  box-sizing: border-box;
+}
+
+.community-page__card-slot .bpcl-card__avatar-wrap {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.45rem;
+  min-height: 0;
+}
+
+.community-page__card-slot .bpcl-card__avatar {
+  width: min(4.75rem, 52%);
+  height: min(4.75rem, 52%);
+}
+
+.community-page__card-slot .bpcl-card__body {
+  flex-shrink: 0;
 }
 
 .community-page__card-link {
@@ -393,7 +494,7 @@ a.community-page__stat:hover {
   align-items: center;
   gap: 0.65rem;
   flex: 1;
-  min-height: 15.5rem;
+  min-height: 20rem;
   padding: clamp(1rem, 2.2vw, 1.25rem) clamp(0.75rem, 2vw, 1rem) clamp(0.85rem, 2vw, 1rem);
   border-radius: 1.15rem;
   border: 1px solid var(--community-glass-border-soft);
@@ -426,25 +527,19 @@ a.community-page__stat:hover {
 }
 
 .community-page__card-link .bpcl-card {
-  max-width: min(100%, 13rem);
+  max-width: min(100%, 15.5rem);
   width: 100%;
 }
 
-.community-page__card-link .bpcl-card--sm {
-  max-width: min(100%, 13rem);
-  font-size: 0.875rem;
-}
-
-.community-page__card-link .bpcl-card--sm .bpcl-card__avatar {
-  width: 3.75rem;
-  height: 3.75rem;
-}
-
-.community-page__card-slot {
+.community-page__card-link .bpcl-card,
+.community-page__card-link .bpcl-gold-card,
+.community-page__card-link .bpcl-holo-card,
+.community-page__card-link .bpcl-player-card {
+  max-width: min(100%, 15.5rem);
   width: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  --gold-card-width: 100%;
+  --holo-card-width: 100%;
+  --player-card-width: 100%;
 }
 
 .community-page__card-caption {
@@ -452,6 +547,8 @@ a.community-page__stat:hover {
   flex-direction: column;
   align-items: center;
   gap: 0.12rem;
+  line-height: normal;
+  text-align: center;
 }
 
 .community-page__honor-badges {
@@ -589,6 +686,7 @@ a.community-page__stat:hover {
     animation: none;
   }
 
+  .community-page__card-entry,
   .community-page__card-link {
     transition: none;
   }

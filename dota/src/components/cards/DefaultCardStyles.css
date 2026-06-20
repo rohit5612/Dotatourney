@@ -1,0 +1,271 @@
+/* Offline generator canvas: 340×520 — sizes scale via container query units */
+.bpcl-default-card {
+  --default-card-width: 17rem;
+
+  --card-grey-1: #e9e8e5;
+  --card-grey-2: #dfdeda;
+  --card-grey-3: #d5d4d0;
+  --edge-1: #c8c8c8;
+  --edge-2: #d2d2d2;
+  --edge-3: #b5b5b5;
+  --text-dark: #252525;
+  --text-mid: #6f6f6f;
+  --avatar-bg: #dddcd8;
+  --engrave-dark: #232323;
+  --engrave-sub: #4a4a4a;
+  --engrave-highlight: rgba(255, 255, 255, 0.72);
+  --engrave-shadow: rgba(0, 0, 0, 0.16);
+
+  width: var(--default-card-width);
+  max-width: 100%;
+  aspect-ratio: 340 / 520;
+  line-height: 0;
+}
+
+.bpcl-default-card--sm {
+  --default-card-width: 13rem;
+}
+
+.bpcl-default-card--lg {
+  --default-card-width: 21rem;
+}
+
+.bpcl-default-card--xl {
+  --default-card-width: min(92vw, 24rem);
+}
+
+.bpcl-default-card__shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 7.65%; /* 26/340 */
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.05) 14%, rgba(255, 255, 255, 0) 28%),
+    linear-gradient(180deg, var(--card-grey-1) 0%, var(--card-grey-2) 42%, var(--card-grey-3) 100%);
+  border: 1px solid var(--edge-1);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.04);
+  padding: 5.29%; /* 18/340 */
+  isolation: isolate;
+  container-type: inline-size;
+}
+
+.bpcl-default-card__shell::before {
+  content: "";
+  position: absolute;
+  inset: 3.53%; /* 12/340 */
+  border-radius: 5.88%; /* 20/340 */
+  border: 1px solid var(--edge-2);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.45),
+    inset 0 0 18px rgba(255, 255, 255, 0.18);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.bpcl-default-card__shell::after {
+  content: "";
+  position: absolute;
+  inset: 5.88%; /* 20/340 */
+  border-radius: 4.71%; /* 16/340 */
+  border: 1px solid rgba(208, 208, 208, 0.96);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.bpcl-default-card__corner {
+  position: absolute;
+  width: 9.41%; /* 32/340 */
+  height: 9.41%;
+  z-index: 1;
+  opacity: 0.88;
+  pointer-events: none;
+}
+
+.bpcl-default-card__corner--tl {
+  top: 5.29%;
+  left: 5.29%;
+  border-top: 1px solid var(--edge-3);
+  border-left: 1px solid var(--edge-3);
+  border-top-left-radius: 2.65cqi; /* 9/340 */
+}
+
+.bpcl-default-card__corner--tr {
+  top: 5.29%;
+  right: 5.29%;
+  border-top: 1px solid var(--edge-3);
+  border-right: 1px solid var(--edge-3);
+  border-top-right-radius: 2.65cqi;
+}
+
+.bpcl-default-card__corner--bl {
+  bottom: 5.29%;
+  left: 5.29%;
+  border-bottom: 1px solid var(--edge-3);
+  border-left: 1px solid var(--edge-3);
+  border-bottom-left-radius: 2.65cqi;
+}
+
+.bpcl-default-card__corner--br {
+  bottom: 5.29%;
+  right: 5.29%;
+  border-bottom: 1px solid var(--edge-3);
+  border-right: 1px solid var(--edge-3);
+  border-bottom-right-radius: 2.65cqi;
+}
+
+.bpcl-default-card__content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 10.59cqi; /* extra top breathing room */
+  /* Clear bottom corner accents (32px) + inner frame inset */
+  padding-bottom: 11.76cqi; /* 40/340 */
+  padding-left: 2.35cqi;
+  padding-right: 2.35cqi;
+  line-height: normal;
+  box-sizing: border-box;
+}
+
+.bpcl-default-card__avatar-shell {
+  width: 63.25%; /* 55% + 15% */
+  aspect-ratio: 1;
+  flex-shrink: 0;
+  padding: 0;
+  border-radius: 6.47%; /* 22/340 */
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  position: relative;
+}
+
+.bpcl-default-card__avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 4.12cqi; /* 14/340 */
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+}
+
+.bpcl-default-card__logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.bpcl-default-card__bpcl-zone {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.bpcl-default-card__bpcl-block {
+  width: 100%;
+  padding: 0 1.18cqi;
+}
+
+.engraved {
+  text-shadow:
+    0 1px 0 var(--engrave-highlight),
+    0 -1px 0 var(--engrave-shadow);
+  user-select: none;
+}
+
+.bpcl-default-card__bpcl-text {
+  font-size: 17.88cqi; /* 20% smaller than 22.35cqi */
+  line-height: 0.9;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--engrave-dark);
+  margin: 0;
+  font-family: "Bodoni MT", "Didot", "Times New Roman", Georgia, serif;
+}
+
+.bpcl-default-card__bpcl-sub-wrap {
+  width: 100%;
+  margin-top: 2.35cqi;
+  padding: 0 0.59cqi;
+  box-sizing: border-box;
+}
+
+.bpcl-default-card__bpcl-sub {
+  margin: 0;
+  font-size: 2.94cqi;
+  line-height: 1.15;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--engrave-sub);
+  font-weight: 700;
+  font-family: "Times New Roman", Georgia, serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bpcl-default-card__name-primary {
+  width: 100%;
+  margin-top: 5.88cqi;
+  padding: 0 10.59cqi;
+  text-align: center;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.bpcl-default-card__footer {
+  width: 100%;
+  margin-top: auto;
+  padding: 0 10.59cqi 0;
+  text-align: center;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.bpcl-default-card__divider-line,
+.bpcl-default-card__name-line {
+  width: 100%;
+  max-width: 72%;
+  height: 1px;
+  margin: 0 auto 2.35cqi; /* 8/340 */
+  background: #d9d9d9;
+}
+
+.bpcl-default-card__name-line {
+  margin-bottom: 2.35cqi;
+}
+
+.bpcl-default-card__name {
+  font-size: 9.71cqi; /* 33/340 */
+  line-height: 1.1;
+  font-weight: 600;
+  color: var(--text-dark);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  text-transform: lowercase;
+  margin: 0;
+}
+
+.bpcl-default-card__sub {
+  margin: 2.94cqi 0 0;
+  font-size: 3.24cqi; /* 11/340 */
+  line-height: 1.2;
+  color: var(--text-mid);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}

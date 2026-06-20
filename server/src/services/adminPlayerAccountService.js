@@ -1,7 +1,7 @@
 import { pool } from "../db/pool.js";
 import { publicPlayerAccount, findAccountById } from "./playerAccountRepository.js";
 import { getCoinBalance } from "./playerAccountRepository.js";
-import { buildCardManifest } from "./cardManifestService.js";
+import { buildCardManifest, listCardAssetsForAccount } from "./cardManifestService.js";
 import { getPublicPlayerProfile } from "./playerProfileService.js";
 
 function mapRegistrationRow(row) {
@@ -90,10 +90,12 @@ export async function getPlayerAccountAdminDetail(id) {
       ...publicPlayerAccount(account),
       adminNotes: account.admin_notes || "",
       googleLinked: Boolean(account.google_sub),
+      cardTierOverride: account.card_tier_override || null,
       clips: Array.isArray(account.clips) ? account.clips : [],
       achievements: Array.isArray(account.achievements) ? account.achievements : [],
     },
     card,
+    cardAssets: await listCardAssetsForAccount(id),
     coinBalance: balance,
     registrations: registrations.map(mapRegistrationRow),
     ledger: ledger.map(mapLedgerRow),
@@ -108,7 +110,64 @@ export async function getPlayerAccountAdminDetail(id) {
   };
 }
 
-export async function patchPlayerAccountAdmin(id, { adminNotes, displayName }) {
+export async function uploadPlayerCardAdmin(accountId, body, adminUserId) {
+  const account = await findAccountById(accountId);
+  if (!account) return null;
+
+  const tier = body.tier;
+  if (!["player", "gold", "holo"].includes(tier)) {
+    const err = new Error("tier must be player, gold, or holo");
+    err.status = 400;
+    throw err;
+  }
+
+  let seasonId = body.seasonId || null;
+  let tournamentId = body.tournamentId || null;
+  if (!tournamentId && body.tournamentSlug) {
+    const { rows } = await pool.query(`SELECT id FROM tournaments WHERE slug = $1`, [body.tournamentSlug]);
+    tournamentId = rows[0]?.id || null;
+  }
+  if (!seasonId && tournamentId) {
+    const { rows } = await pool.query(
+      `SELECT id FROM seasons WHERE tournament_id = $1 ORDER BY number DESC LIMIT 1`,
+      [tournamentId],
+    );
+    seasonId = rows[0]?.id || null;
+  }
+
+  const { upsertCardAsset } = await import("./paymentService.js");
+  const asset = await upsertCardAsset(accountId, {
+    tier,
+    assetUrl: body.assetUrl || "",
+    tagline: body.tagline || "",
+    manifestJson: body.manifestJson || body.manifest || null,
+    seasonId,
+    tournamentId,
+    status: body.approve === false ? "pending" : "approved",
+  });
+
+  if (body.approve !== false && asset) {
+    await pool.query(
+      `UPDATE player_card_assets SET approved_at = NOW(), approved_by = $2 WHERE id = $1`,
+      [asset.id, adminUserId],
+    );
+  }
+
+  const applyProfileTier = body.applyProfileTier !== false;
+  if (applyProfileTier) {
+    await pool.query(
+      `UPDATE player_accounts SET card_tier_override = $2, updated_at = NOW() WHERE id = $1`,
+      [accountId, tier],
+    );
+    account.card_tier_override = tier;
+  }
+
+  const card = await buildCardManifest(account, { tournamentId });
+  const cardAssets = await listCardAssetsForAccount(accountId);
+  return { asset, card, cardAssets };
+}
+
+export async function patchPlayerAccountAdmin(id, { adminNotes, displayName, avatarUrl }) {
   const fields = [];
   const values = [id];
   if (adminNotes !== undefined) {
@@ -118,6 +177,10 @@ export async function patchPlayerAccountAdmin(id, { adminNotes, displayName }) {
   if (displayName !== undefined) {
     values.push(displayName);
     fields.push(`display_name = $${values.length}`);
+  }
+  if (avatarUrl !== undefined) {
+    values.push(avatarUrl);
+    fields.push(`avatar_url = $${values.length}`);
   }
   if (!fields.length) return findAccountById(id);
   const { rows } = await pool.query(

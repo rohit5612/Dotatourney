@@ -3,6 +3,7 @@ export const PUBLIC_NAV_LINKS = [
   { href: "/tournament", label: "Tournament" },
   { href: "/teams", label: "Teams", showWhen: "teamsBracket" },
   { href: "/seasons", label: "Seasons" },
+  { href: "/whats-new", label: "What's New", highlight: true },
   { href: "/announcements", label: "News" },
   { href: "/community", label: "Community" },
   { href: "/schedule", label: "Bracket & Schedule" },

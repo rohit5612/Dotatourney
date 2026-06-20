@@ -119,6 +119,101 @@
   color: #7c3aed;
 }
 
+.player-profile__tier-badge--holo-premium {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.34rem 0.88rem 0.38rem;
+  border: 1px solid color-mix(in srgb, #f4f8ff 82%, #b8c4d8);
+  border-radius: 999px;
+  font-family: Oxanium, Orbitron, Bahnschrift, "Segoe UI", sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  background: linear-gradient(
+    155deg,
+    #f6f8fc 0%,
+    #d4dce8 24%,
+    #9aaabe 50%,
+    #ccd4e0 76%,
+    #eceff6 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    inset 0 -1px 0 rgba(72, 84, 108, 0.22),
+    0 1px 3px rgba(12, 16, 28, 0.38),
+    0 0 16px rgba(110, 220, 255, 0.2),
+    0 0 24px rgba(200, 120, 255, 0.14);
+  overflow: hidden;
+}
+
+.player-profile__tier-badge--holo-premium::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: -2;
+  background: conic-gradient(
+    from 0deg,
+    #ff6eb4,
+    #ffb03a,
+    #ffe566,
+    #4ee89a,
+    #5ed8ff,
+    #8b7cf8,
+    #e879f9,
+    #ff6eb4
+  );
+  animation: bpcl-holo-fx-hue 8s linear infinite;
+  opacity: 0.92;
+}
+
+.player-profile__tier-badge--holo-premium::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    108deg,
+    transparent 28%,
+    rgba(255, 255, 255, 0.28) 44%,
+    rgba(255, 255, 255, 0.72) 50%,
+    rgba(232, 240, 252, 0.34) 56%,
+    transparent 70%
+  );
+  background-size: 220% 100%;
+  mix-blend-mode: soft-light;
+  animation: bpcl-holo-fx-shine-sweep 5s ease-in-out infinite;
+}
+
+.player-profile__tier-badge--holo-premium .player-profile__tier-badge-label {
+  position: relative;
+  z-index: 1;
+  color: #1a2030;
+  font-weight: 900;
+  background-image: linear-gradient(
+    90deg,
+    #8a2868 0%,
+    #4a3898 16%,
+    #2878a8 32%,
+    #289068 48%,
+    #a88828 64%,
+    #984878 80%,
+    #8a2868 100%
+  );
+  background-size: 240% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.75));
+  animation: bpcl-holo-fx-shine-sweep 6.2s ease-in-out infinite;
+}
+
 .player-profile__tier-badge--player {
   border-color: color-mix(in srgb, var(--primary) 45%, transparent);
   color: var(--primary);
@@ -388,10 +483,118 @@
 .player-profile__card-wrap {
   display: flex;
   justify-content: center;
+  min-width: 0;
 }
 
-.player-profile__card {
+.player-profile__card-tap {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.45rem;
   width: min(100%, 15.5rem);
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: zoom-in;
+  color: inherit;
+  line-height: normal;
+  transition: transform 180ms ease;
+}
+
+.player-profile__card-tap .bpcl-gold-card,
+.player-profile__card-tap .bpcl-holo-card,
+.player-profile__card-tap .bpcl-default-card,
+.player-profile__card-tap .bpcl-card {
+  width: 100%;
+  max-width: 100%;
+  --gold-card-width: 100%;
+  --holo-card-width: 100%;
+  --default-card-width: 100%;
+  line-height: normal;
+}
+
+.player-profile__card-tap .bpcl-player-card {
+  width: 100%;
+  max-width: 100%;
+  --player-card-width: 100%;
+  line-height: 0;
+}
+
+.player-profile__card-tap:hover {
+  transform: translateY(-2px);
+}
+
+.player-profile__card-tap:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 70%, transparent);
+  outline-offset: 4px;
+  border-radius: 0.35rem;
+}
+
+.player-profile__card-tap-hint {
+  align-self: center;
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.player-profile__card-tap:hover .player-profile__card-tap-hint {
+  color: var(--foreground);
+}
+
+.player-profile__card-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1rem, 4vw, 2rem);
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.player-profile__card-lightbox-inner {
+  width: min(92vw, 32rem, calc((100dvh - 5rem) * 400 / 600));
+  max-height: calc(100dvh - 5rem);
+}
+
+.player-profile__card-lightbox-inner .bpcl-holo-card {
+  width: 100%;
+  max-width: 100%;
+  --holo-card-width: 100%;
+}
+
+.player-profile__card-lightbox-inner .bpcl-gold-card,
+.player-profile__card-lightbox-inner .bpcl-player-card,
+.player-profile__card-lightbox-inner .bpcl-default-card,
+.player-profile__card-lightbox-inner .bpcl-card {
+  width: 100%;
+  max-width: 100%;
+  --gold-card-width: 100%;
+  --player-card-width: 100%;
+  --default-card-width: 100%;
+}
+
+.player-profile__card-lightbox-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 2;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--background) 88%, transparent);
+  color: var(--foreground);
+  padding: 0.45rem 0.9rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.player-profile__card-lightbox-close:hover {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
 }
 
 .player-profile__about {

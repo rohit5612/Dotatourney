@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Player frame tag composite</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { margin: 0; background: #111; }
+  .stage {
+    width: 400px;
+    height: 600px;
+    position: relative;
+    overflow: hidden;
+    background: #030405;
+  }
+  .stage img.frame {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: fill;
+  }
+  /* Calibrated to 1200×1800 frame-base.png */
+  .top-plaque {
+    position: absolute;
+    left: 50%;
+    top: 8.86%;
+    width: 75%;
+    height: 7%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    text-align: center;
+    overflow: hidden;
+  }
+  .bpcl-logo {
+    margin: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 26px;
+    font-style: italic;
+    font-weight: 900;
+    line-height: 0.92;
+    letter-spacing: 0.03em;
+    color: #eceef1;
+    text-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.82),
+      0 -1px 0 rgba(0, 0, 0, 0.55),
+      0 2px 6px rgba(0, 0, 0, 0.75);
+  }
+  .bpcl-league {
+    margin: 0;
+    padding-left: 0.16em;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 7px;
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #c8ccd2;
+    white-space: nowrap;
+    text-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.45),
+      0 -1px 0 rgba(0, 0, 0, 0.5);
+  }
+  .tier-badge {
+    position: absolute;
+    left: 50%;
+    top: 15.83%;
+    width: 28%;
+    height: 3.5%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 7.5px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.08em;
+    text-align: center;
+    text-transform: uppercase;
+    color: #d2d6db;
+    overflow: hidden;
+    text-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.5),
+      0 -1px 0 rgba(0, 0, 0, 0.52);
+  }
+</style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <img class="frame" src="../dota/public/cards/player/frame-base.png" alt="" width="1200" height="1800">
+    <div class="top-plaque">
+      <p class="bpcl-logo">BPCL</p>
+      <p class="bpcl-league">Bharat Pro Circuit League</p>
+    </div>
+    <p class="tier-badge">Basic</p>
+  </div>
+</body>
+</html>

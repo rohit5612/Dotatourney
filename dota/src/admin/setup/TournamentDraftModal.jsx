@@ -341,7 +341,7 @@ export function TournamentDraftModal({
               </div>
               <div className="setup-draft-callout setup-draft-field--wide">
                 <strong>Payments</strong>
-                <p>Registration fees and Razorpay checkout are configured in the Cards tab.</p>
+                <p>Registration fees and Cashfree checkout are configured in the Cards tab.</p>
               </div>
             </section>
           ) : null}

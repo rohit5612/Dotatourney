@@ -1,50 +1,58 @@
 import { randomUUID } from "node:crypto";
 import { pool } from "../db/pool.js";
 
+import { enrichCardTiers } from "./commerceBundle.js";
+
 export const DEFAULT_CARD_TIERS = {
   default: {
     enabled: true,
+    registrationCostRupees: 300,
+    cardCostRupees: 0,
     bundledPriceRupees: 0,
-    label: "Default (grey)",
-    description: "Included with registration",
+    label: "Default registration",
+    description: "Standard season registration",
+    discountPercent: 0,
   },
   player: {
     enabled: true,
+    registrationCostRupees: 300,
+    cardCostRupees: 240,
     bundledPriceRupees: 240,
-    label: "Player card",
+    label: "Basic Card Bundle",
     description: "Dark frame + stats",
+    discountPercent: 0,
   },
   gold: {
     enabled: true,
+    registrationCostRupees: 240,
+    cardCostRupees: 300,
     bundledPriceRupees: 400,
-    label: "Gold card",
-    description: "Custom logo slot",
+    label: "Gold Card Bundle",
+    description: "Gold frame + Custom logo slot",
+    discountPercent: 0,
   },
   holo: {
     enabled: true,
+    registrationCostRupees: 300,
+    cardCostRupees: 600,
     bundledPriceRupees: 600,
-    label: "Holo card",
-    description: "Avatar + tagline",
+    label: "Holo Card Bundle",
+    description: "Holo frame, Custom Avatar slot + privileges*",
+    discountPercent: 0,
   },
 };
 
-function mergeCardTiers(stored) {
-  const base = { ...DEFAULT_CARD_TIERS };
-  if (!stored || typeof stored !== "object") return base;
-  for (const key of Object.keys(base)) {
-    if (stored[key] && typeof stored[key] === "object") {
-      base[key] = { ...base[key], ...stored[key] };
-    }
-  }
-  return base;
+function mergeCardTiers(stored, registrationFeeRupees = 300) {
+  return enrichCardTiers(stored, registrationFeeRupees);
 }
 
 export function publicCommerceConfig(row) {
   if (!row) return null;
+  const registrationFeeRupees = row.registration_fee_rupees;
   return {
     tournamentId: row.tournament_id,
-    registrationFeeRupees: row.registration_fee_rupees,
-    cardTiers: mergeCardTiers(row.card_tiers),
+    registrationFeeRupees,
+    cardTiers: mergeCardTiers(row.card_tiers, registrationFeeRupees),
     minCashRupees: row.min_cash_rupees,
     updatedAt: row.updated_at,
   };
@@ -84,7 +92,11 @@ export async function upsertCommerceConfig(tournamentId, patch) {
   }
   if (patch.cardTiers !== undefined) {
     fields.push(`card_tiers = $${i++}::jsonb`);
-    values.push(JSON.stringify(mergeCardTiers(patch.cardTiers)));
+    const regFee =
+      patch.registrationFeeRupees ??
+      (await getCommerceConfigByTournamentId(tournamentId))?.registration_fee_rupees ??
+      300;
+    values.push(JSON.stringify(mergeCardTiers(patch.cardTiers, regFee)));
   }
   if (patch.minCashRupees !== undefined) {
     fields.push(`min_cash_rupees = $${i++}`);

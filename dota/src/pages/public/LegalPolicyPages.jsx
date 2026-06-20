@@ -127,7 +127,7 @@ export function TermsAndConditionsPage() {
 
       <LegalSection title="5. Payments">
         <p>
-          Payments are processed through authorised payment gateways (for example Razorpay or PayU).
+          Payments are processed through authorised payment gateways (for example Cashfree).
           You agree to provide valid payment details and authorise charges for the amount shown at
           checkout. Failed or reversed transactions may result in registration being withheld until
           payment is successfully completed.

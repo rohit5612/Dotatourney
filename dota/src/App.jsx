@@ -9,6 +9,7 @@ import {
   PublicAboutRoute,
   PublicCancellationRoute,
   PublicCommunityRoute,
+  PublicWhatsNewRoute,
   PublicPlayerProfileRoute,
   PublicCookiesRoute,
   PublicLandingRoute,
@@ -74,6 +75,9 @@ const PlayerSubstitutePoolPage = lazy(() =>
 );
 const PlayerCheckoutPage = lazy(() =>
   import("./pages/player/PlayerCheckoutPage.jsx").then((m) => ({ default: m.PlayerCheckoutPage })),
+);
+const PlayerCheckoutReturnPage = lazy(() =>
+  import("./pages/player/PlayerCheckoutReturnPage.jsx").then((m) => ({ default: m.PlayerCheckoutReturnPage })),
 );
 const PlayerNotificationsPage = lazy(() =>
   import("./pages/player/PlayerNotificationsPage.jsx").then((m) => ({ default: m.PlayerNotificationsPage })),
@@ -173,6 +177,7 @@ export default function App() {
           <Route path="wallet" element={<PlayerWalletPage />} />
           <Route path="register/:slug" element={<PlayerRegisterDetailsPage />} />
           <Route path="substitute/:slug" element={<PlayerSubstitutePoolPage />} />
+          <Route path="checkout/return" element={<PlayerCheckoutReturnPage />} />
           <Route path="checkout/:slug" element={<PlayerCheckoutPage />} />
         </Route>
 
@@ -194,6 +199,7 @@ export default function App() {
           <Route path="seasons/:slug" element={<PublicSeasonDetailRoute />} />
           <Route path="announcements" element={<PublicAnnouncementsRoute />} />
           <Route path="community" element={<PublicCommunityRoute />} />
+          <Route path="whats-new" element={<PublicWhatsNewRoute />} />
           <Route path="player/:slug" element={<PublicPlayerProfileRoute />} />
           <Route path="match/:matchId" element={<PublicMatchRoute />} />
         </Route>

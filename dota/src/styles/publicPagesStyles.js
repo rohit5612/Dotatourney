@@ -22,6 +22,7 @@ import "./legal-pages.css";
 import "./seasons-page.css";
 import "./news-page.css";
 import "./community-page.css";
+import "./whats-new-page.css";
 import "./player-profile-page.css";
 import "./team-logo-img.css";
 import "./standings-table-public.css";

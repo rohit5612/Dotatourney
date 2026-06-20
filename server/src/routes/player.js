@@ -34,6 +34,7 @@ import {
   sendPlayerClaimAccountEmail,
   sendPlayerEmailVerificationEmail,
   sendPlayerPasswordResetEmail,
+  maybeSendPlayerWelcomeEmail,
 } from "../services/emailService.js";
 import {
   previewCheckout,
@@ -124,6 +125,11 @@ router.get("/auth/verify-email", async (req, res, next) => {
     const email = String(req.query.email || "");
     const account = await verifyPlayerEmail(token, { email });
     const session = await createPlayerSession(account.id);
+    try {
+      await maybeSendPlayerWelcomeEmail(account);
+    } catch (emailErr) {
+      console.error("[email] welcome mail failed:", emailErr?.message || emailErr);
+    }
     res.json({
       message: "Email verified successfully",
       token: session.token,
@@ -328,6 +334,11 @@ router.post("/auth/claim/set-password", async (req, res, next) => {
       claimToken: payload.token,
       password: payload.password,
     });
+    try {
+      await maybeSendPlayerWelcomeEmail(account);
+    } catch (emailErr) {
+      console.error("[email] welcome mail failed:", emailErr?.message || emailErr);
+    }
     res.json({
       message: "Account claimed successfully",
       token: session.token,

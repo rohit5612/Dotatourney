@@ -325,6 +325,7 @@ export async function updatePlayerAccount(id, patch, db = pool) {
     preferred_roles: "preferredRoles",
     location: "location",
     profile_completed_at: "profileCompletedAt",
+    welcome_email_sent_at: "welcomeEmailSentAt",
   };
 
   for (const [col, key] of Object.entries(allowed)) {

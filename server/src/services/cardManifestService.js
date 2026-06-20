@@ -1,7 +1,11 @@
 import { pool } from "../db/pool.js";
 import { findAccountBySlug } from "./playerAccountRepository.js";
+import { demoAccessCardTier, isDemoAccessAccount } from "../utils/demoAccessAccount.js";
 
-function seasonBadgeFromSeason(season) {
+const PREMIUM_TIERS = new Set(["player", "gold", "holo"]);
+
+function seasonBadgeFromSeason(season, tournament) {
+  if (tournament?.season_card_badge) return String(tournament.season_card_badge).trim();
   if (!season) return null;
   const num = season.number != null ? `S${season.number}` : "";
   const theme = season.theme_key ? String(season.theme_key).replace(/_/g, " ") : "";
@@ -9,13 +13,24 @@ function seasonBadgeFromSeason(season) {
   return label ? `${label.charAt(0).toUpperCase()}${label.slice(1)}` : season.name || null;
 }
 
-async function findRegistrationForAccount(accountId, tournamentId) {
-  if (!tournamentId) return null;
+async function findBestRegistration(accountId, tournamentId) {
+  if (tournamentId) {
+    const { rows } = await pool.query(
+      `SELECT * FROM player_registrations
+       WHERE player_account_id = $1 AND tournament_id = $2 AND archived_at IS NULL
+       ORDER BY created_at DESC LIMIT 1`,
+      [accountId, tournamentId],
+    );
+    return rows[0] || null;
+  }
   const { rows } = await pool.query(
     `SELECT * FROM player_registrations
-     WHERE player_account_id = $1 AND tournament_id = $2 AND archived_at IS NULL
-     ORDER BY created_at DESC LIMIT 1`,
-    [accountId, tournamentId],
+     WHERE player_account_id = $1 AND archived_at IS NULL
+     ORDER BY CASE COALESCE(NULLIF(TRIM(card_tier), ''), 'default')
+       WHEN 'holo' THEN 0 WHEN 'gold' THEN 1 WHEN 'player' THEN 2 ELSE 3 END,
+       created_at DESC
+     LIMIT 1`,
+    [accountId],
   );
   return rows[0] || null;
 }
@@ -32,7 +47,24 @@ async function findActiveSeasonForTournament(tournamentId) {
   return rows[0] || null;
 }
 
+async function findCurrentSeason() {
+  const { rows } = await pool.query(
+    `SELECT * FROM seasons
+     WHERE status IN ('active', 'upcoming')
+     ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, number DESC
+     LIMIT 1`,
+  );
+  return rows[0] || null;
+}
+
+async function findTournament(tournamentId) {
+  if (!tournamentId) return null;
+  const { rows } = await pool.query(`SELECT * FROM tournaments WHERE id = $1`, [tournamentId]);
+  return rows[0] || null;
+}
+
 async function findCardAsset(accountId, tier) {
+  if (!tier || tier === "default") return null;
   const { rows } = await pool.query(
     `SELECT * FROM player_card_assets WHERE player_account_id = $1 AND tier = $2`,
     [accountId, tier],
@@ -40,68 +72,213 @@ async function findCardAsset(accountId, tier) {
   return rows[0] || null;
 }
 
-function parseRoles(registration, fallbackRole = "") {
-  if (!registration) return fallbackRole ? [fallbackRole] : [];
-  const roles = registration.roles;
-  if (Array.isArray(roles)) return roles;
-  if (typeof roles === "string") {
-    try {
-      return JSON.parse(roles);
-    } catch {
-      return [];
+function parseRoles(registration, account) {
+  if (registration) {
+    const roles = registration.roles;
+    if (Array.isArray(roles)) return roles;
+    if (typeof roles === "string") {
+      try {
+        return JSON.parse(roles);
+      } catch {
+        return [];
+      }
     }
   }
+  const preferred = account?.preferred_roles;
+  if (Array.isArray(preferred)) return preferred;
   return [];
+}
+
+function parseManifestJson(raw) {
+  if (!raw) return null;
+  if (typeof raw === "object") return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function isApprovedCardAsset(asset) {
+  if (!asset || asset.status !== "approved") return false;
+  if (String(asset.asset_url || "").trim()) return true;
+  const manifest = parseManifestJson(asset.manifest_json);
+  return Boolean(manifest?.version && manifest?.template);
+}
+
+function seasonValidityFromContext({ season, tournament, asset }) {
+  const badge = seasonBadgeFromSeason(season, tournament);
+  const validFrom =
+    tournament?.registrations_open_at ||
+    tournament?.published_at ||
+    season?.starts_at ||
+    season?.created_at ||
+    null;
+  const revoked = asset?.status === "rejected";
+  const seasonEnded = season?.status === "concluded";
+  return {
+    badge,
+    seasonName: season?.name || tournament?.name || null,
+    seasonSlug: season?.slug || null,
+    seasonNumber: season?.number ?? null,
+    validFrom,
+    validUntil: null,
+    active: !revoked && !seasonEnded,
+    label: badge ? `Valid for ${badge}` : "Season card",
+  };
+}
+
+function resolveAccountPortraitUrl(account) {
+  return String(account.avatar_url || account.steam_avatar_url || "").trim();
+}
+
+function applyAccountPortraitToPayload(payload, account) {
+  const customAvatar = String(account.avatar_url || "").trim();
+  if (customAvatar) {
+    payload.avatarUrl = customAvatar;
+    return payload;
+  }
+  if (!String(payload.avatarUrl || "").trim()) {
+    payload.avatarUrl = resolveAccountPortraitUrl(account);
+  }
+  return payload;
+}
+
+function buildCardPayload(asset, account, registration, roles) {
+  const stored = parseManifestJson(asset?.manifest_json);
+  if (stored && Object.keys(stored).length > 0) {
+    return applyAccountPortraitToPayload({ ...stored }, account);
+  }
+  if (asset?.asset_url) {
+    return { template: asset.tier, imageUrl: asset.asset_url };
+  }
+  const primaryRole = roles[0] || "";
+  return {
+    template: asset?.tier || "gold",
+    playerName: account.display_name || account.steam_persona || account.slug,
+    avatarUrl: resolveAccountPortraitUrl(account),
+    stats: {
+      kda: "--",
+      gpm: "--",
+      xpm: "--",
+      winrate: "--",
+      role: primaryRole,
+      mmr: registration?.mmr ?? account.mmr ?? null,
+    },
+    tagline: asset?.tagline || null,
+  };
 }
 
 /**
  * Build card manifest JSON for web, Discord, and GSI overlay consumers.
+ * Every account receives at least a default-season card; premium tiers render after admin upload.
  */
 export async function buildCardManifest(accountRow, options = {}) {
   const account = accountRow?.id ? accountRow : await findAccountBySlug(accountRow);
   if (!account) return null;
 
-  const tournamentId = options.tournamentId || null;
   let season = options.season || null;
-  if (!season && tournamentId) {
+  let tournament = null;
+  let tournamentId = options.tournamentId || null;
+
+  const registration =
+    options.registration ||
+    (await findBestRegistration(account.id, tournamentId || season?.tournament_id || null));
+
+  if (!season && registration?.tournament_id) {
+    tournamentId = registration.tournament_id;
     season = await findActiveSeasonForTournament(tournamentId);
+  }
+  if (!season) {
+    season = await findCurrentSeason();
+    if (season?.tournament_id) tournamentId = season.tournament_id;
   }
   if (!season && options.seasonSlug) {
     const { rows } = await pool.query(`SELECT * FROM seasons WHERE slug = $1`, [options.seasonSlug]);
     season = rows[0] || null;
+    if (season?.tournament_id) tournamentId = season.tournament_id;
   }
 
-  const registration =
-    options.registration || (await findRegistrationForAccount(account.id, season?.tournament_id || tournamentId));
-  const cardTier = registration?.card_tier || options.cardTier || "default";
-  const asset = await findCardAsset(account.id, cardTier === "default" ? "gold" : cardTier);
+  if (tournamentId) {
+    tournament = await findTournament(tournamentId);
+  }
 
-  const roles = parseRoles(registration);
+  const registrationTier =
+    registration?.card_tier ||
+    options.cardTier ||
+    "default";
+  const purchasedTier =
+    (isDemoAccessAccount(account) ? demoAccessCardTier(account) : null) ||
+    registrationTier;
+  const adminOverride = String(account.card_tier_override || "").trim() || null;
+  const effectiveTier = adminOverride || purchasedTier || "default";
+  const asset = PREMIUM_TIERS.has(effectiveTier)
+    ? await findCardAsset(account.id, effectiveTier)
+    : null;
+  const assetApproved = isApprovedCardAsset(asset);
+  const cardPending = PREMIUM_TIERS.has(effectiveTier) && !assetApproved;
+
+  const renderTier = assetApproved ? effectiveTier : "default";
+  const roles = parseRoles(registration, account);
   const primaryRole = roles[0] || "";
+  const seasonValidity = seasonValidityFromContext({ season, tournament, asset });
 
-  return {
-    tier: cardTier,
+  const manifest = {
+    tier: effectiveTier,
+    purchasedTier,
+    tierOverride: adminOverride,
+    renderTier,
+    template: assetApproved ? parseManifestJson(asset.manifest_json)?.template || effectiveTier : "default",
     bpcId: account.bpc_id,
     displayName: account.display_name || account.steam_persona || account.slug,
     slug: account.slug,
-    seasonBadge: seasonBadgeFromSeason(season),
+    seasonBadge: seasonValidity.badge,
+    seasonValidity,
     stats: {
-      mmr: registration?.mmr ?? null,
+      mmr: registration?.mmr ?? account.mmr ?? null,
       role: primaryRole,
       roles,
     },
-    steamAvatar: account.steam_avatar_url || account.avatar_url || "",
-    customImage: asset?.status === "approved" ? asset.asset_url || null : null,
-    tagline: asset?.status === "approved" ? asset.tagline || null : null,
+    avatarUrl: resolveAccountPortraitUrl(account),
+    customAvatarUrl: account.avatar_url || "",
+    steamAvatarUrl: account.steam_avatar_url || "",
+    steamAvatar: resolveAccountPortraitUrl(account),
+    customImage: assetApproved ? asset.asset_url || null : null,
+    tagline: assetApproved ? asset.tagline || null : null,
     frameTheme: season?.theme_key || "emerald",
-    assetStatus: asset?.status || null,
+    assetStatus: asset?.status || (PREMIUM_TIERS.has(effectiveTier) ? "pending" : null),
+    cardPending,
+    cardPayload: assetApproved ? buildCardPayload(asset, account, registration, roles) : null,
   };
+
+  return manifest;
 }
 
 export async function buildCardManifestBySlug(slug, options = {}) {
   const account = await findAccountBySlug(slug);
   if (!account) return null;
   return buildCardManifest(account, options);
+}
+
+export async function listCardAssetsForAccount(accountId) {
+  const { rows } = await pool.query(
+    `SELECT id, tier, asset_url, tagline, status, manifest_json, season_id, tournament_id, created_at, updated_at, approved_at
+     FROM player_card_assets WHERE player_account_id = $1 ORDER BY tier`,
+    [accountId],
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    tier: row.tier,
+    assetUrl: row.asset_url,
+    tagline: row.tagline,
+    status: row.status,
+    manifestJson: parseManifestJson(row.manifest_json),
+    seasonId: row.season_id,
+    tournamentId: row.tournament_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    approvedAt: row.approved_at,
+  }));
 }
 
 export async function buildMatchRosterCards(matchId) {

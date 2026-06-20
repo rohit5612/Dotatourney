@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { env } from "../config/env.js";
+import { pool } from "../db/pool.js";
 
 const BRAND_SHORT = "BPC League";
 const BRAND_FULL = "Bharat Pro Circuit League";
@@ -529,4 +530,194 @@ export async function sendPlayerPasswordResetEmail({ to, resetUrl }) {
     audience: "player",
   });
   await sendMail({ to, subject, text, html });
+}
+
+function formatInr(amount) {
+  return `₹${Number(amount || 0).toLocaleString("en-IN")}`;
+}
+
+function receiptTableHtml({
+  lineItems,
+  subtotal,
+  coinDiscount,
+  coinsApplied,
+  totalPaise,
+  cardTier,
+  bundleLabel,
+  paymentRef,
+  orderId,
+  paidAt,
+}) {
+  const bundleItem = (lineItems || [])[0];
+  const bundleName = bundleLabel || bundleItem?.label || bundleItem?.bundleLabel || "Registration bundle";
+  const bundleAmount = bundleItem?.amount ?? subtotal;
+
+  const tierLabel = bundleLabel || (cardTier && cardTier !== "default" ? cardTier : "");
+  const paidRupee = (Number(totalPaise || 0) / 100).toFixed(2);
+
+  return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0 0;border-top:1px solid #27272f;padding-top:16px;">
+      <tr>
+        <td style="padding:8px 0;color:#a1a1aa;font-size:14px;">${escapeHtml(bundleName)}</td>
+        <td style="padding:8px 0;color:#fff;font-size:14px;text-align:right;">${formatInr(bundleAmount)}</td>
+      </tr>
+      <tr><td colspan="2" style="padding:8px 0;border-top:1px solid #27272f;"></td></tr>
+      <tr>
+        <td style="padding:4px 0;color:#a1a1aa;font-size:14px;">Subtotal</td>
+        <td style="padding:4px 0;color:#fff;font-size:14px;text-align:right;">${formatInr(subtotal)}</td>
+      </tr>
+      ${
+        Number(coinsApplied || coinDiscount) > 0
+          ? `<tr>
+        <td style="padding:4px 0;color:#a1a1aa;font-size:14px;">BPC coin discount</td>
+        <td style="padding:4px 0;color:#5eead4;font-size:14px;text-align:right;">−${formatInr(coinsApplied || coinDiscount)}</td>
+      </tr>`
+          : ""
+      }
+      <tr>
+        <td style="padding:8px 0;color:#fff;font-size:15px;font-weight:600;">Amount paid</td>
+        <td style="padding:8px 0;color:#e9a84a;font-size:15px;font-weight:600;text-align:right;">₹${paidRupee}</td>
+      </tr>
+      ${tierLabel ? `<tr><td colspan="2" style="padding:8px 0 0;color:#71717a;font-size:13px;">Bundle: <strong style="color:#a1a1aa;">${escapeHtml(tierLabel)}</strong></td></tr>` : ""}
+      <tr><td colspan="2" style="padding:8px 0 0;color:#71717a;font-size:12px;">Payment ref: ${escapeHtml(paymentRef || "—")}<br />Order: ${escapeHtml(orderId || "—")}<br />Paid: ${escapeHtml(paidAt || "")}</td></tr>
+    </table>
+    <p style="margin:12px 0 0;font-size:12px;color:#71717a;">This is a payment receipt, not a tax invoice.</p>
+  `;
+}
+
+/**
+ * @param {{ to: string; name: string; bpcId: string }} params
+ */
+export async function sendPlayerWelcomeEmail({ to, name, bpcId }) {
+  const displayName = name || "there";
+  const idLabel = bpcId || "your player ID";
+  const dashboardUrl = `${env.appUrl.replace(/\/$/, "")}/dashboard`;
+  const subject = `Welcome to ${BRAND_SHORT} — your player ID is ${idLabel}`;
+  const text = [
+    `Hi ${displayName},`,
+    ``,
+    `Welcome to ${BRAND_LINE}!`,
+    ``,
+    `Your permanent player ID is ${idLabel}. You'll use this across tournaments and your player card.`,
+    ``,
+    `Next steps:`,
+    `- Link Steam and Discord from your dashboard if you haven't already`,
+    `- Browse open tournaments and complete checkout when you're ready`,
+  ].join("\n");
+  const innerHtml = `
+    <p style="margin:0;font-size:15px;color:#d4d4d8;">Hi <strong style="color:#fff;">${escapeHtml(displayName)}</strong>,</p>
+    <p style="margin:16px 0 0;font-size:14px;color:#a1a1aa;">Welcome to ${escapeHtml(BRAND_LINE)}. Your account is ready.</p>
+    <p style="margin:20px 0 0;font-size:13px;letter-spacing:0.12em;text-transform:uppercase;color:#71717a;">Your player ID</p>
+    <p style="margin:8px 0 0;font-size:28px;font-weight:700;color:#e9a84a;letter-spacing:0.04em;">${escapeHtml(idLabel)}</p>
+    <p style="margin:16px 0 0;font-size:14px;color:#a1a1aa;">Link Steam and Discord from your dashboard, then register for open tournaments when you're ready.</p>
+    ${buttonHtml(dashboardUrl, "Open dashboard")}
+  `;
+  const html = baseEmailWrapper({
+    title: "Welcome to BPC League",
+    preheader: `Your player ID is ${idLabel}.`,
+    innerHtml,
+    audience: "player",
+  });
+  await sendMail({ to, subject, text, html });
+}
+
+/**
+ * @param {{
+ *   to: string;
+ *   name: string;
+ *   tournamentName: string;
+ *   publicCode: string;
+ *   lineItems: Array<{ key?: string; label?: string; amount?: number }>;
+ *   subtotal: number;
+ *   coinDiscount?: number;
+ *   coinsApplied?: number;
+ *   totalPaise: number;
+ *   cardTier?: string;
+ *   bundleLabel?: string;
+ *   paymentRef?: string;
+ *   orderId?: string;
+ *   paidAt?: string;
+ * }} params
+ */
+export async function sendPaidRegistrationEmail({
+  to,
+  name,
+  tournamentName,
+  publicCode,
+  lineItems,
+  subtotal,
+  coinDiscount,
+  coinsApplied,
+  totalPaise,
+  cardTier,
+  bundleLabel,
+  paymentRef,
+  orderId,
+  paidAt,
+}) {
+  const tour = tournamentName || DEFAULT_TOURNAMENT_NAME;
+  const code = publicCode || "";
+  const subject = `Payment received — ${tour}`;
+  const paidRupee = (Number(totalPaise || 0) / 100).toFixed(2);
+  const text = [
+    `Hi ${name || "there"},`,
+    ``,
+    `We received your payment of ₹${paidRupee} for ${tour} (registration ${code}).`,
+    `An admin will review and approve your registration shortly. You'll receive another email when approved or rejected.`,
+    ``,
+    `— ${tour}`,
+  ].join("\n");
+  const receiptHtml = receiptTableHtml({
+    lineItems,
+    subtotal,
+    coinDiscount,
+    coinsApplied,
+    totalPaise,
+    cardTier,
+    bundleLabel,
+    paymentRef,
+    orderId,
+    paidAt,
+  });
+  const innerHtml = `
+    <p style="margin:0;font-size:15px;color:#d4d4d8;">Hi <strong style="color:#fff;">${escapeHtml(name || "there")}</strong>,</p>
+    <p style="margin:16px 0 0;font-size:14px;color:#a1a1aa;">Payment received for <strong style="color:#fff;">${escapeHtml(tour)}</strong>. Registration <strong style="color:#fff;">${escapeHtml(code)}</strong> is confirmed.</p>
+    <p style="margin:12px 0 0;font-size:14px;color:#71717a;">An admin will review and approve your registration shortly. You'll receive another email when it's approved or rejected.</p>
+    <p style="margin:20px 0 0;font-size:13px;letter-spacing:0.12em;text-transform:uppercase;color:#71717a;">Payment receipt</p>
+    ${receiptHtml}
+  `;
+  const html = baseEmailWrapper({
+    title: "Payment received",
+    preheader: `Payment received for ${tour}. Pending admin approval.`,
+    innerHtml,
+    audience: "player",
+  });
+  await sendMail({ to, subject, text, html });
+}
+
+/**
+ * Send welcome email once when account has password + verified email.
+ * @param {object} account row from player_accounts
+ */
+export async function maybeSendPlayerWelcomeEmail(account) {
+  if (!account?.email || String(account.email).includes("@migrated.")) return false;
+  if (account.welcome_email_sent_at) return false;
+  if (!account.password_hash) return false;
+  if (!account.email_verified_at) return false;
+
+  const displayName =
+    account.display_name || account.steam_persona || String(account.email).split("@")[0] || "Player";
+
+  await sendPlayerWelcomeEmail({
+    to: account.email,
+    name: displayName,
+    bpcId: account.bpc_id || "",
+  });
+
+  await pool.query(
+    `UPDATE player_accounts SET welcome_email_sent_at = NOW(), updated_at = NOW()
+     WHERE id = $1 AND welcome_email_sent_at IS NULL`,
+    [account.id],
+  );
+  return true;
 }

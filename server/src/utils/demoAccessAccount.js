@@ -1,6 +1,7 @@
 import { updatePlayerAccount } from "../services/playerAccountRepository.js";
 
 const DEMO_EMAIL_RE = /^demo\.access0?([1-9])@bpcl\.test$/i;
+const DEMO_PLAYER_CARD_SLOTS = new Set([1, 2]);
 
 const DEMO_ROLE_SETS = [
   ["Carry"],
@@ -24,6 +25,13 @@ export function demoAccessSlot(accountOrEmail) {
     .toLowerCase()
     .match(DEMO_EMAIL_RE);
   return match ? Number(match[1]) : null;
+}
+
+/** Demo slots 1–2 render the player/basic card tier for QA. */
+export function demoAccessCardTier(accountOrEmail) {
+  const slot = demoAccessSlot(accountOrEmail);
+  if (DEMO_PLAYER_CARD_SLOTS.has(slot)) return "player";
+  return null;
 }
 
 function demoProfileDefaults(account, slot) {
@@ -97,10 +105,37 @@ export function buildDemoAccessPatch(account) {
   return Object.keys(patch).length ? patch : null;
 }
 
+async function ensureDemoAccessPlayerCard(account, slot) {
+  if (!DEMO_PLAYER_CARD_SLOTS.has(slot)) return;
+
+  const { ensurePendingCardAsset } = await import("../services/paymentService.js");
+  const { pool } = await import("../db/pool.js");
+
+  const { rows: seasonRows } = await pool.query(
+    `SELECT id, tournament_id FROM seasons
+     WHERE status IN ('active', 'upcoming')
+     ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, number DESC
+     LIMIT 1`,
+  );
+  const season = seasonRows[0];
+  if (!season?.tournament_id) return;
+
+  await ensurePendingCardAsset(account.id, {
+    tier: "player",
+    tournamentId: season.tournament_id,
+  });
+}
+
 export async function ensureDemoAccessAccountReady(account) {
   if (!isDemoAccessAccount(account)) return account;
   const patch = buildDemoAccessPatch(account);
-  if (!patch) return account;
-  const updated = await updatePlayerAccount(account.id, patch);
-  return updated || account;
+  let updated = account;
+  if (patch) {
+    updated = (await updatePlayerAccount(account.id, patch)) || account;
+  }
+  const slot = demoAccessSlot(updated);
+  if (slot) {
+    await ensureDemoAccessPlayerCard(updated, slot);
+  }
+  return updated;
 }

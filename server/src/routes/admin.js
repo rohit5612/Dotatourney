@@ -468,6 +468,9 @@ router.put("/tournaments/:id/commerce", requireAdmin, async (req, res, next) => 
         cardTiers: z.record(z.string(), z.object({
           enabled: z.boolean().optional(),
           bundledPriceRupees: z.number().int().min(0).optional(),
+          registrationCostRupees: z.number().int().min(0).optional(),
+          cardCostRupees: z.number().int().min(0).optional(),
+          discountPercent: z.number().min(0).max(100).optional(),
           label: z.string().max(80).optional(),
           description: z.string().max(200).optional(),
         })).optional(),

@@ -308,9 +308,25 @@ export const api = {
     return request(`/admin/player-accounts${suffix}`);
   },
   getPlayerAccount: (id) => request(`/admin/player-accounts/${id}`),
+  listPortraitGifs: () => request("/admin/player-accounts/portrait-gifs"),
+  uploadPortraitGifToCatalog: (payload) =>
+    request("/admin/player-accounts/portrait-gifs", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   patchPlayerAccount: (id, payload) =>
     request(`/admin/player-accounts/${id}`, {
       method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  uploadPlayerPortraitGif: (id, payload) =>
+    request(`/admin/player-accounts/${id}/portrait-gif`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  uploadPlayerCard: (id, payload) =>
+    request(`/admin/player-accounts/${id}/card`, {
+      method: "POST",
       body: JSON.stringify(payload),
     }),
   getSubstitutes: (tournamentId, params = {}) => {

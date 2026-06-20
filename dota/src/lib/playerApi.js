@@ -170,17 +170,11 @@ export const playerApi = {
   },
 };
 
-/** Load Razorpay checkout script once. */
-export function loadRazorpayScript() {
-  return new Promise((resolve, reject) => {
-    if (window.Razorpay) {
-      resolve(window.Razorpay);
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.onload = () => resolve(window.Razorpay);
-    script.onerror = () => reject(new Error("Failed to load Razorpay"));
-    document.body.appendChild(script);
-  });
+export async function pollCheckoutPaid(orderId, { maxAttempts = 30, intervalMs = 2000 } = {}) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const status = await playerApi.checkoutStatus(orderId);
+    if (status.status === "paid") return status;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return null;
 }

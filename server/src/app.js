@@ -1,11 +1,13 @@
 import cors from "cors";
 import express from "express";
+import path from "path";
 import { env } from "./config/env.js";
+import { getPortraitGifStaticDir } from "./services/portraitGifService.js";
 import adminRouter from "./routes/admin.js";
 import publicRouter from "./routes/public.js";
 import tournamentsRouter from "./routes/tournaments.js";
 import playerRouter from "./routes/player.js";
-import { handleRazorpayWebhook } from "./services/paymentService.js";
+import { handleCashfreeWebhook } from "./services/paymentService.js";
 
 function buildAllowedOrigins() {
   const fromEnv = Array.isArray(env.corsOrigin) ? env.corsOrigin : [env.corsOrigin];
@@ -49,13 +51,14 @@ app.use((_req, res, next) => {
 app.use(cors(corsOptions));
 
 app.post(
-  "/api/webhooks/razorpay",
+  "/api/webhooks/cashfree",
   express.raw({ type: "application/json" }),
   async (req, res, next) => {
     try {
-      const signature = req.get("x-razorpay-signature") || "";
+      const signature = req.get("x-webhook-signature") || "";
+      const timestamp = req.get("x-webhook-timestamp") || "";
       const rawBody = req.body instanceof Buffer ? req.body.toString("utf8") : String(req.body || "");
-      const result = await handleRazorpayWebhook(rawBody, signature);
+      const result = await handleCashfreeWebhook(rawBody, signature, timestamp);
       res.json(result);
     } catch (error) {
       next(error);
@@ -64,6 +67,18 @@ app.post(
 );
 
 app.use(express.json({ limit: "25mb" }));
+
+app.use(
+  "/cards/gifs",
+  express.static(getPortraitGifStaticDir(), {
+    maxAge: env.nodeEnv === "production" ? "365d" : 0,
+    setHeaders(res, filePath) {
+      if (path.extname(filePath).toLowerCase() === ".gif") {
+        res.setHeader("Content-Type", "image/gif");
+      }
+    },
+  }),
+);
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });

@@ -8,6 +8,7 @@ import { AnnouncementsPublicPage } from "./AnnouncementsPublicPage.jsx";
 import { CommunityPage } from "./CommunityPage.jsx";
 import { MatchPublicPage } from "./MatchPublicPage.jsx";
 import { PublicPlayerProfilePage } from "./PublicPlayerProfilePage.jsx";
+import { WhatsNewPage } from "./WhatsNewPage.jsx";
 import { SeasonDetailPage } from "./SeasonDetailPage.jsx";
 import { SeasonsHubPage } from "./SeasonsHubPage.jsx";
 import {
@@ -171,6 +172,14 @@ export function PublicCommunityRoute() {
   return (
     <PageContentShell path="/community">
       <CommunityPage />
+    </PageContentShell>
+  );
+}
+
+export function PublicWhatsNewRoute() {
+  return (
+    <PageContentShell path="/whats-new">
+      <WhatsNewPage />
     </PageContentShell>
   );
 }

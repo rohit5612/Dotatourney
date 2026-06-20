@@ -157,13 +157,13 @@ export function SiteNavbar() {
           </button>
         </div>
         <nav className="site-navbar-drawer__nav" aria-label="Mobile">
-          {navLinks.map(({ href, label }) => {
+          {navLinks.map(({ href, label, highlight }) => {
             const active = isNavActive(path, href);
             return (
               <Link
                 key={href}
                 to={href}
-                className={`site-navbar-drawer__link${active ? " site-navbar-drawer__link--active" : ""}`}
+                className={`site-navbar-drawer__link${active ? " site-navbar-drawer__link--active" : ""}${highlight ? " site-navbar-drawer__link--highlight" : ""}`}
                 aria-current={active ? "page" : undefined}
               >
                 {label}
@@ -200,13 +200,13 @@ export function SiteNavbar() {
         </Link>
 
         <nav className="site-navbar__nav site-navbar__nav--public" aria-label="Main">
-          {navLinks.map(({ href, label }) => {
+          {navLinks.map(({ href, label, highlight }) => {
             const active = isNavActive(path, href);
             return (
               <Link
                 key={href}
                 to={href}
-                className={`site-navbar__link${active ? " site-navbar__link--active" : ""}`}
+                className={`site-navbar__link${active ? " site-navbar__link--active" : ""}${highlight ? " site-navbar__link--highlight" : ""}`}
                 aria-current={active ? "page" : undefined}
               >
                 <span className="site-navbar__link-label">{label}</span>

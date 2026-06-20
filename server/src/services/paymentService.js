@@ -4,11 +4,12 @@ import { syncRegistrationCapState } from "./registrationRepository.js";
 import { env } from "../config/env.js";
 import { eligibilityFromAccount } from "./playerAccountRepository.js";
 import {
-  createRazorpayOrder,
-  publicRazorpayKeyId,
-  razorpayConfigured,
-  verifyRazorpayWebhookSignature,
-} from "./razorpayService.js";
+  createCashfreeOrder,
+  cashfreeConfigured,
+  publicCashfreeMode,
+  verifyCashfreeWebhookSignature,
+  fetchCashfreeOrder,
+} from "./cashfreeService.js";
 import {
   getCoinBalance,
   grantCoins,
@@ -17,11 +18,18 @@ import {
 import {
   getOrCreateCommerceConfig,
   publicCommerceConfig,
-  DEFAULT_CARD_TIERS,
 } from "./commerceConfigRepository.js";
-import { sendPlayerRegistrationSubmittedEmail } from "./emailService.js";
+import { resolveBundleLineItem } from "./commerceBundle.js";
+import { sendPaidRegistrationEmail } from "./emailService.js";
 
 export const CARD_TIERS = ["default", "player", "gold", "holo"];
+
+const CHECKOUT_PENDING_TTL_MINUTES = 30;
+
+function checkoutReturnUrl(orderId) {
+  const base = env.appUrl.replace(/\/$/, "");
+  return `${base}/dashboard/checkout/return?orderId=${encodeURIComponent(orderId)}`;
+}
 
 function rupeesToPaise(rupees) {
   return Math.max(0, Math.round(Number(rupees) * 100));
@@ -32,23 +40,8 @@ export async function loadCommerceConfig(tournamentId) {
   return publicCommerceConfig(row);
 }
 
-export function buildCheckoutLineItems(config, cardTier, { bundled = true } = {}) {
-  const tier = CARD_TIERS.includes(cardTier) ? cardTier : "default";
-  const tiers = config?.cardTiers || DEFAULT_CARD_TIERS;
-  const regFee = config?.registrationFeeRupees ?? 300;
-  const items = [{ key: "registration", label: "Registration fee", amount: regFee }];
-  if (tier !== "default") {
-    const tierConfig = tiers[tier];
-    if (tierConfig?.enabled !== false) {
-      const amount = bundled ? (tierConfig?.bundledPriceRupees ?? 0) : (tierConfig?.bundledPriceRupees ?? 0);
-      items.push({
-        key: `card_${tier}`,
-        label: tierConfig?.label || `${tier} card upgrade`,
-        amount,
-      });
-    }
-  }
-  return items;
+export function buildCheckoutLineItems(config, cardTier) {
+  return [resolveBundleLineItem(config, cardTier)];
 }
 
 export function computeCheckoutTotals(lineItems, coinBalance, coinsToApply = null, minCashRupees = 100) {
@@ -118,7 +111,7 @@ export async function previewCheckout(account, tournamentSlug, body) {
 
   const commerce = await loadCommerceConfig(tournament.id);
   const cardTier = CARD_TIERS.includes(body.cardTier) ? body.cardTier : "default";
-  const lineItems = buildCheckoutLineItems(commerce, cardTier, { bundled: true });
+  const lineItems = buildCheckoutLineItems(commerce, cardTier);
   const coinBalance = await getCoinBalance(account.id);
   const totals = computeCheckoutTotals(
     lineItems,
@@ -133,8 +126,19 @@ export async function previewCheckout(account, tournamentSlug, body) {
     cardTier,
     ...totals,
     coinBalance,
-    provider: razorpayConfigured() ? "razorpay" : "manual",
+    provider: cashfreeConfigured() ? "cashfree" : "manual",
   };
+}
+
+async function expireStaleCheckoutOrders(client, tournamentId, playerAccountId) {
+  await client.query(
+    `UPDATE checkout_orders
+     SET status = 'expired', updated_at = NOW()
+     WHERE tournament_id = $1 AND player_account_id = $2
+       AND status = 'pending'
+       AND created_at < NOW() - ($3::text || ' minutes')::interval`,
+    [tournamentId, playerAccountId, String(CHECKOUT_PENDING_TTL_MINUTES)],
+  );
 }
 
 async function findActiveRegistration(client, tournamentId, playerAccountId) {
@@ -167,8 +171,10 @@ export async function confirmCheckout(account, tournamentSlug, body) {
       throw err;
     }
 
+    await expireStaleCheckoutOrders(client, tournament.id, account.id);
+
     const orderId = randomUUID();
-    const provider = razorpayConfigured() ? "razorpay" : "manual";
+    const provider = cashfreeConfigured() ? "cashfree" : "manual";
 
     const { rows: orderRows } = await client.query(
       `INSERT INTO checkout_orders (
@@ -190,27 +196,37 @@ export async function confirmCheckout(account, tournamentSlug, body) {
         preview.coinsApplied,
       ],
     );
-    const order = orderRows[0];
 
-    let razorpayOrderId = null;
-    let keyId = publicRazorpayKeyId();
+    let paymentSessionId = null;
+    let providerOrderId = null;
 
-    if (provider === "razorpay") {
-      const rzOrder = await createRazorpayOrder({
-        amount: preview.totalPaise,
+    if (provider === "cashfree") {
+      const cfOrder = await createCashfreeOrder({
+        orderAmountPaise: preview.totalPaise,
         currency: preview.currency,
-        receipt: orderId,
-        notes: {
-          tournament_id: tournament.id,
-          player_account_id: account.id,
-          card_tier: preview.cardTier,
-        },
-      });
-      razorpayOrderId = rzOrder.id;
-      await client.query(`UPDATE checkout_orders SET razorpay_order_id = $2, updated_at = NOW() WHERE id = $1`, [
         orderId,
-        razorpayOrderId,
-      ]);
+        customer: {
+          id: account.id,
+          name: account.display_name || account.steam_persona || account.email?.split("@")[0] || "Player",
+          email: account.email,
+          phone: account.phone_number || "9999999999",
+        },
+        returnUrl: checkoutReturnUrl(orderId),
+        note: `tournament:${tournament.id}`,
+      });
+      providerOrderId = cfOrder?.order_id || orderId;
+      paymentSessionId = cfOrder?.payment_session_id || null;
+      if (!paymentSessionId) {
+        const err = new Error("Cashfree did not return a payment session");
+        err.status = 502;
+        throw err;
+      }
+      await client.query(
+        `UPDATE checkout_orders
+         SET provider_order_id = $2, payment_session_id = $3, updated_at = NOW()
+         WHERE id = $1`,
+        [orderId, providerOrderId, paymentSessionId],
+      );
     }
 
     await client.query("COMMIT");
@@ -220,8 +236,8 @@ export async function confirmCheckout(account, tournamentSlug, body) {
       provider,
       amount: preview.totalPaise,
       currency: preview.currency,
-      keyId,
-      razorpayOrderId,
+      paymentSessionId,
+      cashfreeMode: publicCashfreeMode(),
       lineItems: preview.lineItems,
       coinDiscount: preview.coinDiscount,
       manualMode: provider === "manual",
@@ -234,7 +250,48 @@ export async function confirmCheckout(account, tournamentSlug, body) {
   }
 }
 
+/**
+ * Poll Cashfree for PAID status and fulfill locally (webhook fallback for localhost / delayed webhooks).
+ */
+export async function reconcileCashfreeCheckoutOrder(orderId, playerAccountId) {
+  if (!cashfreeConfigured()) return false;
+
+  const { rows } = await pool.query(
+    `SELECT * FROM checkout_orders WHERE id = $1 AND player_account_id = $2`,
+    [orderId, playerAccountId],
+  );
+  const order = rows[0];
+  if (!order || order.status === "paid" || order.provider !== "cashfree") return false;
+
+  const cfOrderId = order.provider_order_id || order.id;
+  let cfOrder;
+  try {
+    cfOrder = await fetchCashfreeOrder(cfOrderId);
+  } catch (err) {
+    console.error("[cashfree] reconcile fetch order failed:", err?.message || err);
+    return false;
+  }
+
+  const orderStatus = String(cfOrder?.order_status || "").toUpperCase();
+  if (orderStatus !== "PAID") return false;
+
+  const paymentId = `cf-reconcile-${cfOrderId}`;
+  await fulfillPaidCheckout({
+    checkoutOrderId: order.id,
+    paymentId,
+    paymentProvider: "cashfree",
+    paymentRef: paymentId,
+  });
+  return true;
+}
+
 export async function getCheckoutOrderStatus(orderId, playerAccountId) {
+  try {
+    await reconcileCashfreeCheckoutOrder(orderId, playerAccountId);
+  } catch (err) {
+    console.error("[cashfree] reconcile failed:", err?.message || err);
+  }
+
   const { rows } = await pool.query(
     `SELECT id, status, provider, total_paise, currency, card_tier, paid_at, registration_id, created_at
      FROM checkout_orders
@@ -266,7 +323,7 @@ export async function getCheckoutOrderStatus(orderId, playerAccountId) {
 export async function fulfillPaidCheckout({
   checkoutOrderId,
   paymentId = null,
-  paymentProvider = "razorpay",
+  paymentProvider = "cashfree",
   paymentRef = null,
 }) {
   const client = await pool.connect();
@@ -404,6 +461,13 @@ export async function fulfillPaidCheckout({
 
     await client.query("COMMIT");
 
+    if (order.card_tier && order.card_tier !== "default") {
+      await ensurePendingCardAsset(order.player_account_id, {
+        tier: order.card_tier,
+        tournamentId: order.tournament_id,
+      });
+    }
+
     try {
       const { rows: tourRows } = await pool.query(`SELECT name FROM tournaments WHERE id = $1`, [order.tournament_id]);
       const { rows: regRows } = await pool.query(
@@ -413,15 +477,30 @@ export async function fulfillPaidCheckout({
       const reg = regRows[0];
       const email = reg?.email || account?.email;
       if (email && !String(email).includes("@migrated.")) {
-        await sendPlayerRegistrationSubmittedEmail({
+        const lineItems = Array.isArray(order.line_items)
+          ? order.line_items
+          : typeof order.line_items === "string"
+            ? JSON.parse(order.line_items)
+            : [];
+        await sendPaidRegistrationEmail({
           to: email,
           name: reg?.name || account?.display_name || account?.steam_persona || "",
           tournamentName: tourRows[0]?.name || "BPC League — Bharat Pro Circuit League",
           publicCode: reg?.public_code || account?.bpc_id || "",
+          lineItems,
+          subtotal: order.subtotal,
+          coinDiscount: order.coin_discount,
+          coinsApplied: order.coins_applied,
+          totalPaise: order.total_paise,
+          cardTier: order.card_tier,
+          bundleLabel: lineItems[0]?.label || lineItems[0]?.bundleLabel,
+          paymentRef: paymentRef || paymentId || "",
+          orderId: order.id,
+          paidAt: new Date().toISOString(),
         });
       }
     } catch (emailErr) {
-      console.error("[email] checkout registration submitted mail failed:", emailErr?.message || emailErr);
+      console.error("[email] paid registration mail failed:", emailErr?.message || emailErr);
     }
 
     return { ok: true, registrationId, orderId: order.id };
@@ -433,9 +512,9 @@ export async function fulfillPaidCheckout({
   }
 }
 
-/** Dev/manual provider: simulate payment when Razorpay keys are absent. */
+/** Dev/manual provider: simulate payment when Cashfree keys are absent. */
 export async function simulateManualPayment(orderId, playerAccountId) {
-  if (razorpayConfigured() && env.nodeEnv === "production") {
+  if (cashfreeConfigured() && env.nodeEnv === "production") {
     const err = new Error("Manual payment simulation is disabled in production");
     err.status = 403;
     throw err;
@@ -451,7 +530,7 @@ export async function simulateManualPayment(orderId, playerAccountId) {
     throw err;
   }
   if (order.provider !== "manual") {
-    const err = new Error("This order uses Razorpay; complete payment via checkout");
+    const err = new Error("This order uses Cashfree; complete payment via checkout");
     err.status = 400;
     throw err;
   }
@@ -463,8 +542,8 @@ export async function simulateManualPayment(orderId, playerAccountId) {
   });
 }
 
-export async function handleRazorpayWebhook(rawBody, signature) {
-  const verified = verifyRazorpayWebhookSignature(rawBody, signature);
+export async function handleCashfreeWebhook(rawBody, signature, timestamp) {
+  const verified = verifyCashfreeWebhookSignature(rawBody, signature, timestamp);
   let payload;
   try {
     payload = typeof rawBody === "string" ? JSON.parse(rawBody) : rawBody;
@@ -472,16 +551,19 @@ export async function handleRazorpayWebhook(rawBody, signature) {
     payload = {};
   }
 
-  const eventType = payload?.event || "";
-  const paymentEntity = payload?.payload?.payment?.entity || {};
-  const paymentId = paymentEntity.id || null;
-  const orderId = paymentEntity.order_id || payload?.payload?.order?.entity?.id || null;
+  const eventType = payload?.type || payload?.event || "";
+  const data = payload?.data || payload?.payload || {};
+  const orderEntity = data?.order || {};
+  const paymentEntity = data?.payment || {};
+  const providerOrderId = orderEntity.order_id || paymentEntity.order_id || null;
+  const paymentId = paymentEntity.cf_payment_id || paymentEntity.payment_id || null;
+  const paymentStatus = String(paymentEntity.payment_status || orderEntity.order_status || "").toUpperCase();
 
   const webhookId = randomUUID();
   await pool.query(
     `INSERT INTO payment_webhooks (id, provider, event_type, payment_id, order_id, signature_verified, payload)
-     VALUES ($1, 'razorpay', $2, $3, $4, $5, $6::jsonb)`,
-    [webhookId, eventType, paymentId, orderId, verified, JSON.stringify(payload)],
+     VALUES ($1, 'cashfree', $2, $3, $4, $5, $6::jsonb)`,
+    [webhookId, eventType, paymentId, providerOrderId, verified, JSON.stringify(payload)],
   );
 
   if (!verified) {
@@ -490,15 +572,29 @@ export async function handleRazorpayWebhook(rawBody, signature) {
     throw err;
   }
 
-  if (eventType !== "payment.captured") {
-    return { ok: true, ignored: true, eventType };
+  const successEvents = new Set([
+    "PAYMENT_SUCCESS_WEBHOOK",
+    "PAYMENT_USER_CONFIRMED",
+    "PAYMENT_CHARGES_WEBHOOK",
+  ]);
+  const isPaid =
+    successEvents.has(eventType) ||
+    paymentStatus === "SUCCESS" ||
+    paymentStatus === "PAID" ||
+    String(orderEntity.order_status || "").toUpperCase() === "PAID";
+
+  if (!isPaid) {
+    return { ok: true, ignored: true, eventType, paymentStatus };
   }
 
-  if (!orderId) {
+  if (!providerOrderId) {
     return { ok: true, ignored: true, reason: "missing order id" };
   }
 
-  const { rows } = await pool.query(`SELECT id FROM checkout_orders WHERE razorpay_order_id = $1`, [orderId]);
+  const { rows } = await pool.query(
+    `SELECT id FROM checkout_orders WHERE provider_order_id = $1 OR id::text = $1`,
+    [providerOrderId],
+  );
   const checkoutOrder = rows[0];
   if (!checkoutOrder) {
     return { ok: true, ignored: true, reason: "checkout order not found" };
@@ -508,7 +604,7 @@ export async function handleRazorpayWebhook(rawBody, signature) {
     const result = await fulfillPaidCheckout({
       checkoutOrderId: checkoutOrder.id,
       paymentId,
-      paymentProvider: "razorpay",
+      paymentProvider: "cashfree",
       paymentRef: paymentId,
     });
     await pool.query(`UPDATE payment_webhooks SET processed = TRUE WHERE id = $1`, [webhookId]);
@@ -650,16 +746,65 @@ export async function adminGrantCoins(adminUserId, playerAccountId, { delta, rea
   return entry;
 }
 
-export async function upsertCardAsset(playerAccountId, { tier, assetUrl, tagline }) {
+export async function upsertCardAsset(
+  playerAccountId,
+  { tier, assetUrl, tagline, manifestJson, seasonId, tournamentId, status },
+) {
   const id = randomUUID();
+  const nextStatus = status || "pending";
+  const manifestPayload =
+    manifestJson && typeof manifestJson === "object" ? JSON.stringify(manifestJson) : null;
   const { rows } = await pool.query(
-    `INSERT INTO player_card_assets (id, player_account_id, tier, asset_url, tagline, status)
-     VALUES ($1, $2, $3, $4, $5, 'pending')
+    `INSERT INTO player_card_assets (
+       id, player_account_id, tier, asset_url, tagline, manifest_json, season_id, tournament_id, status
+     ) VALUES ($1, $2, $3, $4, $5, COALESCE($6::jsonb, '{}'::jsonb), $7, $8, $9)
      ON CONFLICT (player_account_id, tier)
-     DO UPDATE SET asset_url = EXCLUDED.asset_url, tagline = EXCLUDED.tagline,
-                   status = 'pending', updated_at = NOW()
+     DO UPDATE SET
+       asset_url = COALESCE(NULLIF(EXCLUDED.asset_url, ''), player_card_assets.asset_url),
+       tagline = COALESCE(NULLIF(EXCLUDED.tagline, ''), player_card_assets.tagline),
+       manifest_json = CASE WHEN EXCLUDED.manifest_json <> '{}'::jsonb THEN EXCLUDED.manifest_json ELSE player_card_assets.manifest_json END,
+       season_id = COALESCE(EXCLUDED.season_id, player_card_assets.season_id),
+       tournament_id = COALESCE(EXCLUDED.tournament_id, player_card_assets.tournament_id),
+       status = CASE WHEN $9 = 'approved' THEN 'approved' ELSE player_card_assets.status END,
+       approved_at = CASE WHEN $9 = 'approved' THEN NOW() ELSE player_card_assets.approved_at END,
+       updated_at = NOW()
      RETURNING *`,
-    [id, playerAccountId, tier, assetUrl || "", tagline || ""],
+    [
+      id,
+      playerAccountId,
+      tier,
+      assetUrl || "",
+      tagline || "",
+      manifestPayload,
+      seasonId || null,
+      tournamentId || null,
+      nextStatus,
+    ],
   );
   return rows[0];
+}
+
+export async function ensurePendingCardAsset(playerAccountId, { tier, tournamentId }) {
+  if (!tier || tier === "default") return null;
+  const existing = await pool.query(
+    `SELECT id FROM player_card_assets WHERE player_account_id = $1 AND tier = $2`,
+    [playerAccountId, tier],
+  );
+  if (existing.rows[0]) return existing.rows[0];
+
+  let seasonId = null;
+  if (tournamentId) {
+    const season = await pool.query(
+      `SELECT id FROM seasons WHERE tournament_id = $1 ORDER BY number DESC LIMIT 1`,
+      [tournamentId],
+    );
+    seasonId = season.rows[0]?.id || null;
+  }
+
+  return upsertCardAsset(playerAccountId, {
+    tier,
+    tournamentId,
+    seasonId,
+    status: "pending",
+  });
 }

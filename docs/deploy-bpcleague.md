@@ -8,7 +8,7 @@ Manual hosting guide for **Netlify (frontend)** + **Hostinger VPS (API + Postgre
 |-----|------|------|
 | `https://bpcleague.in` | Netlify | React SPA (`dota/dist`) |
 | `https://www.bpcleague.in` | Netlify | 301 → apex |
-| `https://api.bpcleague.in` | Hostinger VPS | Express API, OAuth callbacks, Razorpay webhook |
+| `https://api.bpcleague.in` | Hostinger VPS | Express API, OAuth callbacks, Cashfree webhook |
 
 ---
 
@@ -187,9 +187,9 @@ EMAIL_USER=...
 EMAIL_PASS=...
 EMAIL_FROM="BPC League" <noreply@bpcleague.in>
 
-RAZORPAY_KEY_ID=rzp_live_...
-RAZORPAY_KEY_SECRET=...
-RAZORPAY_WEBHOOK_SECRET=...
+CASHFREE_CLIENT_ID=
+CASHFREE_CLIENT_SECRET=
+CASHFREE_ENV=production
 ```
 
 After editing: `pm2 reload bpcl-api`
@@ -206,7 +206,7 @@ Register these **exact** URLs:
 | Google | Authorized redirect URI | `https://api.bpcleague.in/api/player/auth/google/callback` |
 | Discord | OAuth2 redirect | `https://api.bpcleague.in/api/player/auth/discord/callback` |
 | Steam | `API_PUBLIC_URL` must be | `https://api.bpcleague.in` (no trailing slash) |
-| Razorpay | Webhook | `https://api.bpcleague.in/api/webhooks/razorpay` |
+| Cashfree | Webhook | `https://api.bpcleague.in/api/webhooks/cashfree` |
 
 Keep localhost URLs for dev (`http://localhost:3000/api/player/auth/*/callback`).
 
@@ -224,6 +224,57 @@ Keep localhost URLs for dev (`http://localhost:3000/api/player/auth/*/callback`)
 - [ ] Admin invite email links open `https://bpcleague.in/admin/...`
 - [ ] `https://bpcleague.in/robots.txt` and `/sitemap.xml` load
 - [ ] Submit sitemap in [Google Search Console](https://search.google.com/search-console)
+- [ ] `/whats-new` loads tier comparison with live prices from API
+- [ ] `/dashboard/checkout/:slug` — card preview images load from `/cards/previews/`
+- [ ] Cashfree checkout opens (inline modal); return URL `/dashboard/checkout/return` works
+- [ ] Cashfree webhook delivers at `https://api.bpcleague.in/api/webhooks/cashfree`
+
+---
+
+## Cards, checkout previews & Cashfree (Season 2)
+
+### Database migrations (API deploy)
+
+Run after pulling card/checkout changes:
+
+```bash
+cd server && npm run migrate
+```
+
+Key migrations: `046_cashfree_checkout.sql`, `048_player_card_payload.sql`, `049_card_tier_override.sql`.
+
+### Static card assets (Netlify / `dota/public`)
+
+Ship these with the frontend build:
+
+| Path | Purpose |
+|------|---------|
+| `cards/gold/frame.png`, `cards/holo/frame.png`, `cards/player/frame-base.png` | Live card frames |
+| `cards/gifs/` | Holo portrait GIFs |
+| `cards/defaultlogo.png` | Default card logo |
+| `cards/previews/default.png`, `player.png`, `gold.png`, `holo.png` | Checkout + What's New screenshot previews |
+
+### Cashfree (server `.env`)
+
+| Variable | Notes |
+|----------|-------|
+| `APP_URL` | Frontend origin — used for `return_url` → `{APP_URL}/dashboard/checkout/return?orderId=...` |
+| `CASHFREE_CLIENT_ID` / `CASHFREE_CLIENT_SECRET` | From Cashfree dashboard |
+| `CASHFREE_ENV` | `production` for go-live; omit keys locally → manual/simulate checkout |
+
+**Cashfree dashboard:** webhook `https://api.bpcleague.in/api/webhooks/cashfree`
+
+Without Cashfree keys, checkout uses `manual` provider (dev only).
+
+### Content Security Policy (if enforced)
+
+Allow Cashfree SDK at runtime:
+
+```
+script-src https://sdk.cashfree.com
+```
+
+Add via Netlify `_headers` or site config if checkout fails to load the payment widget.
 
 ---
 

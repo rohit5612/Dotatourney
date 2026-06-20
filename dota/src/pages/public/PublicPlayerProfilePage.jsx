@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { HiOutlineArrowLeft, HiOutlineStar, HiOutlineTrophy } from "react-icons/hi2";
-import { BpclCard } from "../../components/cards/BpclCard.jsx";
+import { PlayerProfileCard } from "../../components/cards/PlayerProfileCard.jsx";
 import { PageLoadingSpinner } from "../../components/PageLoadingSpinner.jsx";
 import { TeamLogoImg } from "../../components/TeamLogoImg.jsx";
 import { SITE_BRAND_SHORT } from "../../constants/siteMeta.js";
@@ -10,7 +10,18 @@ import { usePublicCachedQuery } from "../../hooks/usePublicCachedQuery.js";
 import { useShowMoreList } from "../../hooks/useShowMoreList.js";
 import { teamLogoForName } from "../player/dashboardTeamCard.js";
 import { getMatchDisplayScores } from "../../utils/schedule.js";
+import {
+  premiumAboutClass,
+  premiumCardGlowClass,
+  premiumHeroBandClass,
+  premiumLayoutClass,
+  premiumShineTextClass,
+  premiumTierPanelClass,
+} from "../../utils/cardTierEffects.js";
+import { resolveAccountAvatarUrl } from "../../utils/resolvePlayerAvatar.js";
 import "../../components/cards/CardTierStyles.css";
+import "../../styles/card-tier-effects.css";
+import "../../styles/card-tier-effects-holo.css";
 
 const TIER_LABELS = {
   holo: "Holo",
@@ -26,9 +37,21 @@ function formatDate(value) {
 
 function tierBadgeClass(tier) {
   if (tier === "gold") return "player-profile__tier-badge player-profile__tier-badge--gold";
-  if (tier === "holo") return "player-profile__tier-badge player-profile__tier-badge--holo";
+  if (tier === "holo") return "player-profile__tier-badge player-profile__tier-badge--holo-premium";
   if (tier === "player") return "player-profile__tier-badge player-profile__tier-badge--player";
   return "player-profile__tier-badge";
+}
+
+function TierBadge({ tier }) {
+  const label = TIER_LABELS[tier] || "Standard";
+  if (tier === "holo") {
+    return (
+      <span className="player-profile__tier-badge player-profile__tier-badge--holo-premium">
+        <span className="player-profile__tier-badge-label">{label}</span>
+      </span>
+    );
+  }
+  return <span className={tierBadgeClass(tier)}>{label}</span>;
 }
 
 function recognitionBadgeClass(kind) {
@@ -246,9 +269,22 @@ export function PublicPlayerProfilePage() {
   const account = profile?.account;
   const card = profile?.card;
   const cardTier = card?.tier || "default";
+  const layoutFxClass = premiumLayoutClass(cardTier);
+  const profilePanelClass = (extra = "") =>
+    premiumTierPanelClass(cardTier, `community-glass player-profile__panel ${extra}`.trim());
+  const profileHeroPanelClass = premiumTierPanelClass(
+    cardTier,
+    "community-glass community-glass--liquid player-profile__panel player-profile__panel--hero",
+  );
+  const heroBandClass = premiumHeroBandClass(cardTier);
+  const aboutFxClass = premiumAboutClass(cardTier);
+  const holoCaptionShineClass = cardTier === "holo" ? premiumShineTextClass(cardTier) : "";
+  const heroTitleShineClass =
+    cardTier === "gold" ? premiumShineTextClass(cardTier, "hero") : holoCaptionShineClass;
+  const bpcIdShineClass = holoCaptionShineClass;
   const memberSince = formatDate(account?.createdAt);
   const roles = account?.preferredRoles?.length ? account.preferredRoles.join(", ") : null;
-  const avatarUrl = account?.steamAvatarUrl || account?.avatarUrl || "";
+  const avatarUrl = resolveAccountAvatarUrl(account);
   const recognitions = profile?.recognitions || [];
   const currentTeam = profile?.currentTeam;
   const aboutTeamLogoUrl =
@@ -282,8 +318,11 @@ export function PublicPlayerProfilePage() {
   }, [currentTeam, account?.slug]);
 
   return (
-    <div className="player-profile-layout community-page-layout">
-      <section className="community-page__hero-band player-profile__hero-band" aria-labelledby="player-profile-title">
+    <div className={`player-profile-layout community-page-layout${layoutFxClass ? ` ${layoutFxClass}` : ""}`}>
+      <section
+        className={`community-page__hero-band player-profile__hero-band${heroBandClass ? ` ${heroBandClass}` : ""}`}
+        aria-labelledby="player-profile-title"
+      >
         <div className="community-page__hero-overlay" aria-hidden="true" />
         <div className="community-page__hero-inner player-profile__hero-inner">
           <Link to="/community" className="player-profile__back">
@@ -312,12 +351,23 @@ export function PublicPlayerProfilePage() {
                   </div>
                 )}
                 <div className="player-profile__hero-copy">
-                  <h1 id="player-profile-title" className="community-page__hero-title">
+                  <h1
+                    id="player-profile-title"
+                    className={`community-page__hero-title${heroTitleShineClass ? ` ${heroTitleShineClass}` : ""}`}
+                  >
                     {account?.displayName || account?.slug}
                   </h1>
                   <div className="player-profile__hero-meta">
-                    <span className="player-profile__bpc-id">{account?.bpcId}</span>
-                    <span className={tierBadgeClass(cardTier)}>{TIER_LABELS[cardTier] || "Standard"}</span>
+                    <span
+                      className={`player-profile__bpc-id${cardTier === "holo" ? " player-profile__bpc-id--holo" : ""}`}
+                    >
+                      {bpcIdShineClass ? (
+                        <span className={bpcIdShineClass}>{account?.bpcId}</span>
+                      ) : (
+                        account?.bpcId
+                      )}
+                    </span>
+                    <TierBadge tier={cardTier} />
                     {currentTeam?.team?.name ? (
                       <span className="player-profile__team-chip">{currentTeam.team.name}</span>
                     ) : null}
@@ -349,13 +399,13 @@ export function PublicPlayerProfilePage() {
 
         {!loading && !error && profile ? (
           <>
-            <section className="community-glass community-glass--liquid player-profile__panel player-profile__panel--hero">
+            <section className={profileHeroPanelClass}>
               <div className="player-profile__hero-grid">
                 <div className="player-profile__card-wrap">
-                  {card ? <BpclCard manifest={card} className="player-profile__card" /> : null}
+                  {card ? <PlayerProfileCard manifest={card} cardTier={cardTier} /> : null}
                 </div>
                 <div
-                  className={`player-profile__about${aboutTeamLogoUrl ? " player-profile__about--team" : ""}`}
+                  className={`player-profile__about${aboutTeamLogoUrl ? " player-profile__about--team" : ""}${aboutFxClass ? ` ${aboutFxClass}` : ""}`}
                   style={aboutTeamLogoUrl ? { "--about-team-logo": `url("${aboutTeamLogoUrl}")` } : undefined}
                 >
                   {aboutTeamLogoUrl ? <div className="player-profile__about-team-bg" aria-hidden="true" /> : null}
@@ -406,7 +456,7 @@ export function PublicPlayerProfilePage() {
             <div className="player-profile__content-grid">
               <div className="player-profile__content-col player-profile__content-col--main">
                 {currentTeam?.team ? (
-                  <section className="community-glass player-profile__panel">
+                  <section className={profilePanelClass()}>
                     <h2 className="player-profile__section-title">Current team</h2>
                     <div className="player-profile__team-card player-profile__team-card--featured">
                       <TeamLogoImg
@@ -460,7 +510,7 @@ export function PublicPlayerProfilePage() {
                 ) : null}
 
                 {profile.matchHistory?.length ? (
-                  <section className="community-glass player-profile__panel">
+                  <section className={profilePanelClass()}>
                     <h2 className="player-profile__section-title">Match history</h2>
                     <ul className="player-profile__match-list">
                       {visibleMatchHistory.map((row) => (
@@ -487,7 +537,7 @@ export function PublicPlayerProfilePage() {
 
               <div className="player-profile__content-col player-profile__content-col--side">
                 {profile.seasonHistory?.length ? (
-                  <section className="community-glass player-profile__panel">
+                  <section className={profilePanelClass()}>
                     <h2 className="player-profile__section-title">Season history</h2>
                     <ul className="player-profile__history-list">
                       {profile.seasonHistory.map((entry) => (
@@ -523,7 +573,7 @@ export function PublicPlayerProfilePage() {
                 ) : null}
 
                 {stintGroups.length ? (
-                  <section className="community-glass player-profile__panel">
+                  <section className={profilePanelClass()}>
                     <h2 className="player-profile__section-title">Team stints</h2>
                     <div className="player-profile__stint-seasons">
                       {stintGroups.map((group) => (
@@ -594,7 +644,7 @@ export function PublicPlayerProfilePage() {
                 ) : null}
 
                 {profile.achievements?.length ? (
-                  <section className="community-glass player-profile__panel">
+                  <section className={profilePanelClass()}>
                     <h2 className="player-profile__section-title">Achievements</h2>
                     <ul className="player-profile__achievements">
                       {profile.achievements.map((item, index) => (
@@ -606,7 +656,7 @@ export function PublicPlayerProfilePage() {
               </div>
             </div>
 
-            <footer className="community-glass player-profile__footer">
+            <footer className={premiumTierPanelClass(cardTier, "community-glass player-profile__footer")}>
               Browse more players in the <Link to="/community">community directory</Link>.
             </footer>
           </>

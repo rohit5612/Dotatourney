@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../lib/api";
-import { BpclCard } from "../../components/cards/BpclCard.jsx";
+import { BpclCardMini } from "../../components/cards/BpclCardRenderer.jsx";
 import { TeamLogoImg } from "../../components/TeamLogoImg.jsx";
 import { PageLoadingSpinner } from "../../components/PageLoadingSpinner.jsx";
 import { usePublicCachedQuery } from "../../hooks/usePublicCachedQuery.js";
@@ -52,7 +52,7 @@ export function MatchPublicPage() {
               <h2 className="font-serif text-xl">Roster cards</h2>
               <div className="mt-4 flex flex-wrap gap-4">
                 {data.rosterCards.map((card) => (
-                  <BpclCard key={card.bpcId} manifest={card} size="sm" />
+                  <BpclCardMini key={card.bpcId} manifest={card} />
                 ))}
               </div>
             </div>
