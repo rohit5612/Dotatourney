@@ -10,6 +10,7 @@ import {
 import { SubstitutePoolHero } from "../../components/player/SubstitutePoolFlow.jsx";
 import { roles } from "../../constants/tournament";
 import { playerApi } from "../../lib/playerApi";
+import { isValidPhoneNumber, PHONE_NUMBER_ERROR, sanitizePhoneInput } from "../../lib/phoneNumber";
 import { canJoinSubstitutePool } from "./tournamentDisplay.js";
 
 export function PlayerSubstitutePoolPage() {
@@ -36,7 +37,7 @@ export function PlayerSubstitutePoolPage() {
       mmr: account.mmr ?? "",
       preferredRoles: account.preferredRoles || [],
       location: account.location || "",
-      phoneNumber: account.phoneNumber || "",
+      phoneNumber: sanitizePhoneInput(account.phoneNumber || ""),
     }));
   }, [account]);
 
@@ -59,6 +60,11 @@ export function PlayerSubstitutePoolPage() {
     if (!poolOpen || !account.eligibleForRegistration || !rolesSelected) return;
     setBusy(true);
     setError("");
+    if (form.phoneNumber && !isValidPhoneNumber(form.phoneNumber)) {
+      setError(PHONE_NUMBER_ERROR);
+      setBusy(false);
+      return;
+    }
     try {
       await playerApi.patchMe({
         mmr: form.mmr === "" ? null : Number(form.mmr),
@@ -188,10 +194,15 @@ export function PlayerSubstitutePoolPage() {
                     <input
                       id="sub-phone"
                       type="tel"
+                      inputMode="numeric"
+                      autoComplete="tel-national"
+                      maxLength={10}
+                      pattern="\d{10}"
                       value={form.phoneNumber}
-                      onChange={(e) => setForm((f) => ({ ...f, phoneNumber: e.target.value }))}
-                      placeholder="Contact number"
+                      onChange={(e) => setForm((f) => ({ ...f, phoneNumber: sanitizePhoneInput(e.target.value) }))}
+                      placeholder="10-digit mobile number"
                     />
+                    <p className="player-reg__field-hint">Digits only — no spaces, dashes, or country code.</p>
                   </div>
                   <div className="player-auth__field player-reg__field-span">
                     <label htmlFor="sub-location">Location</label>

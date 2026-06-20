@@ -46,6 +46,7 @@ import { LegalLink, LegalPageLayout, LegalSection } from "../components/legal/Le
 import { roles } from "../constants/tournament";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock.js";
 import { api } from "../lib/api";
+import { isValidPhoneNumber, PHONE_NUMBER_ERROR, sanitizePhoneInput } from "../lib/phoneNumber";
 import { peekCache } from "../lib/requestCache.js";
 import { LandingBannerAnnouncement } from "../components/LandingBannerAnnouncement.jsx";
 import { LandingEssenceSection } from "../components/landing/LandingEssenceSection.jsx";
@@ -2283,7 +2284,7 @@ export function RegistrationPage({ event, message, setMessage }) {
           email: session.email || email,
           name: session.name || "",
           location: session.location || "",
-          phoneNumber: session.phoneNumber || "",
+          phoneNumber: sanitizePhoneInput(session.phoneNumber || ""),
           discordHandle: session.discordHandle || "",
           mmr: session.mmr != null ? String(session.mmr) : "",
           steamName: session.steamName || "",
@@ -2351,6 +2352,7 @@ export function RegistrationPage({ event, message, setMessage }) {
     if (!form.email.trim()) return "Email is required.";
     if (!form.name.trim()) return "Name is required.";
     if (!form.phoneNumber.trim()) return "Phone number is required.";
+    if (!isValidPhoneNumber(form.phoneNumber)) return PHONE_NUMBER_ERROR;
     if (!form.discordHandle.trim()) return "Discord ID is required.";
     if (!isValidDiscordHandle(form.discordHandle)) {
       return "Discord ID must be a legacy tag (e.g. Player#4092), a handle (e.g. my_handle), or a 17–20 digit user ID.";
@@ -2432,7 +2434,7 @@ export function RegistrationPage({ event, message, setMessage }) {
         email: session.email || em,
         name: session.name || "",
         location: session.location || "",
-        phoneNumber: session.phoneNumber || "",
+        phoneNumber: sanitizePhoneInput(session.phoneNumber || ""),
         discordHandle: session.discordHandle || "",
         mmr: session.mmr != null ? String(session.mmr) : "",
         steamName: session.steamName || "",
@@ -2692,7 +2694,20 @@ export function RegistrationPage({ event, message, setMessage }) {
             <Input label="Email" type="email" value={form.email} onChange={(v) => setForm((prev) => ({ ...prev, email: v }))} required />
             <Input label="Name" value={form.name} onChange={(v) => setForm((prev) => ({ ...prev, name: v }))} required />
             <Input label="City / region (optional)" value={form.location} onChange={(v) => setForm((prev) => ({ ...prev, location: v }))} />
-            <Input label="Phone number" type="tel" value={form.phoneNumber} onChange={(v) => setForm((prev) => ({ ...prev, phoneNumber: v }))} required />
+            <Input
+              label="Phone number"
+              type="tel"
+              inputMode="numeric"
+              maxLength={10}
+              pattern="\d{10}"
+              placeholder="10-digit mobile number"
+              value={form.phoneNumber}
+              onChange={(v) => setForm((prev) => ({ ...prev, phoneNumber: sanitizePhoneInput(v) }))}
+              required
+            />
+            <p className="reg-page__span-2 text-xs text-muted-foreground -mt-1">
+              Digits only — no spaces, dashes, or country code.
+            </p>
             <Input label="Discord ID" value={form.discordHandle} onChange={(v) => setForm((prev) => ({ ...prev, discordHandle: v }))} required />
             <p className="reg-page__span-2 text-xs text-muted-foreground -mt-1">
               Format examples: legacy tag <span className="font-mono text-foreground">Name#1234</span>, handle <span className="font-mono text-foreground">my_handle</span>, or numeric ID{" "}
@@ -2919,7 +2934,7 @@ export function RegistrationPage({ event, message, setMessage }) {
   );
 }
 
-function Input({ label, value, onChange, type = "text", required = false, max, placeholder }) {
+function Input({ label, value, onChange, type = "text", required = false, max, maxLength, inputMode, pattern, placeholder }) {
   return (
     <label className="block text-sm">
       {label}
@@ -2927,6 +2942,9 @@ function Input({ label, value, onChange, type = "text", required = false, max, p
         required={required}
         type={type}
         max={max}
+        maxLength={maxLength}
+        inputMode={inputMode}
+        pattern={pattern}
         placeholder={placeholder}
         className="mt-1 w-full rounded-md border border-input bg-background p-2"
         value={value}

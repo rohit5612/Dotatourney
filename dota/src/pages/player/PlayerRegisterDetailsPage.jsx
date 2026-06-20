@@ -11,6 +11,7 @@ import {
 } from "../../components/player/RegistrationFlow.jsx";
 import { roles } from "../../constants/tournament";
 import { playerApi } from "../../lib/playerApi";
+import { isValidPhoneNumber, PHONE_NUMBER_ERROR, sanitizePhoneInput } from "../../lib/phoneNumber";
 
 export function PlayerRegisterDetailsPage() {
   const { slug } = useParams();
@@ -27,7 +28,7 @@ export function PlayerRegisterDetailsPage() {
       mmr: account.mmr ?? "",
       preferredRoles: account.preferredRoles || [],
       location: account.location || "",
-      phoneNumber: account.phoneNumber || "",
+      phoneNumber: sanitizePhoneInput(account.phoneNumber || ""),
     });
   }, [account]);
 
@@ -44,6 +45,11 @@ export function PlayerRegisterDetailsPage() {
     e.preventDefault();
     setBusy(true);
     setError("");
+    if (form.phoneNumber && !isValidPhoneNumber(form.phoneNumber)) {
+      setError(PHONE_NUMBER_ERROR);
+      setBusy(false);
+      return;
+    }
     try {
       await playerApi.patchMe({
         mmr: form.mmr === "" ? null : Number(form.mmr),
@@ -127,10 +133,15 @@ export function PlayerRegisterDetailsPage() {
                   <input
                     id="reg-phone"
                     type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel-national"
+                    maxLength={10}
+                    pattern="\d{10}"
                     value={form.phoneNumber}
-                    onChange={(e) => setForm((f) => ({ ...f, phoneNumber: e.target.value }))}
-                    placeholder="Contact number"
+                    onChange={(e) => setForm((f) => ({ ...f, phoneNumber: sanitizePhoneInput(e.target.value) }))}
+                    placeholder="10-digit mobile number"
                   />
+                  <p className="player-reg__field-hint">Digits only — no spaces, dashes, or country code.</p>
                 </div>
                 <div className="player-auth__field player-reg__field-span">
                   <label htmlFor="reg-location">Location</label>

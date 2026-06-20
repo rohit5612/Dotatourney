@@ -4,6 +4,7 @@ import { DashboardActionIcon } from "../../components/player/DashboardActionIcon
 import { DashboardNavIcon } from "../../components/player/DashboardNavIcon.jsx";
 import { roles } from "../../constants/tournament";
 import { playerApi } from "../../lib/playerApi";
+import { isValidPhoneNumber, PHONE_NUMBER_ERROR, sanitizePhoneInput } from "../../lib/phoneNumber";
 
 const LINKAGE = [
   { key: "emailVerified", label: "Email", detailKey: "email", linkKey: null },
@@ -64,7 +65,7 @@ export function PlayerProfileSettingsPage() {
     if (!account) return;
     setForm({
       displayName: account.displayName || "",
-      phoneNumber: account.phoneNumber || "",
+      phoneNumber: sanitizePhoneInput(account.phoneNumber || ""),
       location: account.location || "",
       mmr: account.mmr ?? "",
       preferredRoles: account.preferredRoles || [],
@@ -86,6 +87,11 @@ export function PlayerProfileSettingsPage() {
     setBusy(true);
     setError("");
     setMessage("");
+    if (form.phoneNumber && !isValidPhoneNumber(form.phoneNumber)) {
+      setError(PHONE_NUMBER_ERROR);
+      setBusy(false);
+      return;
+    }
     try {
       await playerApi.patchMe({
         displayName: form.displayName,
@@ -197,9 +203,16 @@ export function PlayerProfileSettingsPage() {
                 <label htmlFor="settings-phone">Phone</label>
                 <input
                   id="settings-phone"
+                  type="tel"
+                  inputMode="numeric"
+                  autoComplete="tel-national"
+                  maxLength={10}
+                  pattern="\d{10}"
+                  placeholder="10-digit mobile number"
                   value={form.phoneNumber}
-                  onChange={(e) => setForm((f) => ({ ...f, phoneNumber: e.target.value }))}
+                  onChange={(e) => setForm((f) => ({ ...f, phoneNumber: sanitizePhoneInput(e.target.value) }))}
                 />
+                <p className="player-reg__field-hint">Digits only — no spaces, dashes, or country code.</p>
               </div>
               <div className="player-auth__field">
                 <label htmlFor="settings-location">Location</label>
