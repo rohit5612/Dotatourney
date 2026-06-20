@@ -27,6 +27,7 @@ import {
   updatePlayerAccount,
 } from "../services/playerAccountRepository.js";
 import { createOAuthState, parseOAuthState } from "../services/oauthStateService.js";
+import { optionalPhoneNumberSchema } from "../utils/phoneNumber.js";
 import { steamLoginUrl, verifySteamOpenIdCallback, fetchSteamProfile } from "../services/steamOpenIdService.js";
 import { discordAuthorizeUrl, exchangeDiscordCode } from "../services/discordOAuthService.js";
 import { googleAuthorizeUrl, exchangeGoogleCode } from "../services/googleOAuthService.js";
@@ -205,7 +206,7 @@ router.patch("/me", requirePlayer, async (req, res, next) => {
   try {
     const schema = z.object({
       displayName: z.string().min(1).max(80).optional(),
-      phoneNumber: z.string().max(32).optional(),
+      phoneNumber: optionalPhoneNumberSchema,
       bio: z.string().max(500).optional(),
       mmr: z.number().int().min(0).max(20000).nullable().optional(),
       preferredRoles: z.array(z.string().min(1)).optional(),
@@ -255,10 +256,14 @@ router.post("/me/change-password", requirePlayer, async (req, res, next) => {
 router.post("/auth/claim/start", async (req, res, next) => {
   try {
     const { bpcId, email } = z
-      .object({ bpcId: z.string().min(1), email: z.string().email() })
+      .object({
+        bpcId: z.string().trim().min(1),
+        email: z.string().trim().email(),
+      })
       .parse(req.body);
     const result = await startLegacyClaim({ bpcId, email });
-    const verifyUrl = `${frontendUrl("/claim-account")}?step=verify&bpcId=${encodeURIComponent(bpcId)}&email=${encodeURIComponent(result.account.email)}&token=${encodeURIComponent(result.verifyToken)}`;
+    const canonicalBpcId = result.account.bpc_id;
+    const verifyUrl = `${frontendUrl("/claim-account")}?step=verify&bpcId=${encodeURIComponent(canonicalBpcId)}&email=${encodeURIComponent(result.account.email)}&token=${encodeURIComponent(result.verifyToken)}`;
     await sendPlayerClaimAccountEmail({
       to: result.account.email,
       verifyUrl,
@@ -278,9 +283,9 @@ router.get("/auth/claim/verify", async (req, res, next) => {
   try {
     const payload = z
       .object({
-        bpcId: z.string().min(1),
-        email: z.string().email(),
-        token: z.string().min(1),
+        bpcId: z.string().trim().min(1),
+        email: z.string().trim().email(),
+        token: z.string().trim().min(1),
       })
       .parse(req.query);
     const result = await verifyLegacyClaim({
@@ -301,10 +306,10 @@ router.post("/auth/claim/verify", async (req, res, next) => {
   try {
     const payload = z
       .object({
-        bpcId: z.string().min(1),
-        email: z.string().email(),
-        code: z.string().min(1).optional(),
-        token: z.string().min(1).optional(),
+        bpcId: z.string().trim().min(1),
+        email: z.string().trim().email(),
+        code: z.string().trim().min(1).optional(),
+        token: z.string().trim().min(1).optional(),
       })
       .refine((d) => d.code || d.token, { message: "token required" })
       .parse(req.body);
@@ -538,7 +543,7 @@ const registrationDetailsSchema = z.object({
   mmr: z.number().int().min(0).max(20000).nullable().optional(),
   roles: z.array(z.string().min(1)).optional(),
   location: z.string().max(120).optional(),
-  phoneNumber: z.string().max(32).optional(),
+  phoneNumber: optionalPhoneNumberSchema,
 });
 
 const checkoutConfirmSchema = checkoutPreviewSchema.extend({

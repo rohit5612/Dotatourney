@@ -45,6 +45,7 @@ import {
   buildMatchRosterCards,
   CARD_PNG_STUB,
 } from "../services/cardManifestService.js";
+import { isValidPhoneNumber, PHONE_NUMBER_ERROR } from "../utils/phoneNumber.js";
 
 const router = express.Router();
 
@@ -98,6 +99,13 @@ const registerFormSchema = z
         message:
           "Steam profile must be a steamcommunity.com URL, e.g. https://steamcommunity.com/profiles/76561198… or https://steamcommunity.com/id/yourid",
         path: ["steamProfile"],
+      });
+    }
+    if (!isValidPhoneNumber(data.phoneNumber)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: PHONE_NUMBER_ERROR,
+        path: ["phoneNumber"],
       });
     }
   });

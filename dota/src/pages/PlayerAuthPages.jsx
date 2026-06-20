@@ -588,6 +588,8 @@ export function PlayerClaimAccountPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [verifyLinkToken, setVerifyLinkToken] = useState("");
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("step") !== "verify") return;
@@ -621,47 +623,50 @@ export function PlayerClaimAccountPage() {
       // ignore corrupt cache
     }
 
-    let active = true;
     setBpcId(linkBpcId);
     setEmail(linkEmail);
-    setStep("verifying");
+    setVerifyLinkToken(token);
+    setStep("confirm");
+    setMessage("Confirm below to verify your email and continue.");
+    window.history.replaceState({}, "", "/claim-account");
+  }, []);
+
+  async function onConfirmVerify() {
+    if (!bpcId || !email || !verifyLinkToken) {
+      setError("Invalid claim link. Request a new email from the form below.");
+      setStep("start");
+      return;
+    }
+
     setLoading(true);
     setError("");
+    setMessage("");
 
-    playerApi
-      .claimVerifyFromLink(linkBpcId, linkEmail, token)
-      .then((data) => {
-        if (!active) return;
-        try {
-          sessionStorage.setItem(
-            cacheKey,
-            JSON.stringify({
-              claimToken: data.claimToken,
-              bpcId: linkBpcId,
-              email: linkEmail,
-            }),
-          );
-        } catch {
-          // ignore quota errors
-        }
-        setClaimToken(data.claimToken);
-        setStep("password");
-        setMessage("Email verified. Create your password to finish claiming your account.");
-        window.history.replaceState({}, "", "/claim-account");
-      })
-      .catch((err) => {
-        if (!active) return;
-        setError(err.message || "Could not verify your claim link.");
-        setStep("start");
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
+    try {
+      const data = await playerApi.claimVerifyFromLink(bpcId, email, verifyLinkToken);
+      const cacheKey = `bpcl:claim-verify:${verifyLinkToken}`;
+      try {
+        sessionStorage.setItem(
+          cacheKey,
+          JSON.stringify({
+            claimToken: data.claimToken,
+            bpcId,
+            email,
+          }),
+        );
+      } catch {
+        // ignore quota errors
+      }
+      setClaimToken(data.claimToken);
+      setStep("password");
+      setMessage("Email verified. Create your password to finish claiming your account.");
+    } catch (err) {
+      setError(err.message || "Could not verify your claim link.");
+      setStep("start");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function onStart(e) {
     e.preventDefault();
@@ -731,8 +736,25 @@ export function PlayerClaimAccountPage() {
         <div className="player-auth__message player-auth__message--ok" role="status">
           <p style={{ margin: 0 }}>{message || "Check your email for a secure link to verify and claim your account."}</p>
           <p className="player-auth__sub player-auth__sub--tight" style={{ marginTop: "0.75rem", marginBottom: 0 }}>
-            Open the link in the email — no verification code needed.
+            Open the link in the email, then click Continue on the claim page.
           </p>
+        </div>
+      ) : null}
+
+      {step === "confirm" ? (
+        <div className="player-auth__message player-auth__message--ok" role="status">
+          <p style={{ margin: 0 }}>
+            Ready to verify <strong>{bpcId}</strong> for <strong>{email}</strong>.
+          </p>
+          <button
+            type="button"
+            className="btn btn-primary w-full"
+            style={{ marginTop: "1rem" }}
+            disabled={loading}
+            onClick={onConfirmVerify}
+          >
+            {loading ? "Verifying…" : "Continue to set password"}
+          </button>
         </div>
       ) : null}
 

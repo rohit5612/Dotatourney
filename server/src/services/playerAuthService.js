@@ -325,40 +325,45 @@ async function verifyLegacyClaimOnce({ bpcId, email, verifyHash }) {
   try {
     await client.query("BEGIN");
 
-    const { rows: lockedRows } = await client.query(
-      `SELECT * FROM player_accounts WHERE bpc_id = $1 FOR UPDATE`,
-      [bpcId],
-    );
-    const account = lockedRows[0];
+    const account = await findAccountByBpcId(bpcId);
     if (!account) {
       const err = new Error("Invalid claim request");
       err.status = 400;
       throw err;
     }
+
+    const { rows: lockedRows } = await client.query(`SELECT * FROM player_accounts WHERE id = $1 FOR UPDATE`, [
+      account.id,
+    ]);
+    const locked = lockedRows[0];
+    if (!locked) {
+      const err = new Error("Invalid claim request");
+      err.status = 400;
+      throw err;
+    }
+
     const normalizedEmail = String(email || "").trim().toLowerCase();
-    if (account.email.toLowerCase() !== normalizedEmail) {
+    if (locked.email.toLowerCase() !== normalizedEmail) {
       const err = new Error("Email does not match");
       err.status = 400;
       throw err;
     }
 
-    if (
-      !tokenHashesEqual(account.email_verify_token_hash, verifyHash) ||
-      !account.email_verify_expires_at
-    ) {
-      if (!account.email_verify_token_hash && !account.password_hash) {
-        const err = new Error(
-          "This verification link was already used. Request a new claim email to continue.",
-        );
-        err.status = 400;
-        err.code = "CLAIM_LINK_ALREADY_USED";
-        throw err;
-      }
+    if (locked.password_hash) {
+      const err = new Error("This account already has a password. Sign in or use forgot password.");
+      err.status = 409;
+      err.code = "ALREADY_CLAIMED";
+      throw err;
+    }
+
+    const hasMatchingVerifyToken =
+      tokenHashesEqual(locked.email_verify_token_hash, verifyHash) && locked.email_verify_expires_at;
+    if (!hasMatchingVerifyToken) {
       const err = new Error("Invalid or expired verification link");
       err.status = 400;
       throw err;
     }
-    if (new Date(account.email_verify_expires_at) < new Date()) {
+    if (new Date(locked.email_verify_expires_at) < new Date()) {
       const err = new Error("Verification link expired");
       err.status = 400;
       throw err;
@@ -371,22 +376,20 @@ async function verifyLegacyClaimOnce({ bpcId, email, verifyHash }) {
     await client.query(
       `INSERT INTO player_claim_tokens (id, player_account_id, token_hash, expires_at)
        VALUES ($1, $2, $3, $4)`,
-      [randomUUID(), account.id, claimHash, claimExpires.toISOString()],
+      [randomUUID(), locked.id, claimHash, claimExpires.toISOString()],
     );
 
     await updatePlayerAccount(
-      account.id,
+      locked.id,
       {
-        emailVerifiedAt: account.email_verified_at || new Date().toISOString(),
-        emailVerifyTokenHash: null,
-        emailVerifyExpiresAt: null,
+        emailVerifiedAt: locked.email_verified_at || new Date().toISOString(),
       },
       client,
     );
 
     await client.query("COMMIT");
     rememberClaimVerifyResult(verifyHash, claimToken);
-    return { account: await findAccountById(account.id), claimToken };
+    return { account: await findAccountById(locked.id), claimToken };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -424,6 +427,8 @@ export async function setPasswordFromClaim({ claimToken, password }) {
   await pool.query(`UPDATE player_claim_tokens SET used_at = NOW() WHERE id = $1`, [row.id]);
   await updatePlayerAccount(row.player_account_id, {
     passwordHash: hashPassword(password),
+    emailVerifyTokenHash: null,
+    emailVerifyExpiresAt: null,
   });
   const account = await findAccountById(row.player_account_id);
   const session = await createPlayerSession(account.id);
