@@ -980,6 +980,7 @@
   transform: none;
 }
 
+.player-dash__card-pedestal .player-profile__card-display--pedestal,
 .player-dash__card-pedestal .player-profile__card-tap--pedestal {
   display: block;
   position: relative;
@@ -990,19 +991,18 @@
   background: transparent;
   color: inherit;
   line-height: normal;
-  cursor: zoom-in;
+  cursor: pointer;
 }
 
-.player-dash__card-pedestal .player-profile__card-tap--pedestal:hover {
-  transform: none;
-}
-
+.player-dash__card-pedestal .player-profile__card-display--pedestal .bpcl-card-renderer,
+.player-dash__card-pedestal .player-profile__card-display--pedestal .bpcl-card--pedestal,
 .player-dash__card-pedestal .player-profile__card-tap--pedestal .bpcl-card-renderer,
 .player-dash__card-pedestal .player-profile__card-tap--pedestal .bpcl-card--pedestal {
   width: min(100%, var(--bpcl-card-slot-width, 17rem));
   max-width: var(--bpcl-card-slot-width, 17rem);
 }
 
+.player-dash__card-pedestal .player-profile__card-display--pedestal .bpcl-player-card,
 .player-dash__card-pedestal .player-profile__card-tap--pedestal .bpcl-player-card {
   line-height: normal;
 }
@@ -1026,7 +1026,6 @@
   -webkit-backdrop-filter: blur(4px);
 }
 
-/* Card lightbox (shared with public profile tap-to-enlarge) */
 .player-profile__card-lightbox {
   position: fixed;
   inset: 0;

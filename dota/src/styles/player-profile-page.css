@@ -486,6 +486,20 @@
   min-width: 0;
 }
 
+.player-profile__card-display {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.45rem;
+  width: min(100%, 15.5rem);
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  line-height: normal;
+}
+
 .player-profile__card-tap {
   display: flex;
   flex-direction: column;
@@ -496,12 +510,16 @@
   padding: 0;
   border: none;
   background: transparent;
-  cursor: zoom-in;
+  cursor: pointer;
   color: inherit;
   line-height: normal;
-  transition: transform 180ms ease;
+  text-align: inherit;
 }
 
+.player-profile__card-display .bpcl-gold-card,
+.player-profile__card-display .bpcl-holo-card,
+.player-profile__card-display .bpcl-default-card,
+.player-profile__card-display .bpcl-card,
 .player-profile__card-tap .bpcl-gold-card,
 .player-profile__card-tap .bpcl-holo-card,
 .player-profile__card-tap .bpcl-default-card,
@@ -514,15 +532,12 @@
   line-height: normal;
 }
 
+.player-profile__card-display .bpcl-player-card,
 .player-profile__card-tap .bpcl-player-card {
   width: 100%;
   max-width: 100%;
   --player-card-width: 100%;
   line-height: 0;
-}
-
-.player-profile__card-tap:hover {
-  transform: translateY(-2px);
 }
 
 .player-profile__card-tap:focus-visible {
@@ -537,10 +552,6 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--muted-foreground);
-}
-
-.player-profile__card-tap:hover .player-profile__card-tap-hint {
-  color: var(--foreground);
 }
 
 .player-profile__card-lightbox {

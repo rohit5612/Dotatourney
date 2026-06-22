@@ -408,11 +408,6 @@ a.community-page__stat:hover {
   background: transparent;
   text-decoration: none;
   color: inherit;
-  transition: transform 180ms ease;
-}
-
-.community-page__card-entry:hover {
-  transform: translateY(-3px);
 }
 
 .community-page__card-entry:focus-visible {
