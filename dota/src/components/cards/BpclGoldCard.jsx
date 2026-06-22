@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { resolveCardPortraitUrl } from "../../utils/resolvePlayerAvatar.js";
+import { ResponsiveCardName } from "./ResponsiveCardName.jsx";
 import "./GoldCardStyles.css";
 
 function statValue(stats, key) {
@@ -127,7 +128,7 @@ export function BpclGoldCard({ manifest, size = "md", className = "", interactiv
           />
 
           <div className="bpcl-gold-card__name-plate">
-            <p className="bpcl-gold-card__name">{playerName}</p>
+            <ResponsiveCardName className="bpcl-gold-card__name">{playerName}</ResponsiveCardName>
           </div>
           <dl className="bpcl-gold-card__stats">
             {statRows.map((row) => (

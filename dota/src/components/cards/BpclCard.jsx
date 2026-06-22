@@ -1,3 +1,4 @@
+import { ResponsiveCardName } from "./ResponsiveCardName.jsx";
 import "./CardTierStyles.css";
 
 const TIER_LABELS = {
@@ -39,7 +40,9 @@ export function BpclCard({ manifest, size = "md", className = "" }) {
           )}
         </div>
         <div className="bpcl-card__body">
-          <p className="bpcl-card__name">{manifest.displayName || "Player"}</p>
+          <ResponsiveCardName className="bpcl-card__name">
+            {manifest.displayName || "Player"}
+          </ResponsiveCardName>
           <p className="bpcl-card__id">{manifest.bpcId}</p>
           {tier !== "default" && (role || mmr != null) ? (
             <p className="bpcl-card__stats">

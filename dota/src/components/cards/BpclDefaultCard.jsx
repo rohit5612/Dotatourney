@@ -1,3 +1,4 @@
+import { ResponsiveCardName } from "./ResponsiveCardName.jsx";
 import "./DefaultCardStyles.css";
 
 const DEFAULT_LOGO = "/cards/defaultlogo.png";
@@ -32,7 +33,7 @@ export function BpclDefaultCard({ manifest, size = "md", className = "" }) {
 
           <div className="bpcl-default-card__name-primary">
             <div className="bpcl-default-card__name-line bpcl-default-card__divider-line" aria-hidden="true" />
-            <p className="bpcl-default-card__name">{playerName}</p>
+            <ResponsiveCardName className="bpcl-default-card__name">{playerName}</ResponsiveCardName>
           </div>
 
           <div className="bpcl-default-card__footer">

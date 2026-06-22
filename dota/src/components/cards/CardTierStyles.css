@@ -91,7 +91,7 @@
 .bpcl-card__name {
   font-weight: 700;
   color: var(--foreground);
-  margin: 0;
+  white-space: nowrap;
 }
 
 .bpcl-card__id {

@@ -321,7 +321,7 @@ function polyPath(c, points) {
       do {
         c.font = `${weight} ${size}px ${family}`;
         if (c.measureText(text).width <= maxWidth) return size;
-        size -= 2;
+        size -= 1;
       } while (size >= minSize);
       return minSize;
     }
@@ -655,7 +655,7 @@ function polyPath(c, points) {
 
       const name = String(config.playerName).trim() || 'Player';
       const nameY = 1182;
-      const nameSz = fitText(c, name, 884, 97, 48, nameFamily, 800);
+      const nameSz = fitText(c, name, 884, 97, 42, nameFamily, 800);
       c.save();
       c.font = `800 ${nameSz}px ${nameFamily}`;
       c.textAlign = 'center';

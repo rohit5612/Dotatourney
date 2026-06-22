@@ -253,8 +253,6 @@
   color: var(--text-dark);
   letter-spacing: 0.02em;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   padding: 0;
   font-family: Georgia, "Times New Roman", serif;
   margin: 0;
