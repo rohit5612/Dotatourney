@@ -627,7 +627,7 @@
   mask-image: linear-gradient(to left, rgb(0 0 0 / 1) 32%, transparent 90%);
 }
 
-.player-profile__about--team::after {
+.player-profile__about--team:not(.bpcl-tier-fx__about):not(.bpcl-tier-fx-holo__about)::after {
   content: "";
   position: absolute;
   inset: 0;

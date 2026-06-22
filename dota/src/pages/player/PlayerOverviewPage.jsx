@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
-import { CardTierBadge, cardTierDisplayLabel } from "../../components/cards/CardTierBadge.jsx";
+import { CardTierBadge } from "../../components/cards/CardTierBadge.jsx";
 import { PlayerProfileCard } from "../../components/cards/PlayerProfileCard.jsx";
 import { BpcCoin } from "../../components/coins/BpcCoin.jsx";
 import { CardUpgradeModal } from "../../components/player/CardUpgradeModal.jsx";
@@ -182,23 +182,6 @@ export function PlayerOverviewPage() {
                 <span>Public profile</span>
               </Link>
             </div>
-
-            {canUpgradeCard ? (
-              <div className="player-dash__upgrade-banner">
-                <p className="player-dash__upgrade-banner-text">
-                  You&apos;re on <strong>{cardTierDisplayLabel(upgradeEligibility.currentTier)}</strong> for{" "}
-                  <strong>{upgradeEligibility.tournament?.name}</strong>. Upgrade to unlock a higher card tier for
-                  this season.
-                </p>
-                <button
-                  type="button"
-                  className="player-dash__upgrade-banner-btn"
-                  onClick={() => setUpgradeModalOpen(true)}
-                >
-                  View upgrade options
-                </button>
-              </div>
-            ) : null}
           </div>
         </div>
       </header>

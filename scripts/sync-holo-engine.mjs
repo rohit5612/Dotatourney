@@ -139,7 +139,7 @@ s = s.replace(
       dl.addColorStop(.5,'rgba(170,186,208,.34)'); dl.addColorStop(.84,'rgba(140,156,182,.22)'); dl.addColorStop(1,'rgba(140,156,182,0)');
       line(c,54,1112,HOLO_WIDTH-54,1112,dl,1.25); c.restore();
 
-      const name=String(config.playerName).trim().toUpperCase()||'PLAYER NAME';
+      const name=String(config.playerName).trim()||'Player';
       const nameSz=fitText(c,name,884,84,42,nameFamily,800);
       c.save();
       c.font=\`800 \${nameSz}px \${nameFamily}\`; c.textAlign='center'; c.textBaseline='middle';

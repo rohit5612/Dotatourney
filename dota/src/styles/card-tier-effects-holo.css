@@ -71,24 +71,13 @@
   }
 }
 
-/* —— Community / profile: static holo card halo (no spin) —— */
+/* —— Community / profile: holo card — no outer glow halo —— */
 .bpcl-tier-fx-holo__card-glow {
   position: relative;
-  border-radius: 0.35rem;
-  filter:
-    drop-shadow(0 0 0.55rem rgba(255, 52, 168, 0.38))
-    drop-shadow(0 0 1.1rem rgba(107, 91, 255, 0.32))
-    drop-shadow(0 0 1.65rem rgba(28, 158, 255, 0.26))
-    drop-shadow(0 0 2.2rem rgba(36, 200, 132, 0.18));
 }
 
 .bpcl-tier-fx-holo__card-glow::after {
-  content: "";
-  position: absolute;
-  inset: 4% 6% 8%;
-  border-radius: 0.25rem;
-  pointer-events: none;
-  box-shadow: inset 0 0 1.35rem rgba(107, 91, 255, 0.16);
+  content: none;
 }
 
 .bpcl-tier-fx-holo__card-glow .bpcl-holo-card__glow {
@@ -369,20 +358,34 @@
   animation: bpcl-holo-fx-panel-aura 5.2s ease-in-out infinite;
 }
 
-.player-profile__about.bpcl-tier-fx-holo__about .player-profile__about-inner {
-  z-index: 2;
-  overflow: hidden;
+.player-profile__about--team.bpcl-tier-fx-holo__about::before {
+  background:
+    linear-gradient(
+      125deg,
+      rgba(255, 79, 191, 0.14) 0%,
+      transparent 40%,
+      transparent 58%,
+      rgba(66, 207, 255, 0.16) 100%
+    ),
+    linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--background) 86%, transparent) 0%,
+      color-mix(in srgb, var(--background) 52%, transparent) 38%,
+      color-mix(in srgb, var(--background) 18%, transparent) 62%,
+      transparent 84%
+    );
 }
 
-.player-profile__about.bpcl-tier-fx-holo__about .player-profile__about-inner::before {
+.player-profile__about.bpcl-tier-fx-holo__about::after {
   content: "";
   position: absolute;
   top: -25%;
   left: 0;
   width: 46%;
   height: 150%;
+  border-radius: inherit;
   pointer-events: none;
-  z-index: 0;
+  z-index: 1;
   background: linear-gradient(
     105deg,
     transparent 34%,
@@ -394,25 +397,217 @@
   animation: bpcl-holo-fx-about-sweep 6.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
+.player-profile__about.bpcl-tier-fx-holo__about .player-profile__about-inner {
+  position: relative;
+  z-index: 2;
+}
+
 .player-profile__about.bpcl-tier-fx-holo__about .player-profile__about-inner > * {
   position: relative;
   z-index: 1;
 }
 
-.player-profile__about--team.bpcl-tier-fx-holo__about::after {
-  z-index: 1;
+.player-profile__about--team.bpcl-tier-fx-holo__about .player-profile__about-team-bg {
+  z-index: 0;
 }
 
 .player-profile-layout--holo-fx .player-profile__card-wrap .bpcl-tier-fx-holo__card-glow {
   width: 100%;
 }
 
+/* —— Holo public profile: rainbow aura border bleed (community bg via PageContentShell) —— */
+@keyframes bpcl-holo-aura-pulse {
+  0%,
+  100% {
+    opacity: 0.88;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.035);
+  }
+}
+
+@keyframes bpcl-holo-aura-breathe {
+  0%,
+  100% {
+    opacity: 0.9;
+    filter: blur(8px) saturate(1.65) brightness(0.72);
+  }
+  50% {
+    opacity: 1;
+    filter: blur(11px) saturate(1.85) brightness(0.78);
+  }
+}
+
+@keyframes bpcl-holo-sheen-pulse {
+  0%,
+  100% {
+    opacity: 0.82;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes bpcl-holo-aura-drift {
+  0%,
+  100% {
+    transform: rotate(0deg) scale(1.02);
+  }
+  50% {
+    transform: rotate(4deg) scale(1.06);
+  }
+}
+
+/* Holo aura border — organic rainbow bleed on viewport edges, above profile content */
+.player-profile-holo-aura-frame {
+  --holo-aura-edge-mask: radial-gradient(
+    ellipse 92% 88% at 50% 50%,
+    transparent 42%,
+    rgb(0 0 0 / 0.55) 56%,
+    rgb(0 0 0 / 1) 100%
+  );
+
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.player-profile-holo-aura-frame__spectrum {
+  position: absolute;
+  inset: -20%;
+  background: conic-gradient(
+    from 0deg at 50% 50%,
+    #902858 0deg,
+    #884810 52deg,
+    #786818 104deg,
+    #126848 156deg,
+    #106080 208deg,
+    #687888 244deg,
+    #403078 280deg,
+    #703078 316deg,
+    #902858 360deg
+  );
+  filter: blur(22px) saturate(1.85) brightness(0.72);
+  opacity: 0.96;
+  mix-blend-mode: soft-light;
+  animation:
+    bpcl-holo-fx-hue 14s linear infinite,
+    bpcl-holo-aura-pulse 4.5s ease-in-out infinite,
+    bpcl-holo-aura-drift 16s ease-in-out infinite;
+  -webkit-mask-image: var(--holo-aura-edge-mask);
+  mask-image: var(--holo-aura-edge-mask);
+}
+
+.player-profile-holo-aura-frame__organic {
+  position: absolute;
+  inset: -3%;
+  filter: blur(8px) saturate(1.65) brightness(0.68);
+  opacity: 1;
+  mix-blend-mode: soft-light;
+  animation: bpcl-holo-aura-breathe 5s ease-in-out infinite;
+  -webkit-mask-image: var(--holo-aura-edge-mask);
+  mask-image: var(--holo-aura-edge-mask);
+  background:
+    radial-gradient(ellipse 16% 14% at 6% 1%, rgba(200, 56, 136, 0.92), transparent 62%),
+    radial-gradient(ellipse 13% 16% at 17% -1%, rgba(24, 136, 176, 0.9), transparent 60%),
+    radial-gradient(ellipse 18% 13% at 31% 2%, rgba(88, 72, 160, 0.88), transparent 58%),
+    radial-gradient(ellipse 14% 15% at 44% 0%, rgba(30, 152, 112, 0.86), transparent 62%),
+    radial-gradient(ellipse 17% 14% at 58% 3%, rgba(168, 136, 32, 0.88), transparent 60%),
+    radial-gradient(ellipse 15% 16% at 71% -1%, rgba(184, 48, 128, 0.9), transparent 58%),
+    radial-gradient(ellipse 16% 13% at 84% 2%, rgba(72, 56, 144, 0.88), transparent 62%),
+    radial-gradient(ellipse 14% 14% at 95% 1%, rgba(24, 120, 168, 0.86), transparent 60%),
+    radial-gradient(ellipse 17% 15% at 4% 99%, rgba(24, 120, 168, 0.92), transparent 60%),
+    radial-gradient(ellipse 14% 17% at 16% 101%, rgba(200, 56, 136, 0.88), transparent 58%),
+    radial-gradient(ellipse 19% 14% at 29% 98%, rgba(88, 72, 160, 0.86), transparent 62%),
+    radial-gradient(ellipse 15% 16% at 43% 100%, rgba(30, 152, 112, 0.84), transparent 60%),
+    radial-gradient(ellipse 18% 15% at 57% 99%, rgba(168, 136, 32, 0.88), transparent 58%),
+    radial-gradient(ellipse 14% 17% at 70% 101%, rgba(72, 56, 144, 0.9), transparent 62%),
+    radial-gradient(ellipse 16% 14% at 83% 98%, rgba(24, 136, 176, 0.88), transparent 60%),
+    radial-gradient(ellipse 15% 15% at 94% 99%, rgba(184, 48, 128, 0.86), transparent 58%),
+    radial-gradient(ellipse 15% 20% at -1% 18%, rgba(200, 56, 136, 0.9), transparent 60%),
+    radial-gradient(ellipse 13% 18% at 1% 36%, rgba(24, 136, 176, 0.86), transparent 58%),
+    radial-gradient(ellipse 16% 19% at -2% 54%, rgba(88, 72, 160, 0.84), transparent 62%),
+    radial-gradient(ellipse 14% 17% at 1% 72%, rgba(30, 152, 112, 0.82), transparent 60%),
+    radial-gradient(ellipse 15% 20% at -1% 88%, rgba(168, 136, 32, 0.86), transparent 58%),
+    radial-gradient(ellipse 15% 19% at 101% 22%, rgba(72, 56, 144, 0.88), transparent 60%),
+    radial-gradient(ellipse 13% 18% at 99% 41%, rgba(24, 120, 168, 0.84), transparent 58%),
+    radial-gradient(ellipse 16% 20% at 102% 58%, rgba(184, 48, 128, 0.88), transparent 62%),
+    radial-gradient(ellipse 14% 17% at 99% 76%, rgba(88, 72, 160, 0.82), transparent 60%),
+    radial-gradient(ellipse 15% 19% at 101% 91%, rgba(24, 136, 176, 0.86), transparent 58%),
+    radial-gradient(ellipse 30% 26% at 0% 0%, rgba(200, 56, 136, 0.78), transparent 62%),
+    radial-gradient(ellipse 28% 24% at 100% 0%, rgba(24, 136, 176, 0.76), transparent 62%),
+    radial-gradient(ellipse 30% 26% at 0% 100%, rgba(88, 72, 160, 0.74), transparent 62%),
+    radial-gradient(ellipse 28% 24% at 100% 100%, rgba(30, 152, 112, 0.72), transparent 62%);
+}
+
+.player-profile-holo-aura-frame__sheen {
+  position: absolute;
+  inset: -2%;
+  filter: blur(1px) brightness(0.95);
+  mix-blend-mode: soft-light;
+  opacity: 0.95;
+  animation: bpcl-holo-sheen-pulse 4s ease-in-out infinite;
+  -webkit-mask-image: var(--holo-aura-edge-mask);
+  mask-image: var(--holo-aura-edge-mask);
+  background:
+    radial-gradient(ellipse 24% 18% at 10% 7%, rgba(200, 208, 224, 0.72), transparent 62%),
+    radial-gradient(ellipse 20% 16% at 28% 2%, rgba(176, 188, 208, 0.58), transparent 60%),
+    radial-gradient(ellipse 26% 14% at 52% 0%, rgba(220, 228, 240, 0.52), transparent 58%),
+    radial-gradient(ellipse 22% 16% at 76% 4%, rgba(168, 180, 200, 0.62), transparent 62%),
+    radial-gradient(ellipse 24% 18% at 92% 8%, rgba(200, 208, 224, 0.68), transparent 60%),
+    radial-gradient(ellipse 22% 16% at 8% 93%, rgba(184, 192, 210, 0.6), transparent 62%),
+    radial-gradient(ellipse 20% 18% at 32% 99%, rgba(200, 208, 224, 0.54), transparent 60%),
+    radial-gradient(ellipse 24% 16% at 55% 100%, rgba(176, 188, 208, 0.56), transparent 58%),
+    radial-gradient(ellipse 21% 17% at 78% 97%, rgba(200, 208, 224, 0.6), transparent 62%),
+    radial-gradient(ellipse 23% 16% at 93% 92%, rgba(168, 180, 200, 0.64), transparent 60%),
+    radial-gradient(ellipse 16% 24% at 0% 24%, rgba(200, 208, 224, 0.56), transparent 58%),
+    radial-gradient(ellipse 15% 22% at 1% 52%, rgba(176, 188, 208, 0.48), transparent 60%),
+    radial-gradient(ellipse 16% 24% at 0% 78%, rgba(200, 208, 224, 0.54), transparent 58%),
+    radial-gradient(ellipse 16% 24% at 100% 28%, rgba(200, 208, 224, 0.58), transparent 58%),
+    radial-gradient(ellipse 15% 22% at 99% 54%, rgba(176, 188, 208, 0.5), transparent 60%),
+    radial-gradient(ellipse 16% 24% at 100% 82%, rgba(200, 208, 224, 0.56), transparent 58%);
+}
+
+.player-profile-layout--holo-fx {
+  position: relative;
+  isolation: isolate;
+}
+
+.player-profile-layout--holo-fx > :not(.player-profile-holo-aura-frame) {
+  position: relative;
+  z-index: 1;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .player-profile-holo-aura-frame__spectrum,
+  .player-profile-holo-aura-frame__organic,
+  .player-profile-holo-aura-frame__sheen {
+    animation: none;
+  }
+
+  .player-profile-holo-aura-frame__spectrum {
+    opacity: 0.92;
+    transform: none;
+  }
+
+  .player-profile-holo-aura-frame__organic {
+    opacity: 0.94;
+    filter: blur(8px) saturate(1.65) brightness(0.72);
+  }
+
+  .player-profile-holo-aura-frame__sheen {
+    opacity: 0.88;
+  }
+
   .bpcl-tier-fx-holo__shine-text,
   .bpcl-tier-fx-holo__panel.community-glass::before,
   .bpcl-tier-fx-holo__panel.community-glass:not(.community-glass--liquid)::after,
   .player-profile__about.bpcl-tier-fx-holo__about::before,
-  .player-profile__about.bpcl-tier-fx-holo__about .player-profile__about-inner::before,
+  .player-profile__about.bpcl-tier-fx-holo__about::after,
   .player-profile__tier-badge--holo-premium::before,
   .player-profile__tier-badge--holo-premium::after,
   .player-profile__tier-badge--holo-premium .player-profile__tier-badge-label {

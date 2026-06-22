@@ -67,13 +67,13 @@ function SidebarPlayer({ account, coinBalance, logout, onShowSetupGuide }) {
           Show setup guide
         </button>
         <div className="player-dash__wallet">
-          <p className="player-dash__wallet-label">Balance</p>
-          <div className="player-dash__wallet-row">
-            <BpcCoin amount={coinBalance} size="sm" className="player-dash__wallet-coins" />
+          <div className="player-dash__wallet-head">
+            <p className="player-dash__wallet-label">Balance</p>
             <NavLink to="/dashboard/wallet" className="player-dash__wallet-link" title="Transaction log">
               Transactions
             </NavLink>
           </div>
+          <BpcCoin amount={coinBalance} size="sm" className="player-dash__wallet-coins" />
         </div>
         <div className="player-dash__sidebar-actions">
           <button
@@ -93,7 +93,7 @@ function SidebarPlayer({ account, coinBalance, logout, onShowSetupGuide }) {
 export function PlayerDashboardLayout() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { account, coinBalance, loading, error, logout, refreshMe } = usePlayerSession();
+  const { account, coinBalance, loading, error, linkNotice, logout, refreshMe } = usePlayerSession();
   const onboarding = usePlayerOnboarding({ enabled: Boolean(account) && !loading });
 
   useEffect(() => {
@@ -138,6 +138,14 @@ export function PlayerDashboardLayout() {
         </aside>
 
         <main className="player-dash__main">
+          {linkNotice === "discord_join_failed" ? (
+            <div className="player-auth__message player-auth__message--error" role="status">
+              Discord linked, but we couldn&apos;t add you to the server automatically.{" "}
+              <a href="https://discord.gg/sV2PhYc6A3" target="_blank" rel="noreferrer">
+                Join manually
+              </a>
+            </div>
+          ) : null}
           {error ? <div className="player-auth__message player-auth__message--error">{error}</div> : null}
           {loading ? (
             <div className="player-dash__loading">

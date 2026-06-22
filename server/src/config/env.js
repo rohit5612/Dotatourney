@@ -69,6 +69,10 @@ export const env = {
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET?.trim() || "",
   discordClientId: process.env.DISCORD_CLIENT_ID?.trim() || "",
   discordClientSecret: process.env.DISCORD_CLIENT_SECRET?.trim() || "",
+  /** Bot token from the same Discord app — used to add linked players to DISCORD_GUILD_ID */
+  discordBotToken: process.env.DISCORD_BOT_TOKEN?.trim() || "",
+  /** Numeric Discord server ID for auto-join on link */
+  discordGuildId: process.env.DISCORD_GUILD_ID?.trim() || "",
   steamApiKey: process.env.STEAM_API_KEY?.trim() || "",
   nodeEnv: process.env.NODE_ENV || "development",
   cashfreeClientId: process.env.CASHFREE_CLIENT_ID?.trim() || "",

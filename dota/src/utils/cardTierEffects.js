@@ -63,6 +63,6 @@ export function premiumShineTextClass(tier, variant = "") {
 
 export function premiumCardGlowClass(tier) {
   if (isGoldTierFx(tier)) return "bpcl-tier-fx__card-glow";
-  if (isHoloTierFx(tier)) return "bpcl-tier-fx-holo__card-glow";
+  if (isHoloTierFx(tier)) return "";
   return "";
 }

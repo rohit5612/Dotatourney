@@ -7,10 +7,14 @@ export function usePlayerSession() {
   const [me, setMe] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [linkNotice, setLinkNotice] = useState("");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tokenFromLink = params.get("token");
+    if (params.get("linked") === "discord" && params.get("discord_join") === "failed") {
+      setLinkNotice("discord_join_failed");
+    }
     if (tokenFromLink) {
       setPlayerToken(tokenFromLink);
       window.history.replaceState({}, "", window.location.pathname);
@@ -55,5 +59,14 @@ export function usePlayerSession() {
     navigate("/login");
   }
 
-  return { me, account: me?.account, coinBalance: me?.coinBalance ?? 0, loading, error, refreshMe, logout };
+  return {
+    me,
+    account: me?.account,
+    coinBalance: me?.coinBalance ?? 0,
+    loading,
+    error,
+    linkNotice,
+    refreshMe,
+    logout,
+  };
 }

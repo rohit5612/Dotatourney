@@ -86,7 +86,7 @@ function LazyTierCard({ template, manifest, size, interactive, showAura }) {
     return <Component manifest={manifest} size={size} />;
   }
   if (kind === "holo") {
-    return <Component manifest={manifest} size={size} interactive={interactive} showAura={showAura} />;
+    return <Component manifest={manifest} size={size} interactive={interactive} />;
   }
   if (kind === "legacy") {
     return <Component manifest={{ ...manifest, tier: effectiveTier }} size={size} />;

@@ -9,7 +9,7 @@ export function discordAuthorizeUrl(redirectUri, state) {
     client_id: env.discordClientId,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: "identify",
+    scope: "identify guilds.join",
     state,
   });
   return `${DISCORD_AUTH}?${params.toString()}`;
@@ -50,5 +50,44 @@ export async function exchangeDiscordCode(code, redirectUri) {
     discordId: user.id,
     discordUsername: user.global_name || user.username || "",
     discordAvatarUrl: avatarUrl,
+    accessToken: token.access_token,
   };
+}
+
+/**
+ * Add a user to the configured BPC Discord guild using their OAuth access token.
+ * Non-throwing: link flow should succeed even when join fails.
+ * @returns {Promise<boolean>} true when joined or already a member
+ */
+export async function addUserToGuild({ discordUserId, accessToken }) {
+  const guildId = env.discordGuildId;
+  const botToken = env.discordBotToken;
+  if (!guildId || !botToken || !discordUserId || !accessToken) {
+    return false;
+  }
+
+  const res = await fetch(`https://discord.com/api/guilds/${guildId}/members/${discordUserId}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bot ${botToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ access_token: accessToken }),
+  });
+
+  if (res.status === 201 || res.status === 204 || res.status === 409) {
+    return true;
+  }
+
+  let detail = "";
+  try {
+    const body = await res.json();
+    detail = body?.message || JSON.stringify(body);
+  } catch {
+    detail = await res.text().catch(() => "");
+  }
+  console.warn(
+    `[discord] guild join failed for user ${discordUserId} (status ${res.status})${detail ? `: ${detail}` : ""}`,
+  );
+  return false;
 }

@@ -268,20 +268,34 @@
   animation: bpcl-tier-fx-panel-aura 4.8s ease-in-out infinite;
 }
 
-.player-profile__about.bpcl-tier-fx__about .player-profile__about-inner {
-  z-index: 2;
-  overflow: hidden;
+.player-profile__about--team.bpcl-tier-fx__about::before {
+  background:
+    linear-gradient(
+      125deg,
+      rgba(255, 228, 140, 0.24) 0%,
+      transparent 40%,
+      transparent 58%,
+      rgba(255, 196, 72, 0.18) 100%
+    ),
+    linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--background) 86%, transparent) 0%,
+      color-mix(in srgb, var(--background) 52%, transparent) 38%,
+      color-mix(in srgb, var(--background) 18%, transparent) 62%,
+      transparent 84%
+    );
 }
 
-.player-profile__about.bpcl-tier-fx__about .player-profile__about-inner::before {
+.player-profile__about.bpcl-tier-fx__about::after {
   content: "";
   position: absolute;
   top: -25%;
   left: 0;
   width: 46%;
   height: 150%;
+  border-radius: inherit;
   pointer-events: none;
-  z-index: 0;
+  z-index: 1;
   background: linear-gradient(
     105deg,
     transparent 34%,
@@ -293,13 +307,18 @@
   animation: bpcl-tier-fx-about-sweep 6.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
+.player-profile__about.bpcl-tier-fx__about .player-profile__about-inner {
+  position: relative;
+  z-index: 2;
+}
+
 .player-profile__about.bpcl-tier-fx__about .player-profile__about-inner > * {
   position: relative;
   z-index: 1;
 }
 
-.player-profile__about--team.bpcl-tier-fx__about::after {
-  z-index: 1;
+.player-profile__about--team.bpcl-tier-fx__about .player-profile__about-team-bg {
+  z-index: 0;
 }
 
 .player-profile-layout--gold-fx .player-profile__card-wrap .bpcl-tier-fx__card-glow {
@@ -311,7 +330,7 @@
   .bpcl-tier-fx__panel.community-glass::before,
   .bpcl-tier-fx__panel.community-glass:not(.community-glass--liquid)::after,
   .player-profile__about.bpcl-tier-fx__about::before,
-  .player-profile__about.bpcl-tier-fx__about .player-profile__about-inner::before {
+  .player-profile__about.bpcl-tier-fx__about::after {
     animation: none;
   }
 

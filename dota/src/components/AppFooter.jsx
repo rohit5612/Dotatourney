@@ -49,8 +49,8 @@ export function AppFooter({ navigate, mode = "public", className = "" }) {
             <div>
               <p className="app-footer__brand">BPC League</p>
               <p className="app-footer__tagline">
-                Bharat Pro Circuit League — a Dota 2 tournament hub for registrations, rosters, brackets, schedules,
-                standings, and match-day updates.
+                Bharat Pro Circuit League — built for India&apos;s Dota community: structured seasons, roster drafts,
+                fair brackets, and a real run to finals.
               </p>
               {mode === "public" ? (
                 <p className="app-footer__contact">

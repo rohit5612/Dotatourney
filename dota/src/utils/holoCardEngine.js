@@ -122,15 +122,43 @@ function polyPath(c, points) {
       return g;
     }
 
-    function eliteNeonGradient(c, x1, x2, t, offset = 0) {
-      const hue=(t*38+offset)%360;
-      const g=c.createLinearGradient(x1,0,x2,0);
-      g.addColorStop(0,`hsl(${hue},100%,66%)`);
-      g.addColorStop(.22,`hsl(${hue+72},100%,68%)`);
-      g.addColorStop(.46,`hsl(${hue+150},100%,66%)`);
-      g.addColorStop(.72,`hsl(${hue+230},100%,68%)`);
-      g.addColorStop(1,`hsl(${hue+360},100%,66%)`);
+    function staticHoloTextGradient(c, x1, x2) {
+      const g = c.createLinearGradient(x1, 0, x2, 0);
+      g.addColorStop(0, '#ff4fbf');
+      g.addColorStop(0.18, '#a979ff');
+      g.addColorStop(0.38, '#42cfff');
+      g.addColorStop(0.58, '#49f0bb');
+      g.addColorStop(0.78, '#ffe36e');
+      g.addColorStop(1, '#ff739d');
       return g;
+    }
+
+    function pulsingHoloTextGradient(c, x1, x2, t, offset = 0) {
+      const pulse = 0.78 + 0.22 * Math.sin(t * 2.6 + offset * 0.025);
+      const sweep = (shineX - 0.5) * 120 + Math.sin(t * 1.9 + offset * 0.035) * 110;
+      const hue = (t * 44 + offset) % 360;
+      const g = c.createLinearGradient(x1 + sweep, 0, x2 + sweep, 0);
+      const stops = [
+        [0, hue],
+        [0.16, hue + 58],
+        [0.34, hue + 128],
+        [0.52, hue + 198],
+        [0.7, hue + 268],
+        [0.86, hue + 328],
+        [1, hue + 360],
+      ];
+      stops.forEach(([pos, h]) => {
+        g.addColorStop(pos, `hsl(${h % 360} 88% ${54 + pulse * 14}%)`);
+      });
+      return g;
+    }
+
+    function staticPrismGradient(c, x1, x2) {
+      return prismTextGradient(c, x1, x2);
+    }
+
+    function eliteNeonGradient(c, x1, x2, t, offset = 0) {
+      return pulsingHoloTextGradient(c, x1, x2, t, offset);
     }
 
     function drawEmbossedBrand(c, x, y, rotation, t, offset = 0) {
@@ -187,15 +215,6 @@ function polyPath(c, points) {
       const y = 1394;
       const w = 210;
       const h = 34;
-      const hue=(t*38)%360;
-      c.save();
-      c.globalCompositeOperation='screen';
-      const aura=c.createRadialGradient(cx,y+h/2,0,cx,y+h/2,150);
-      aura.addColorStop(0,`hsla(${hue+190},100%,68%,${.32*foil*glow})`);
-      aura.addColorStop(.45,`hsla(${hue+290},100%,68%,${.18*foil*glow})`);
-      aura.addColorStop(1,'rgba(0,0,0,0)');
-      c.fillStyle=aura; c.fillRect(cx-175,y-64,350,120);
-      c.restore();
 
       c.save();
       const shell=[[cx-w/2+18,y],[cx+w/2-18,y],[cx+w/2,y+12],[cx+w/2-28,y+h],[cx-w/2+28,y+h],[cx-w/2,y+12]];
@@ -206,10 +225,10 @@ function polyPath(c, points) {
       base.addColorStop(1,'rgba(5,8,16,.92)');
       c.shadowColor='rgba(0,0,0,.70)'; c.shadowBlur=14; c.fillStyle=base; c.fill();
 
-      c.shadowColor=`hsla(${hue+185},100%,66%,.82)`; c.shadowBlur=15;
-      const rim=eliteNeonGradient(c,cx-w/2,cx+w/2,t,185);
+      c.shadowBlur=0;
+      const rim=staticPrismGradient(c,cx-w/2,cx+w/2);
       c.strokeStyle=rim; c.lineWidth=2.8; polyPath(c,shell); c.stroke();
-      c.shadowBlur=0; c.strokeStyle='rgba(245,252,255,.52)'; c.lineWidth=1;
+      c.strokeStyle='rgba(245,252,255,.52)'; c.lineWidth=1;
       polyPath(c,[[cx-w/2+25,y+5],[cx+w/2-25,y+5],[cx+w/2-40,y+11],[cx-w/2+40,y+11]]);
       c.stroke();
 
@@ -218,18 +237,13 @@ function polyPath(c, points) {
       for(let i=0;i<slotCount;i++){
         const x=start+i*(slotW+gap);
         const sg=c.createLinearGradient(x,y+9,x+slotW,y+27);
-        sg.addColorStop(0,`hsla(${hue+i*34+165},100%,78%,.98)`);
+        sg.addColorStop(0,'#8ed8ff');
         sg.addColorStop(.5,'rgba(255,255,255,.92)');
-        sg.addColorStop(1,`hsla(${hue+i*34+245},100%,66%,.95)`);
-        c.save();
-        c.shadowColor=`hsla(${hue+i*34+205},100%,68%,.95)`;
-        c.shadowBlur=13;
+        sg.addColorStop(1,'#c8a8ff');
         roundedRect(c,x,y+11,slotW,14,4);
         c.fillStyle=sg; c.fill();
-        c.globalCompositeOperation='screen'; c.globalAlpha=.45;
-        c.fillStyle='rgba(255,255,255,.9)';
+        c.fillStyle='rgba(255,255,255,.72)';
         c.fillRect(x+2,y+12,slotW-4,2);
-        c.restore();
       }
       c.restore();
     }
@@ -438,19 +452,7 @@ function polyPath(c, points) {
     }
 
     function drawSparkles(c, t, foil) {
-      if (foil < 0.04) return;
-      // Pearl card sparkles: white/pastel glints, not saturated
-      const pastels=['rgba(255,210,230','rgba(220,200,255','rgba(190,220,255','rgba(190,248,222','rgba(255,248,200'];
-      getSparkles().forEach(({x,y,rad,hue,ph,br}) => {
-        const p = br*(0.52+0.48*Math.sin(t*2.0+ph));
-        if (p < 0.18) return;
-        const col = pastels[Math.floor(hue/72)%5];
-        const sg=c.createRadialGradient(x,y,0,x,y,rad*(1.2+foil*.4));
-        sg.addColorStop(0,`rgba(255,255,255,${p*foil*.85})`);
-        sg.addColorStop(0.30,`${col},${p*foil*.28})`);
-        sg.addColorStop(1,`${col},0)`);
-        c.save(); c.fillStyle=sg; c.fillRect(x-rad*2.4,y-rad*2.4,rad*4.8,rad*4.8); c.restore();
-      });
+      return;
     }
 
     function drawAvatarPlaceholder(c, t) {
@@ -548,23 +550,7 @@ function polyPath(c, points) {
     // ─── Frame shell ────────────────────────────────────────────────
 
     function drawBlackLabelMaterial(c, t, foil, glow) {
-      const hue=(t*38)%360;
-      const pulse=.76+.24*Math.sin(t*3.2);
-      // The frame asset contains the physical rail modules. These soft pools
-      // animate their emitted light without drawing lines over the titanium.
-      const moduleGlows=[
-        [250,48,86,0],[836,48,86,70],
-        [35,230,72,130],[35,520,72,190],[35,790,72,250],[35,1190,82,310],
-        [1051,230,72,40],[1051,520,72,100],[1051,790,72,160],[1051,1190,82,220],
-        [250,1408,92,280],[836,1408,92,340]
-      ];
-      moduleGlows.forEach(([x,y,r,offset])=>{
-        c.save(); c.globalCompositeOperation='screen';
-        const color=`hsla(${hue+offset},100%,65%,${(.18+.14*pulse)*glow*foil})`;
-        const flare=c.createRadialGradient(x,y,0,x,y,r);
-        flare.addColorStop(0,color); flare.addColorStop(1,'rgba(0,0,0,0)');
-        c.fillStyle=flare; c.fillRect(x-r,y-r,r*2,r*2); c.restore();
-      });
+      return;
     }
 
     function drawFrameShell(c, t, foil, glow) {
@@ -609,49 +595,6 @@ function polyPath(c, points) {
 
       // (structural overlays removed — reference PNG frame handles all detail)
 
-      // ── ART WINDOW BEVEL ────────────────────────────────────────────────
-      // A fine luminous lip and colored recess keep depth without shrinking the art.
-      strokePoly(c,ART_OPENING,'rgba(232,248,255,.76)',2.5,'rgba(98,78,158,.34)',12);
-      c.save();
-      c.strokeStyle='rgba(148,212,246,.24)'; c.lineWidth=1.25;
-      c.shadowColor='rgba(93,68,150,.26)'; c.shadowBlur=8; c.shadowOffsetY=4;
-      polyPath(c,ART_OPENING); c.stroke();
-      c.restore();
-
-      // The lower portrait edge needs its own contact depth before the name plate.
-      const artBottomEdge=[[67,1025],[132,1075],[203,1075],[236,1098],[850,1098],[883,1075],[954,1075],[1017,1025]];
-      c.save();
-      polyPath(c,ART_OPENING); c.clip();
-      const contactShade=c.createLinearGradient(0,1010,0,1098);
-      contactShade.addColorStop(0,'rgba(54,38,92,0)');
-      contactShade.addColorStop(.55,'rgba(54,38,92,.08)');
-      contactShade.addColorStop(.82,'rgba(48,32,84,.20)');
-      contactShade.addColorStop(1,'rgba(36,22,68,.36)');
-      c.fillStyle=contactShade; c.fillRect(67,1010,950,88);
-      c.restore();
-
-      c.save();
-      c.beginPath();
-      artBottomEdge.forEach(([x,y],i)=>i?c.lineTo(x,y):c.moveTo(x,y));
-      c.strokeStyle='rgba(68,48,112,.38)'; c.lineWidth=13;
-      c.shadowColor='rgba(48,30,88,.60)'; c.shadowBlur=20; c.shadowOffsetY=11;
-      c.stroke();
-      c.shadowColor='transparent'; c.shadowBlur=0; c.shadowOffsetY=0;
-      c.save(); c.translate(0,3);
-      c.strokeStyle='rgba(42,28,78,.46)'; c.lineWidth=6; c.stroke();
-      c.restore();
-      const bottomLip=c.createLinearGradient(132,0,954,0);
-      bottomLip.addColorStop(0,'rgba(218,244,255,.88)');
-      bottomLip.addColorStop(.3,'rgba(230,198,255,.88)');
-      bottomLip.addColorStop(.58,'rgba(174,236,255,.92)');
-      bottomLip.addColorStop(.82,'rgba(214,255,230,.88)');
-      bottomLip.addColorStop(1,'rgba(255,232,202,.86)');
-      c.strokeStyle=bottomLip; c.lineWidth=3.5; c.stroke();
-      c.save(); c.translate(0,-1.5);
-      c.strokeStyle='rgba(255,255,255,.66)'; c.lineWidth=1.25; c.stroke();
-      c.restore();
-      c.restore();
-
       // ── Top-center tier title ────────────────────────────────────────────
       c.save();
       const badgeCenterX=(334+752)/2, badgeCenterY=(22+124)/2-9;
@@ -660,10 +603,10 @@ function polyPath(c, points) {
       const badgeMetrics=c.measureText('HOLO');
       const badgeTextY=badgeCenterY+(badgeMetrics.actualBoundingBoxAscent-badgeMetrics.actualBoundingBoxDescent)/2;
       c.lineWidth=2.5; c.strokeStyle='rgba(64,54,112,.46)';
-      c.shadowColor='rgba(96,210,255,.28)'; c.shadowBlur=11;
+      c.shadowColor='transparent'; c.shadowBlur=0;
       c.strokeText('HOLO',badgeCenterX,badgeTextY);
-      c.fillStyle=eliteNeonGradient(c,badgeCenterX-180,badgeCenterX+180,t,20);
-      c.shadowColor=`hsla(${(t*38)%360},100%,65%,.82)`; c.shadowBlur=20;
+      c.fillStyle=staticPrismGradient(c,badgeCenterX-180,badgeCenterX+180);
+      c.shadowColor='transparent'; c.shadowBlur=0;
       c.fillText('HOLO',badgeCenterX,badgeTextY);
       c.restore();
 
@@ -710,23 +653,20 @@ function polyPath(c, points) {
       line(c, 54, 1112, HOLO_WIDTH - 54, 1112, dl, 1.25);
       c.restore();
 
-      const name = String(config.playerName).trim().toUpperCase() || 'PLAYER NAME';
-      const nameSz = fitText(c, name, 884, 84, 42, nameFamily, 800);
+      const name = String(config.playerName).trim() || 'Player';
+      const nameY = 1182;
+      const nameSz = fitText(c, name, 884, 97, 48, nameFamily, 800);
       c.save();
       c.font = `800 ${nameSz}px ${nameFamily}`;
       c.textAlign = 'center';
       c.textBaseline = 'middle';
       c.lineWidth = 3;
       c.strokeStyle = 'rgba(40,28,78,.62)';
-      c.shadowColor = `hsla(${(t * 38) % 360},100%,65%,${0.86 * glow})`;
-      c.shadowBlur = 20;
-      c.strokeText(name, HOLO_WIDTH / 2, 1188);
-      c.fillStyle = eliteNeonGradient(c, 112, HOLO_WIDTH - 112, t);
-      c.fillText(name, HOLO_WIDTH / 2, 1188);
-      c.globalCompositeOperation = 'screen';
-      c.globalAlpha = 0.22 + 0.12 * foil;
-      c.fillStyle = 'rgba(255,255,255,.72)';
-      c.fillText(name, HOLO_WIDTH / 2 - 1, 1186);
+      c.shadowColor = 'transparent';
+      c.shadowBlur = 0;
+      c.strokeText(name, HOLO_WIDTH / 2, nameY);
+      c.fillStyle = pulsingHoloTextGradient(c, 112, HOLO_WIDTH - 112, t, 0);
+      c.fillText(name, HOLO_WIDTH / 2, nameY);
       c.restore();
 
       c.save();
@@ -760,10 +700,10 @@ function polyPath(c, points) {
         c.save();
         c.textAlign = 'center';
         c.textBaseline = 'middle';
-        c.font = `800 17px ${nameFamily}`;
-        c.fillStyle = eliteNeonGradient(c, cx - 72, cx + 72, t, i * 45);
-        c.shadowColor = `hsla(${(t * 38 + i * 45) % 360},100%,65%,.72)`;
-        c.shadowBlur = 9;
+        c.font = `800 26px ${nameFamily}`;
+        c.fillStyle = staticHoloTextGradient(c, cx - 72, cx + 72);
+        c.shadowColor = 'transparent';
+        c.shadowBlur = 0;
         c.fillText(label, cx, sT + 16);
         c.restore();
         c.save();
@@ -772,10 +712,10 @@ function polyPath(c, points) {
         c.font = `900 46px ${fam}`;
         c.lineWidth = 2;
         c.strokeStyle = 'rgba(38,28,76,.58)';
+        c.shadowColor = 'transparent';
+        c.shadowBlur = 0;
         c.strokeText(value || '--', cx, sT + 66);
-        c.fillStyle = eliteNeonGradient(c, cx - 100, cx + 100, t, i * 45);
-        c.shadowColor = `hsla(${(t * 38 + i * 45) % 360},100%,65%,${0.82 * glow})`;
-        c.shadowBlur = 16;
+        c.fillStyle = pulsingHoloTextGradient(c, cx - 100, cx + 100, t, i * 48 + 24);
         c.fillText(value || '--', cx, sT + 66);
         c.restore();
       });
@@ -784,6 +724,66 @@ function polyPath(c, points) {
 
     // ─── Safe zones ─────────────────────────────────────────────────
 
+
+    // ─── Art window edge (drawn after portrait punch-through) ───────
+
+    function drawArtWindowBevel(c) {
+      strokePoly(c, ART_OPENING, 'rgba(232,248,255,.76)', 2.5, 'rgba(98,78,158,.34)', 12);
+      c.save();
+      c.strokeStyle = 'rgba(148,212,246,.24)';
+      c.lineWidth = 1.25;
+      c.shadowColor = 'rgba(93,68,150,.26)';
+      c.shadowBlur = 8;
+      c.shadowOffsetY = 4;
+      polyPath(c, ART_OPENING);
+      c.stroke();
+      c.restore();
+
+      const artBottomEdge = [[67,1025],[132,1075],[203,1075],[236,1098],[850,1098],[883,1075],[954,1075],[1017,1025]];
+      c.save();
+      c.beginPath();
+      artBottomEdge.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
+      c.strokeStyle = 'rgba(68,48,112,.38)';
+      c.lineWidth = 13;
+      c.shadowColor = 'rgba(48,30,88,.60)';
+      c.shadowBlur = 20;
+      c.shadowOffsetY = 11;
+      c.stroke();
+      c.shadowColor = 'transparent';
+      c.shadowBlur = 0;
+      c.shadowOffsetY = 0;
+      c.save();
+      c.translate(0, 3);
+      c.strokeStyle = 'rgba(42,28,78,.46)';
+      c.lineWidth = 6;
+      c.stroke();
+      c.restore();
+      const bottomLip = c.createLinearGradient(132, 0, 954, 0);
+      bottomLip.addColorStop(0, 'rgba(218,244,255,.88)');
+      bottomLip.addColorStop(0.3, 'rgba(230,198,255,.88)');
+      bottomLip.addColorStop(0.58, 'rgba(174,236,255,.92)');
+      bottomLip.addColorStop(0.82, 'rgba(214,255,230,.88)');
+      bottomLip.addColorStop(1, 'rgba(255,232,202,.86)');
+      c.strokeStyle = bottomLip;
+      c.lineWidth = 3.5;
+      c.stroke();
+      c.save();
+      c.translate(0, -1.5);
+      c.strokeStyle = 'rgba(255,255,255,.66)';
+      c.lineWidth = 1.25;
+      c.stroke();
+      c.restore();
+      c.restore();
+    }
+
+    function punchArtWindow(c) {
+      c.save();
+      c.globalCompositeOperation = 'destination-out';
+      polyPath(c, ART_OPENING);
+      c.fillStyle = '#000';
+      c.fill();
+      c.restore();
+    }
 
     // ─── Master draw ────────────────────────────────────────────────
 
@@ -800,43 +800,15 @@ function polyPath(c, points) {
       drawPremiumBody(c, t, foil, glow);
       if (frameImage) c.drawImage(frameImage, 0, 0, HOLO_WIDTH, HOLO_HEIGHT);
 
-      // Art content
-      c.save();
-      polyPath(c, ART_OPENING);
-      c.clip();
-
-      if (avatar) {
-        c.globalCompositeOperation = 'source-over';
-        drawPositionedImage(c, avatar,
-          ART_BOUNDS.x, ART_BOUNDS.y, ART_BOUNDS.w, ART_BOUNDS.h,
-          config.cropMode,
-          config.avatarZoom,
-          config.avatarX,
-          config.avatarY
-        );
-      } else {
-        drawAvatarPlaceholder(c, t);
-        // Foil wash over placeholder
-        const avatarWash = c.createLinearGradient(ART_BOUNDS.x, ART_BOUNDS.y, ART_BOUNDS.x + ART_BOUNDS.w, ART_BOUNDS.y + ART_BOUNDS.h);
-        // Prism wash over placeholder art area on white card
-        avatarWash.addColorStop(0,   `rgba(255,100,100,${0.08 * foil})`);
-        avatarWash.addColorStop(.28, `rgba(80,200,80,${0.06 * foil})`);
-        avatarWash.addColorStop(.58, `rgba(60,120,255,${0.08 * foil})`);
-        avatarWash.addColorStop(1,   `rgba(200,60,255,${0.06 * foil})`);
-        c.fillStyle = avatarWash;
-        c.globalCompositeOperation = 'screen';
-        c.fillRect(ART_BOUNDS.x, ART_BOUNDS.y, ART_BOUNDS.w, ART_BOUNDS.h);
-        c.globalCompositeOperation = 'source-over';
-      }
-
-      c.restore(); // art clip
-
       if (frameOverlay)     c.drawImage(frameOverlay, 0, 0, HOLO_WIDTH, HOLO_HEIGHT);
       else if (frameImage)  c.drawImage(frameImage,   0, 0, HOLO_WIDTH, HOLO_HEIGHT);
 
       drawFrameShell(c, t, foil, glow);
       drawHoloHeader(c, foil, glow);
       drawInfoModule(c, t, config, shine);
+
+      punchArtWindow(c);
+      drawArtWindowBevel(c);
 
       c.restore(); // card clip
     }

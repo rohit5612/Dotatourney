@@ -29,7 +29,7 @@ import {
 import { createOAuthState, parseOAuthState } from "../services/oauthStateService.js";
 import { optionalPhoneNumberSchema } from "../utils/phoneNumber.js";
 import { steamLoginUrl, verifySteamOpenIdCallback, fetchSteamProfile } from "../services/steamOpenIdService.js";
-import { discordAuthorizeUrl, exchangeDiscordCode } from "../services/discordOAuthService.js";
+import { addUserToGuild, discordAuthorizeUrl, exchangeDiscordCode } from "../services/discordOAuthService.js";
 import { googleAuthorizeUrl, exchangeGoogleCode } from "../services/googleOAuthService.js";
 import {
   sendPlayerClaimAccountEmail,
@@ -518,8 +518,15 @@ router.get("/auth/discord/callback", async (req, res, next) => {
       discordAvatarUrl: profile.discordAvatarUrl,
     });
     await recordAccountLink(account.id, "discord", profile.discordId);
+    const joinedGuild = await addUserToGuild({
+      discordUserId: profile.discordId,
+      accessToken: profile.accessToken,
+    });
     const session = await createPlayerSession(account.id);
-    return res.redirect(`${frontendUrl("/dashboard")}?linked=discord&token=${encodeURIComponent(session.token)}`);
+    const joinParam = joinedGuild ? "" : "&discord_join=failed";
+    return res.redirect(
+      `${frontendUrl("/dashboard")}?linked=discord&token=${encodeURIComponent(session.token)}${joinParam}`,
+    );
   } catch (error) {
     return redirectWithError(res, error.message || "Discord link failed");
   }

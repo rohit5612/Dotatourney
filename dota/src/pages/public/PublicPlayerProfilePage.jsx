@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { HiOutlineArrowLeft, HiOutlineStar, HiOutlineTrophy } from "react-icons/hi2";
 import { CardTierBadge } from "../../components/cards/CardTierBadge.jsx";
 import { PlayerProfileCard } from "../../components/cards/PlayerProfileCard.jsx";
+import { HoloProfileViewportFx } from "../../components/player/HoloProfileViewportFx.jsx";
 import { PageLoadingSpinner } from "../../components/PageLoadingSpinner.jsx";
 import { TeamLogoImg } from "../../components/TeamLogoImg.jsx";
 import { SITE_BRAND_SHORT } from "../../constants/siteMeta.js";
@@ -294,6 +295,7 @@ export function PublicPlayerProfilePage() {
 
   return (
     <div className={`player-profile-layout community-page-layout${layoutFxClass ? ` ${layoutFxClass}` : ""}`}>
+      {cardTier === "holo" ? <HoloProfileViewportFx /> : null}
       <section
         className={`community-page__hero-band player-profile__hero-band${heroBandClass ? ` ${heroBandClass}` : ""}`}
         aria-labelledby="player-profile-title"
