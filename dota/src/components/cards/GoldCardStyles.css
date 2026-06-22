@@ -5,6 +5,15 @@
   --gold-card-width: 17rem;
   --gold-canvas-w: 400;
   --gold-canvas-h: 600;
+  /* Stat value anchors — % of card (400×600); edit to align with goldframe.png */
+  --gold-stat-kda-x: 19.0%;
+  --gold-stat-kda-y: 89%;
+  --gold-stat-gpm-x: 39%;
+  --gold-stat-gpm-y: 89%;
+  --gold-stat-xpm-x: 59%;
+  --gold-stat-xpm-y: 89%;
+  --gold-stat-winrate-x: 81%;
+  --gold-stat-winrate-y: 89%;
   width: var(--gold-card-width);
   max-width: 100%;
   aspect-ratio: 400 / 600;
@@ -28,7 +37,7 @@
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  transition: transform 0.12s ease-out;
+  will-change: transform;
 }
 
 .bpcl-gold-card__glow {
@@ -42,10 +51,14 @@
   position: relative;
   width: 100%;
   height: 100%;
+  overflow: hidden;
   container-type: inline-size;
 }
 
-.bpcl-gold-card__frame {
+.bpcl-gold-card__frame-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
   display: block;
   width: 100%;
   height: 100%;
@@ -54,39 +67,64 @@
   user-select: none;
 }
 
-/* Portrait slot — generator: left 102, top 184, 196×205 on 400×600 */
+/* Portrait recess — generator: left 76, top 168, 250×250 on 400×600 */
 .bpcl-gold-card__portrait-slot {
   position: absolute;
-  left: 25.5%;
-  top: 30.67%;
-  width: 49%;
-  height: 34.17%;
+  left: 19%;
+  top: 28%;
+  width: 62.5%;
+  height: 41.67%;
   overflow: hidden;
   z-index: 1;
-  background: linear-gradient(180deg, #130900 0%, #231205 52%, #120700 100%);
-  box-shadow: inset 0 0 1.1rem rgba(0, 0, 0, 0.7);
+  border-radius: 0.125rem;
+  background: linear-gradient(165deg, #1c1006 0%, #0a0602 55%, #140c04 100%);
+  box-shadow:
+    inset 0 0.45rem 1.1rem rgba(0, 0, 0, 0.72),
+    inset 0 -0.28rem 0.72rem rgba(0, 0, 0, 0.48),
+    inset 0.22rem 0 0.72rem rgba(0, 0, 0, 0.34),
+    inset -0.22rem 0 0.72rem rgba(0, 0, 0, 0.34);
 }
 
 .bpcl-gold-card__portrait {
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  inset: -4%;
+  width: 108%;
+  height: 108%;
   object-fit: cover;
   object-position: center center;
   display: block;
+  transform: scale(1.06);
+  transition: transform 0.12s ease-out;
+  will-change: transform;
 }
 
 .bpcl-gold-card__portrait--empty {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: none;
   background: radial-gradient(circle at 50% 35%, #3a2208, #120700);
 }
 
-.bpcl-gold-card__portrait-shine {
+.bpcl-gold-card__portrait-vignette {
   position: absolute;
   inset: 0;
+  z-index: 2;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 80% 78% at 50% 45%, transparent 68%, rgba(0, 0, 0, 0.24) 100%),
-    linear-gradient(120deg, rgba(255, 255, 255, 0.08), transparent 28%, transparent 72%, rgba(0, 0, 0, 0.1));
-  box-shadow: inset 0 0 0.65rem rgba(0, 0, 0, 0.38);
+    radial-gradient(ellipse 88% 80% at 50% 40%, transparent 48%, rgba(0, 0, 0, 0.42) 100%),
+    linear-gradient(180deg, rgba(255, 214, 120, 0.14) 0%, transparent 16%, transparent 68%, rgba(0, 0, 0, 0.52) 100%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.36) 0%, transparent 12%, transparent 88%, rgba(0, 0, 0, 0.36) 100%);
+}
+
+.bpcl-gold-card__portrait-rim {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 228, 150, 0.12),
+    inset 0 2px 0 rgba(255, 236, 170, 0.08);
 }
 
 .bpcl-gold-card__shimmer {
@@ -97,19 +135,20 @@
   mix-blend-mode: screen;
 }
 
-/* Name plate — generator: left 42, top 416, 316×64 */
+/* Name plate — dynamic text over frame; generator: left 50, top 417, 300×58 */
 .bpcl-gold-card__name-plate {
   position: absolute;
-  left: 10.5%;
-  top: 69.33%;
-  width: 79%;
-  height: 10.67%;
+  left: 12.5%;
+  top: 69.5%;
+  width: 75%;
+  height: 9.67%;
   z-index: 4;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   padding-top: 0.25rem;
+  pointer-events: none;
 }
 
 .bpcl-gold-card__name {
@@ -128,50 +167,59 @@
     0 4px 9px rgba(86, 43, 0, 0.22);
 }
 
-/* Stats — generator: left 72, top 502, 256×47 (wider + spaced columns) */
+/* Stat values — absolutely positioned on canvas; labels are on goldframe.png */
 .bpcl-gold-card__stats {
   position: absolute;
-  left: 17%;
-  top: 83.67%;
-  width: 66%;
-  height: 7.83%;
+  inset: 0;
   z-index: 4;
-  display: grid;
-  grid-template-columns: 1.14fr 0.95fr 0.95fr 0.96fr;
-  align-items: center;
-  column-gap: 0.2rem;
   margin: 0;
-  padding: 1.15% 0.5% 1%;
+  padding: 0;
+  pointer-events: none;
+  list-style: none;
 }
 
 .bpcl-gold-card__stat {
-  text-align: center;
-  min-width: 0;
-  padding: 0;
+  display: contents;
 }
 
 .bpcl-gold-card__stat dt {
-  margin: 0;
-  font-family: "Rajdhani", sans-serif;
-  font-size: clamp(0.5rem, 2.35cqi, 0.68rem);
-  font-weight: 800;
-  letter-spacing: 0.035em;
-  line-height: 1.08;
-  text-transform: uppercase;
-  color: rgba(72, 38, 0, 0.76);
+  display: none;
 }
 
 .bpcl-gold-card__stat dd {
+  position: absolute;
   margin: 0;
   font-family: "Bebas Neue", "Rajdhani", Impact, sans-serif;
   font-size: clamp(0.8rem, 6cqi, 1.5rem);
   font-weight: 700;
-  line-height: 1.02;
+  line-height: 1;
+  text-align: center;
   color: #4e2c00;
+  transform: translate(-50%, -50%);
   text-shadow:
     0 1px 0 rgba(255, 217, 76, 0.42),
     0 3px 6px rgba(88, 42, 0, 0.12);
   white-space: nowrap;
+}
+
+.bpcl-gold-card__stat--kda dd {
+  left: var(--gold-stat-kda-x);
+  top: var(--gold-stat-kda-y);
+}
+
+.bpcl-gold-card__stat--gpm dd {
+  left: var(--gold-stat-gpm-x);
+  top: var(--gold-stat-gpm-y);
+}
+
+.bpcl-gold-card__stat--xpm dd {
+  left: var(--gold-stat-xpm-x);
+  top: var(--gold-stat-xpm-y);
+}
+
+.bpcl-gold-card__stat--winrate dd {
+  left: var(--gold-stat-winrate-x);
+  top: var(--gold-stat-winrate-y);
 }
 
 .bpcl-gold-card__stat-value--compact {

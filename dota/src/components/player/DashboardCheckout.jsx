@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { BpcCoin } from "../coins/BpcCoin.jsx";
 import { BpcCoinSlider } from "../coins/BpcCoinSlider.jsx";
 import { pollCheckoutPaid, playerApi } from "../../lib/playerApi";
+import { cardTierDisplayLabel } from "../../constants/cardTierPreviews.js";
 import { bundleTotalForTier, formatDiscountLabel } from "../../utils/commerceBundle.js";
 import { CashfreeGatewayModal } from "../payment/CashfreeGatewayModal.jsx";
 
@@ -109,7 +110,7 @@ export function DashboardCheckout({ tournamentSlug, registrationsOpen, eligible 
 
   if (step === "done") {
     const isPremiumCard = cardTier !== "default";
-    const tierLabel = tiers[cardTier]?.label || cardTier;
+    const tierLabel = tiers[cardTier]?.label || cardTierDisplayLabel(cardTier);
     return (
       <section className="mt-8 rounded-lg border border-accent/40 bg-card p-5">
         <h2 className="font-serif text-xl text-accent">Registration complete</h2>
@@ -143,7 +144,7 @@ export function DashboardCheckout({ tournamentSlug, registrationsOpen, eligible 
               onClick={() => setCardTier(id)}
               aria-pressed={cardTier === id}
             >
-              <span className="player-reg__tier-card-label">{tier?.label || id}</span>
+              <span className="player-reg__tier-card-label">{tier?.label || cardTierDisplayLabel(id)}</span>
               <span className="player-reg__tier-card-price">₹{bundleTotal}</span>
               <span className="player-reg__tier-card-desc">{tier?.description || ""}</span>
               {discountLabel ? (

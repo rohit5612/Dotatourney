@@ -11,6 +11,7 @@ import { CardTierPreviewImage } from "../../components/cards/CardTierPreviewImag
 import {
   CARD_TIER_COMPARISON_FEATURES,
   CARD_TIER_ORDER,
+  cardTierDisplayLabel,
 } from "../../constants/cardTierPreviews.js";
 import { SITE_BRAND_SHORT } from "../../constants/siteMeta.js";
 import { usePublicTournament } from "../../context/PublicTournamentContext.jsx";
@@ -148,7 +149,7 @@ export function WhatsNewPage() {
                       >
                         <div className="whats-new-page__tier-head">
                           <CardTierPreviewImage tier={tierId} size="sm" className="whats-new-page__tier-img" />
-                          <span className="whats-new-page__tier-label">{tier.label || tierId}</span>
+                          <span className="whats-new-page__tier-label">{tier.label || cardTierDisplayLabel(tierId)}</span>
                           <span className="whats-new-page__tier-price">₹{bundleTotal}</span>
                         </div>
                       </th>

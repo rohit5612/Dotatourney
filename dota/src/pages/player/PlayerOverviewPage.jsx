@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
-import { BpclCardRenderer } from "../../components/cards/BpclCardRenderer.jsx";
+import { CardTierBadge, cardTierDisplayLabel } from "../../components/cards/CardTierBadge.jsx";
+import { PlayerProfileCard } from "../../components/cards/PlayerProfileCard.jsx";
 import { BpcCoin } from "../../components/coins/BpcCoin.jsx";
+import { CardUpgradeModal } from "../../components/player/CardUpgradeModal.jsx";
+import { CardUpgradeSuccessModal } from "../../components/player/CardUpgradeSuccessModal.jsx";
 import { DashboardActionIcon } from "../../components/player/DashboardActionIcon.jsx";
 import { MatchesSchedulePanel } from "../../components/player/MatchesSchedulePanel.jsx";
 import { PlayerSetupChecklist } from "../../components/player/onboarding/PlayerSetupChecklist.jsx";
@@ -13,13 +16,28 @@ import "../../styles/team-logo-img.css";
 import "../../components/cards/CardTierStyles.css";
 
 export function PlayerOverviewPage() {
-  const { account, coinBalance } = useOutletContext();
+  const { account, coinBalance, refreshMe } = useOutletContext();
   const [team, setTeam] = useState(null);
   const [matchSchedule, setMatchSchedule] = useState(null);
   const [cardManifest, setCardManifest] = useState(null);
   const [tournaments, setTournaments] = useState([]);
   const [registrations, setRegistrations] = useState([]);
   const [recognitions, setRecognitions] = useState([]);
+  const [upgradeEligibility, setUpgradeEligibility] = useState(null);
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
+  const [upgradeSuccess, setUpgradeSuccess] = useState(null);
+
+  const refreshCardManifest = useCallback(() => {
+    if (!account?.slug) return Promise.resolve();
+    return playerApi
+      .publicCard(account.slug)
+      .then((r) => setCardManifest(r.card || r.manifest))
+      .catch(() => {});
+  }, [account?.slug]);
+
+  const loadUpgradeEligibility = useCallback(() => {
+    return playerApi.upgradeEligibility().then(setUpgradeEligibility).catch(() => setUpgradeEligibility(null));
+  }, []);
 
   const loadMatches = useCallback(() => {
     return playerApi.matches().then(setMatchSchedule).catch(() => setMatchSchedule(null));
@@ -35,7 +53,8 @@ export function PlayerOverviewPage() {
       setRegistrations(r.registrations || []);
       setRecognitions(r.recognitions || []);
     }).catch(() => {});
-  }, [account?.slug, loadMatches]);
+    loadUpgradeEligibility();
+  }, [account?.slug, loadMatches, loadUpgradeEligibility]);
 
   const teamInfo = team?.team?.team;
   const dashboardTeam = useMemo(() => buildPlayerDashboardTeamCard(team), [team]);
@@ -51,6 +70,21 @@ export function PlayerOverviewPage() {
 
   const upcomingCount = matchSchedule?.upcoming?.length ?? 0;
   const linkageDone = [account.emailVerified, account.steamLinked, account.discordLinked].filter(Boolean).length;
+  const canUpgradeCard = upgradeEligibility?.eligible && (upgradeEligibility?.upgradeOptions?.length ?? 0) > 0;
+
+  async function handleUpgradeSuccess({ targetTier, tournamentName }) {
+    setUpgradeModalOpen(false);
+    await Promise.all([
+      refreshCardManifest(),
+      loadUpgradeEligibility(),
+      playerApi.history().then((r) => {
+        setRegistrations(r.registrations || []);
+        setRecognitions(r.recognitions || []);
+      }),
+      refreshMe?.(),
+    ]);
+    setUpgradeSuccess({ targetTier, tournamentName });
+  }
 
   return (
     <div className="player-dash__overview">
@@ -71,7 +105,7 @@ export function PlayerOverviewPage() {
             data-tour="card-pedestal"
           >
             {cardManifest ? (
-              <BpclCardRenderer manifest={cardManifest} className="bpcl-card--pedestal" />
+              <PlayerProfileCard manifest={cardManifest} cardTier={cardTier} variant="pedestal" />
             ) : (
               <div className="player-dash__card-pedestal-empty">
                 <p>Loading your season card…</p>
@@ -84,6 +118,7 @@ export function PlayerOverviewPage() {
             <h1 className="player-dash__hero-title">{account.displayName}</h1>
             <div className="player-dash__hero-meta">
               <span className="player-dash__badge">{account.bpcId}</span>
+              <CardTierBadge tier={cardTier} />
               {memberSince ? <span className="player-dash__hero-chip">Member since {memberSince}</span> : null}
             </div>
             {recognitions.length ? (
@@ -121,9 +156,19 @@ export function PlayerOverviewPage() {
             </div>
 
             <div className="player-dash__hero-actions">
+              {canUpgradeCard ? (
+                <button
+                  type="button"
+                  className="player-dash__action player-dash__action--tournaments player-dash__action--lead"
+                  onClick={() => setUpgradeModalOpen(true)}
+                >
+                  <DashboardActionIcon name="tournaments" />
+                  <span>Upgrade card</span>
+                </button>
+              ) : null}
               <Link
                 to="/dashboard/tournaments"
-                className="player-dash__action player-dash__action--tournaments player-dash__action--lead"
+                className={`player-dash__action player-dash__action--tournaments${canUpgradeCard ? "" : " player-dash__action--lead"}`}
               >
                 <DashboardActionIcon name="tournaments" />
                 <span>Tournaments</span>
@@ -137,6 +182,23 @@ export function PlayerOverviewPage() {
                 <span>Public profile</span>
               </Link>
             </div>
+
+            {canUpgradeCard ? (
+              <div className="player-dash__upgrade-banner">
+                <p className="player-dash__upgrade-banner-text">
+                  You&apos;re on <strong>{cardTierDisplayLabel(upgradeEligibility.currentTier)}</strong> for{" "}
+                  <strong>{upgradeEligibility.tournament?.name}</strong>. Upgrade to unlock a higher card tier for
+                  this season.
+                </p>
+                <button
+                  type="button"
+                  className="player-dash__upgrade-banner-btn"
+                  onClick={() => setUpgradeModalOpen(true)}
+                >
+                  View upgrade options
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       </header>
@@ -167,6 +229,20 @@ export function PlayerOverviewPage() {
 
         <MatchesSchedulePanel schedule={matchSchedule} onRefresh={loadMatches} />
       </div>
+
+      <CardUpgradeModal
+        open={upgradeModalOpen}
+        eligibility={upgradeEligibility}
+        onClose={() => setUpgradeModalOpen(false)}
+        onSuccess={handleUpgradeSuccess}
+      />
+
+      <CardUpgradeSuccessModal
+        open={Boolean(upgradeSuccess)}
+        targetTier={upgradeSuccess?.targetTier}
+        tournamentName={upgradeSuccess?.tournamentName}
+        onClose={() => setUpgradeSuccess(null)}
+      />
     </div>
   );
 }

@@ -32,6 +32,8 @@ export function isProfileComplete(account) {
   );
 }
 
+export const CORE_SETUP_TASK_IDS = ["email", "steam", "discord"];
+
 export function buildSetupTasks(account, tournaments = [], registrations = []) {
   if (!account) return [];
 
@@ -49,14 +51,15 @@ export function buildSetupTasks(account, tournaments = [], registrations = []) {
       label: "Verify email",
       done: Boolean(account.emailVerified),
       href: "/dashboard/settings",
+      tier: "core",
       required: true,
     },
     {
       id: "steam",
       label: "Link Steam",
       done: Boolean(account.steamLinked),
-      href: account.steamLinked ? null : null,
       oauth: account.steamLinked ? null : "steam",
+      tier: "core",
       required: true,
     },
     {
@@ -64,6 +67,7 @@ export function buildSetupTasks(account, tournaments = [], registrations = []) {
       label: "Link Discord",
       done: Boolean(account.discordLinked),
       oauth: account.discordLinked ? null : "discord",
+      tier: "core",
       required: true,
     },
     {
@@ -71,15 +75,17 @@ export function buildSetupTasks(account, tournaments = [], registrations = []) {
       label: "Update player profile",
       done: isProfileComplete(account),
       href: "/dashboard/settings",
+      tier: "next",
       required: false,
-      hint: "Optional — speeds up registration, or fill in when you sign up",
+      hint: "Recommended — speeds up registration, or fill in when you sign up",
     },
     {
       id: "register",
       label: "Register for a tournament",
       done: hasRegistration,
       href: "/dashboard/tournaments",
-      required: true,
+      tier: "next",
+      required: false,
     },
   ];
 
@@ -89,6 +95,7 @@ export function buildSetupTasks(account, tournaments = [], registrations = []) {
       label: "Join substitute pool",
       done: hasSubstitute,
       href: "/dashboard/tournaments",
+      tier: "next",
       required: false,
     });
   }
@@ -96,8 +103,17 @@ export function buildSetupTasks(account, tournaments = [], registrations = []) {
   return tasks;
 }
 
-export function setupProgress(tasks) {
-  const required = tasks.filter((t) => t.required);
+export function coreSetupTasks(tasks) {
+  return tasks.filter((task) => task.tier === "core");
+}
+
+export function nextSetupTasks(tasks) {
+  return tasks.filter((task) => task.tier === "next");
+}
+
+export function setupProgress(tasks, { tier = "core" } = {}) {
+  const scoped = tier === "all" ? tasks : tasks.filter((t) => t.tier === tier);
+  const required = scoped.filter((t) => t.required !== false);
   const done = required.filter((t) => t.done).length;
   return { done, total: required.length, pct: required.length ? Math.round((done / required.length) * 100) : 100 };
 }
@@ -112,7 +128,7 @@ const DASHBOARD_TOUR_STEPS = [
   {
     id: "checklist",
     title: "Complete setup",
-    body: "Link Steam and Discord to unlock registration. Profile details are optional but help captains review you faster.",
+    body: "Verify email and link Steam and Discord to unlock registration. Profile and tournament sign-up live in Next steps once linkage is done.",
     target: "[data-tour='setup-checklist']",
     placement: "bottom",
   },

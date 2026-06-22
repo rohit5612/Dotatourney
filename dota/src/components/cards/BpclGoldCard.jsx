@@ -11,6 +11,7 @@ function statValue(stats, key) {
 export function BpclGoldCard({ manifest, size = "md", className = "", interactive = true }) {
   const cardRef = useRef(null);
   const shimmerRef = useRef(null);
+  const portraitRef = useRef(null);
   const tilt = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
 
   const payload = manifest?.cardPayload || {};
@@ -18,10 +19,10 @@ export function BpclGoldCard({ manifest, size = "md", className = "", interactiv
   const playerName = payload.playerName || manifest?.displayName || "Player";
   const avatarUrl = resolveCardPortraitUrl(manifest);
   const statRows = [
-    { label: "KDA", value: statValue(stats, "kda") },
-    { label: "AVG GPM", value: statValue(stats, "gpm") },
-    { label: "AVG XPM", value: statValue(stats, "xpm") },
-    { label: "WINRATE", value: statValue(stats, "winrate") },
+    { key: "kda", label: "KDA", value: statValue(stats, "kda") },
+    { key: "gpm", label: "AVG GPM", value: statValue(stats, "gpm") },
+    { key: "xpm", label: "AVG XPM", value: statValue(stats, "xpm") },
+    { key: "winrate", label: "WINRATE", value: statValue(stats, "winrate") },
   ];
 
   function statValueSizeClass(label, value) {
@@ -44,8 +45,8 @@ export function BpclGoldCard({ manifest, size = "md", className = "", interactiv
     let raf;
     const tick = () => {
       const t = tilt.current;
-      const dx = (t.tx - t.x) * 0.12;
-      const dy = (t.ty - t.y) * 0.12;
+      const dx = (t.tx - t.x) * 0.1;
+      const dy = (t.ty - t.y) * 0.1;
       if (Math.abs(dx) > 0.003 || Math.abs(dy) > 0.003) {
         t.x += dx;
         t.y += dy;
@@ -69,10 +70,15 @@ export function BpclGoldCard({ manifest, size = "md", className = "", interactiv
       const rect = event.currentTarget.getBoundingClientRect();
       const mx = (event.clientX - rect.left) / rect.width;
       const my = (event.clientY - rect.top) / rect.height;
-      tilt.current.tx = (my - 0.5) * 14;
-      tilt.current.ty = (0.5 - mx) * 14;
+      tilt.current.tx = (my - 0.5) * 18;
+      tilt.current.ty = (0.5 - mx) * 18;
       if (shimmerRef.current) {
-        shimmerRef.current.style.background = `radial-gradient(ellipse 70% 70% at ${mx * 100}% ${my * 100}%, rgba(255,255,220,.16) 0%, transparent 58%)`;
+        shimmerRef.current.style.background = `radial-gradient(ellipse 70% 70% at ${mx * 100}% ${my * 100}%, rgba(255,255,220,.18) 0%, transparent 58%)`;
+      }
+      if (portraitRef.current) {
+        const px = (mx - 0.5) * 10;
+        const py = (my - 0.5) * 8;
+        portraitRef.current.style.transform = `translate(${px}px, ${py}px) scale(1.06)`;
       }
     },
     [interactive],
@@ -82,6 +88,7 @@ export function BpclGoldCard({ manifest, size = "md", className = "", interactiv
     tilt.current.tx = 0;
     tilt.current.ty = 0;
     if (shimmerRef.current) shimmerRef.current.style.background = "";
+    if (portraitRef.current) portraitRef.current.style.transform = "scale(1.06)";
   }, []);
 
   return (
@@ -94,27 +101,44 @@ export function BpclGoldCard({ manifest, size = "md", className = "", interactiv
       <div ref={cardRef} className="bpcl-gold-card__tilt">
         <div className="bpcl-gold-card__glow" aria-hidden="true" />
         <div className="bpcl-gold-card__frame-wrap">
-          <img src="/cards/gold/frame.png" alt="" className="bpcl-gold-card__frame" decoding="async" />
           <div className="bpcl-gold-card__portrait-slot">
             {avatarUrl ? (
-              <img src={avatarUrl} alt="" className="bpcl-gold-card__portrait" decoding="async" />
+              <img
+                ref={portraitRef}
+                src={avatarUrl}
+                alt=""
+                className="bpcl-gold-card__portrait"
+                decoding="async"
+              />
             ) : (
               <div className="bpcl-gold-card__portrait bpcl-gold-card__portrait--empty" aria-hidden="true" />
             )}
-            <div className="bpcl-gold-card__portrait-shine" aria-hidden="true" />
+            <div className="bpcl-gold-card__portrait-vignette" aria-hidden="true" />
+            <div className="bpcl-gold-card__portrait-rim" aria-hidden="true" />
           </div>
-          <div ref={shimmerRef} className="bpcl-gold-card__shimmer" aria-hidden="true" />
+
+          <img
+            src="/cards/gold/goldframe.png"
+            alt=""
+            className="bpcl-gold-card__frame-overlay"
+            width={400}
+            height={600}
+            decoding="async"
+          />
+
           <div className="bpcl-gold-card__name-plate">
             <p className="bpcl-gold-card__name">{playerName}</p>
           </div>
           <dl className="bpcl-gold-card__stats">
             {statRows.map((row) => (
-              <div key={row.label} className="bpcl-gold-card__stat">
+              <div key={row.label} className={`bpcl-gold-card__stat bpcl-gold-card__stat--${row.key}`}>
                 <dt>{row.label}</dt>
                 <dd className={statValueSizeClass(row.label, row.value)}>{row.value}</dd>
               </div>
             ))}
           </dl>
+
+          <div ref={shimmerRef} className="bpcl-gold-card__shimmer" aria-hidden="true" />
         </div>
       </div>
     </article>

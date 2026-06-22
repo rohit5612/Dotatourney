@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { HiOutlineArrowLeft, HiOutlineStar, HiOutlineTrophy } from "react-icons/hi2";
+import { CardTierBadge } from "../../components/cards/CardTierBadge.jsx";
 import { PlayerProfileCard } from "../../components/cards/PlayerProfileCard.jsx";
 import { PageLoadingSpinner } from "../../components/PageLoadingSpinner.jsx";
 import { TeamLogoImg } from "../../components/TeamLogoImg.jsx";
@@ -23,35 +24,9 @@ import "../../components/cards/CardTierStyles.css";
 import "../../styles/card-tier-effects.css";
 import "../../styles/card-tier-effects-holo.css";
 
-const TIER_LABELS = {
-  holo: "Holo",
-  gold: "Gold",
-  player: "Player",
-  default: "Standard",
-};
-
 function formatDate(value) {
   if (!value) return "";
   return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-}
-
-function tierBadgeClass(tier) {
-  if (tier === "gold") return "player-profile__tier-badge player-profile__tier-badge--gold";
-  if (tier === "holo") return "player-profile__tier-badge player-profile__tier-badge--holo-premium";
-  if (tier === "player") return "player-profile__tier-badge player-profile__tier-badge--player";
-  return "player-profile__tier-badge";
-}
-
-function TierBadge({ tier }) {
-  const label = TIER_LABELS[tier] || "Standard";
-  if (tier === "holo") {
-    return (
-      <span className="player-profile__tier-badge player-profile__tier-badge--holo-premium">
-        <span className="player-profile__tier-badge-label">{label}</span>
-      </span>
-    );
-  }
-  return <span className={tierBadgeClass(tier)}>{label}</span>;
 }
 
 function recognitionBadgeClass(kind) {
@@ -367,7 +342,7 @@ export function PublicPlayerProfilePage() {
                         account?.bpcId
                       )}
                     </span>
-                    <TierBadge tier={cardTier} />
+                    <CardTierBadge tier={cardTier} />
                     {currentTeam?.team?.name ? (
                       <span className="player-profile__team-chip">{currentTeam.team.name}</span>
                     ) : null}

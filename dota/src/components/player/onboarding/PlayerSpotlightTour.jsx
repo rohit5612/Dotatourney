@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import "../../../styles/player-onboarding.css";
 
+const TARGET_CLASS = "player-tour-target";
+
 function getTargetRect(selector) {
   if (!selector) return null;
   const el = document.querySelector(selector);
@@ -14,6 +16,29 @@ function getTargetRect(selector) {
     width: rect.width + pad * 2,
     height: rect.height + pad * 2,
   };
+}
+
+function scrollTargetIntoView(selector) {
+  const el = document.querySelector(selector);
+  if (!el) return;
+
+  el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+
+  let parent = el.parentElement;
+  while (parent) {
+    const style = window.getComputedStyle(parent);
+    const scrollable =
+      /auto|scroll/.test(style.overflowY) ||
+      /auto|scroll/.test(style.overflowX) ||
+      /auto|scroll/.test(style.overflow);
+    if (scrollable && parent.scrollHeight > parent.clientHeight) {
+      const parentRect = parent.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      const offset = elRect.top - parentRect.top - parent.clientHeight / 2 + elRect.height / 2;
+      parent.scrollBy({ top: offset, behavior: "smooth" });
+    }
+    parent = parent.parentElement;
+  }
 }
 
 function TooltipPanel({ step, stepIndex, stepsLength, onNext, onBack, onSkip, targetRect }) {
@@ -73,18 +98,19 @@ function TooltipPanel({ step, stepIndex, stepsLength, onNext, onBack, onSkip, ta
         {step.body}
       </p>
       <div className="player-tour__actions">
-        {stepIndex > 0 ? (
-          <button type="button" className="player-tour__btn player-tour__btn--ghost" onClick={onBack}>
-            Back
-          </button>
-        ) : (
-          <button type="button" className="player-tour__btn player-tour__btn--ghost" onClick={onSkip}>
-            Skip tour
-          </button>
-        )}
-        <button type="button" className="player-tour__btn player-tour__btn--primary" onClick={onNext}>
-          {stepIndex < stepsLength - 1 ? "Next" : "Got it"}
+        <button type="button" className="player-tour__btn player-tour__btn--ghost" onClick={onSkip}>
+          Skip tour
         </button>
+        <div className="player-tour__actions-main">
+          {stepIndex > 0 ? (
+            <button type="button" className="player-tour__btn player-tour__btn--ghost" onClick={onBack}>
+              Back
+            </button>
+          ) : null}
+          <button type="button" className="player-tour__btn player-tour__btn--primary" onClick={onNext}>
+            {stepIndex < stepsLength - 1 ? "Next" : "Got it"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -96,24 +122,44 @@ export function PlayerSpotlightTour({ open, step, stepIndex, stepsLength, onNext
   useEffect(() => {
     if (!open || !step) return undefined;
 
+    const selector = step.target;
+    let targetEl = selector ? document.querySelector(selector) : null;
+
+    function clearTargetHighlight() {
+      document.querySelectorAll(`.${TARGET_CLASS}`).forEach((node) => {
+        node.classList.remove(TARGET_CLASS);
+      });
+    }
+
     function updateRect() {
-      setTargetRect(getTargetRect(step.target));
+      setTargetRect(getTargetRect(selector));
+    }
+
+    clearTargetHighlight();
+
+    if (targetEl) {
+      targetEl.classList.add(TARGET_CLASS);
+      scrollTargetIntoView(selector);
+    } else {
+      setTargetRect(null);
     }
 
     updateRect();
+
+    const settleTimers = [120, 320, 560].map((delay) => window.setTimeout(updateRect, delay));
+
     window.addEventListener("resize", updateRect);
     window.addEventListener("scroll", updateRect, true);
 
     const observer = new ResizeObserver(updateRect);
-    if (step.target) {
-      const el = document.querySelector(step.target);
-      if (el) observer.observe(el);
-    }
+    if (targetEl) observer.observe(targetEl);
 
     return () => {
+      settleTimers.forEach(clearTimeout);
       window.removeEventListener("resize", updateRect);
       window.removeEventListener("scroll", updateRect, true);
       observer.disconnect();
+      clearTargetHighlight();
     };
   }, [open, step]);
 
@@ -123,10 +169,8 @@ export function PlayerSpotlightTour({ open, step, stepIndex, stepsLength, onNext
       if (event.key === "Escape") onSkip();
     }
     document.addEventListener("keydown", onKeyDown);
-    document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = "";
     };
   }, [open, onSkip]);
 
@@ -136,7 +180,7 @@ export function PlayerSpotlightTour({ open, step, stepIndex, stepsLength, onNext
 
   return createPortal(
     <div className="player-tour" aria-modal="true">
-      <div className="player-tour__backdrop" aria-hidden="true" />
+      {isCenter ? <div className="player-tour__backdrop" aria-hidden="true" /> : null}
       {!isCenter && targetRect ? (
         <div
           className="player-tour__spotlight"
@@ -159,6 +203,6 @@ export function PlayerSpotlightTour({ open, step, stepIndex, stepsLength, onNext
         targetRect={isCenter ? null : targetRect}
       />
     </div>,
-    document.body
+    document.body,
   );
 }

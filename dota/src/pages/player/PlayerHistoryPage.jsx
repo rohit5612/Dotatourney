@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { DashboardNavIcon } from "../../components/player/DashboardNavIcon.jsx";
 import { useShowMoreList } from "../../hooks/useShowMoreList.js";
+import { cardTierDisplayLabel } from "../../constants/cardTierPreviews.js";
 import { playerApi } from "../../lib/playerApi";
 
 function formatDate(value) {
@@ -262,7 +263,7 @@ export function PlayerHistoryPage() {
                       <div className="player-dash__history-row-copy">
                         <p className="player-dash__history-row-title">{reg.tournamentName}</p>
                         <p className="player-dash__history-row-meta">
-                          {reg.cardTier || "default"} card
+                          {cardTierDisplayLabel(reg.cardTier || "default")} card
                           {reg.createdAt ? ` · ${formatDate(reg.createdAt)}` : ""}
                         </p>
                       </div>

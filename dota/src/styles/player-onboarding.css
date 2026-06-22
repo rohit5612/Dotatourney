@@ -1,18 +1,18 @@
 /* Player dashboard spotlight tour */
 :root {
-  --player-tour-dim: rgb(8 10 18 / 0.44);
+  --player-tour-dim: rgb(8 10 18 / 0.52);
 }
 
 .player-tour {
   position: fixed;
   inset: 0;
-  z-index: 1200;
   pointer-events: none;
 }
 
 .player-tour__backdrop {
-  position: absolute;
+  position: fixed;
   inset: 0;
+  z-index: 1200;
   background: var(--player-tour-dim);
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
@@ -21,17 +21,24 @@
 
 .player-tour__spotlight {
   position: fixed;
+  z-index: 1200;
   border-radius: 0.85rem;
   box-shadow: 0 0 0 9999px var(--player-tour-dim);
   pointer-events: none;
-  z-index: 1;
   outline: 2px solid color-mix(in srgb, var(--accent) 55%, white);
   outline-offset: 2px;
+  background: transparent;
+}
+
+.player-tour-target {
+  position: relative;
+  z-index: 1201 !important;
+  isolation: isolate;
 }
 
 .player-tour__panel {
   position: fixed;
-  z-index: 2;
+  z-index: 1202;
   width: min(22rem, calc(100vw - 1.5rem));
   padding: 1.1rem 1.15rem 1rem;
   border-radius: 1rem;
@@ -77,9 +84,17 @@
 
 .player-tour__actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   gap: 0.5rem;
   margin-top: 1rem;
+}
+
+.player-tour__actions-main {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-left: auto;
 }
 
 .player-tour__btn {
@@ -117,6 +132,27 @@
 .player-setup--complete {
   border-color: color-mix(in srgb, var(--accent) 28%, transparent);
   background: color-mix(in srgb, var(--accent) 8%, rgb(6 8 14 / 0.7));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.player-setup__next-btn {
+  padding: 0.45rem 0.85rem;
+  border-radius: 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-size: 0.76rem;
+  font-weight: 650;
+  color: var(--accent);
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.player-setup__next-btn:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
 .player-setup__complete-msg {
@@ -199,28 +235,67 @@
 
 .player-setup__tasks {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  flex-direction: column;
+  gap: 0.45rem;
   margin: 0.85rem 0 0;
   padding: 0;
   list-style: none;
 }
 
+.player-setup__tasks--modal {
+  margin-top: 0.85rem;
+}
+
+.player-setup__tasks-item {
+  list-style: none;
+}
+
 .player-setup__task {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.4rem 0.65rem;
-  border-radius: 999px;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.65rem;
   border: 1px solid rgb(255 255 255 / 0.1);
   background: rgb(255 255 255 / 0.03);
   font-size: 0.76rem;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.player-setup__task--action {
+  cursor: pointer;
+}
+
+.player-setup__task--action:hover,
+.player-setup__task--action:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, rgb(255 255 255 / 0.03));
+  outline: none;
+}
+
+.player-setup__task--action:active {
+  transform: translateY(1px);
 }
 
 .player-setup__task--optional {
-  border-radius: 0.75rem;
   align-items: flex-start;
-  padding: 0.55rem 0.7rem;
+}
+
+.player-setup__task-chevron {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 1.1rem;
+  height: 1.1rem;
+  color: var(--accent);
+}
+
+.player-setup__task-chevron svg {
+  width: 0.9rem;
+  height: 0.9rem;
 }
 
 .player-setup__task-copy {
@@ -288,21 +363,16 @@
   color: var(--accent);
 }
 
-.player-setup__task-link {
-  font-size: 0.68rem;
-  font-weight: 700;
-  color: var(--accent);
-  text-decoration: none;
-}
-
-.player-setup__task-link:hover {
-  text-decoration: underline;
+@media (max-width: 767px) {
+  .player-setup__task {
+    padding: 0.65rem 0.75rem;
+  }
 }
 
 .player-dash__sidebar-setup-link {
   display: block;
   width: 100%;
-  margin-top: 0.35rem;
+  margin: 0 0 0.65rem;
   padding: 0.4rem 0.55rem;
   border: none;
   border-radius: 0.55rem;
@@ -322,11 +392,6 @@
 
   .player-setup__task {
     justify-content: space-between;
-    border-radius: 0.65rem;
     width: 100%;
-  }
-
-  .player-setup__task--optional {
-    flex-wrap: nowrap;
   }
 }

@@ -2,7 +2,7 @@ import "./CardTierStyles.css";
 
 const TIER_LABELS = {
   default: "BPC Player",
-  player: "Player Card",
+  player: "Basic Card",
   gold: "Gold Card",
   holo: "Holo Card",
 };

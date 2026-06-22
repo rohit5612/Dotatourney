@@ -189,6 +189,10 @@ export function PlayerSignupPage() {
       const data = await playerApi.register({ email, password, displayName });
       let msg = data.message;
       if (data.devVerifyUrl) msg += ` Dev link: ${data.devVerifyUrl}`;
+      setDisplayName("");
+      setEmail("");
+      setPassword("");
+      setConfirmPassword("");
       setMessage(msg);
     } catch (err) {
       setError(err.message);
@@ -202,47 +206,51 @@ export function PlayerSignupPage() {
       <AuthFormHeader badge="New player" title="Create account" sub="Google for instant access, or email with verification." />
       {error ? <div className="player-auth__message player-auth__message--error">{error}</div> : null}
       {message ? <div className="player-auth__message player-auth__message--ok">{message}</div> : null}
-      <div className="player-auth__actions">
-        <GoogleAuthButton label="Sign up with Google" intent="signup" />
-      </div>
-      <AuthDivider label="or sign up with email" />
-      <form onSubmit={onSubmit}>
-        <div className="player-auth__field">
-          <label htmlFor="displayName">Display name</label>
-          <input id="displayName" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
-        </div>
-        <div className="player-auth__field">
-          <label htmlFor="email">Email</label>
-          <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-        </div>
-        <div className="player-auth__field">
-          <label htmlFor="password">Password (min 8)</label>
-          <input
-            id="password"
-            type="password"
-            required
-            minLength={8}
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
-        <div className="player-auth__field">
-          <label htmlFor="confirmPassword">Confirm password</label>
-          <input
-            id="confirmPassword"
-            type="password"
-            required
-            minLength={8}
-            autoComplete="new-password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-          />
-        </div>
-        <button type="submit" className="btn btn-primary player-auth__submit w-full" disabled={loading}>
-          {loading ? "Creating…" : "Create account"}
-        </button>
-      </form>
+      {!message ? (
+        <>
+          <div className="player-auth__actions">
+            <GoogleAuthButton label="Sign up with Google" intent="signup" />
+          </div>
+          <AuthDivider label="or sign up with email" />
+          <form onSubmit={onSubmit}>
+            <div className="player-auth__field">
+              <label htmlFor="displayName">Display name</label>
+              <input id="displayName" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+            </div>
+            <div className="player-auth__field">
+              <label htmlFor="email">Email</label>
+              <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+            </div>
+            <div className="player-auth__field">
+              <label htmlFor="password">Password (min 8)</label>
+              <input
+                id="password"
+                type="password"
+                required
+                minLength={8}
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            <div className="player-auth__field">
+              <label htmlFor="confirmPassword">Confirm password</label>
+              <input
+                id="confirmPassword"
+                type="password"
+                required
+                minLength={8}
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </div>
+            <button type="submit" className="btn btn-primary player-auth__submit w-full" disabled={loading}>
+              {loading ? "Creating…" : "Create account"}
+            </button>
+          </form>
+        </>
+      ) : null}
       <p className="player-auth__sub player-auth__sub--tight" style={{ marginTop: "1rem", marginBottom: 0 }}>
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => navigate("/login")}>
           Already have an account? Sign in

@@ -119,6 +119,17 @@ export const playerApi = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  upgradeEligibility: () => playerRequest("/player/card-upgrade/eligibility"),
+  upgradePreview: (slug, payload) =>
+    playerRequest(`/player/tournaments/${encodeURIComponent(slug)}/upgrade/preview`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  upgradeConfirm: (slug, payload) =>
+    playerRequest(`/player/tournaments/${encodeURIComponent(slug)}/upgrade/confirm`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   checkoutStatus: (orderId) => playerRequest(`/player/checkout/${encodeURIComponent(orderId)}/status`),
   simulatePay: (orderId) =>
     playerRequest(`/player/checkout/${encodeURIComponent(orderId)}/simulate-pay`, { method: "POST" }),

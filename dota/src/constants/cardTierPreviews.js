@@ -2,6 +2,17 @@
 
 export const CARD_TIER_ORDER = ["default", "player", "gold", "holo"];
 
+export const CARD_TIER_DISPLAY_LABELS = {
+  default: "Default",
+  player: "Basic",
+  gold: "Gold",
+  holo: "Holo",
+};
+
+export function cardTierDisplayLabel(tier = "default") {
+  return CARD_TIER_DISPLAY_LABELS[tier] || CARD_TIER_DISPLAY_LABELS.default;
+}
+
 export const CARD_TIER_PREVIEW_IMAGES = {
   default: "/cards/previews/default.png",
   player: "/cards/previews/player.png",
@@ -11,7 +22,7 @@ export const CARD_TIER_PREVIEW_IMAGES = {
 
 export const CARD_TIER_PREVIEW_LABELS = {
   default: "Default BPC card preview",
-  player: "Player BPC card preview",
+  player: "Basic BPC card preview",
   gold: "Gold BPC card preview",
   holo: "Holo BPC card preview",
 };

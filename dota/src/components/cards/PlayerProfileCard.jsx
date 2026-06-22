@@ -6,9 +6,15 @@ import { useBodyScrollLock } from "../../hooks/useBodyScrollLock.js";
 import "./GoldCardStyles.css";
 import "./PlayerCardStyles.css";
 
-export function PlayerProfileCard({ manifest, className = "", cardTier = "default" }) {
+export function PlayerProfileCard({
+  manifest,
+  className = "",
+  cardTier = "default",
+  variant = "profile",
+}) {
   const [expanded, setExpanded] = useState(false);
-  const cardGlowClass = premiumCardGlowClass(cardTier);
+  const isPedestal = variant === "pedestal";
+  const cardGlowClass = isPedestal ? "" : premiumCardGlowClass(cardTier);
 
   useBodyScrollLock(expanded);
 
@@ -48,19 +54,23 @@ export function PlayerProfileCard({ manifest, className = "", cardTier = "defaul
       document.body,
     );
 
+  const thumbnail = isPedestal ? (
+    <BpclCardRenderer manifest={manifest} className="bpcl-card--pedestal" showAura={false} />
+  ) : (
+    <BpclCardRenderer manifest={manifest} size="md" interactive={false} showMeta={false} showAura={false} />
+  );
+
   return (
     <>
       <button
         type="button"
-        className={`player-profile__card-tap${className ? ` ${className}` : ""}`}
+        className={`player-profile__card-tap${isPedestal ? " player-profile__card-tap--pedestal" : ""}${className ? ` ${className}` : ""}`}
         onClick={() => setExpanded(true)}
         aria-label="Enlarge player card"
         aria-haspopup="dialog"
         aria-expanded={expanded}
       >
-        <div className={cardGlowClass || undefined}>
-          <BpclCardRenderer manifest={manifest} size="md" interactive={false} showMeta={false} showAura={false} />
-        </div>
+        {cardGlowClass ? <div className={cardGlowClass}>{thumbnail}</div> : thumbnail}
         <span className="player-profile__card-tap-hint">Tap to enlarge</span>
       </button>
       {lightbox}

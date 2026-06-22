@@ -6,7 +6,7 @@ import { DashboardNavIcon } from "../../components/player/DashboardNavIcon.jsx";
 import { PlayerSpotlightTour } from "../../components/player/onboarding/PlayerSpotlightTour.jsx";
 import { PlayerAreaLayout } from "../../components/layout/PlayerAreaLayout.jsx";
 import { SITE_BRAND_SHORT } from "../../constants/siteMeta.js";
-import { buildSetupTasks, setupProgress, usePlayerOnboarding } from "../../hooks/usePlayerOnboarding.js";
+import { usePlayerOnboarding } from "../../hooks/usePlayerOnboarding.js";
 import { usePlayerSession } from "./usePlayerSession";
 import "../../styles/player-auth.css";
 import "../../styles/player-dashboard.css";
@@ -24,8 +24,6 @@ const NAV = [
 
 function SidebarPlayer({ account, coinBalance, logout, onShowSetupGuide }) {
   const initial = (account.displayName || account.bpcId || "?")[0].toUpperCase();
-  const progress = setupProgress(buildSetupTasks(account));
-  const setupIncomplete = progress.done < progress.total;
 
   return (
     <>
@@ -65,6 +63,9 @@ function SidebarPlayer({ account, coinBalance, logout, onShowSetupGuide }) {
       </nav>
 
       <div className="player-dash__sidebar-meta" data-tour="wallet-balance">
+        <button type="button" className="player-dash__sidebar-setup-link" onClick={onShowSetupGuide}>
+          Show setup guide
+        </button>
         <div className="player-dash__wallet">
           <p className="player-dash__wallet-label">Balance</p>
           <div className="player-dash__wallet-row">
@@ -74,34 +75,7 @@ function SidebarPlayer({ account, coinBalance, logout, onShowSetupGuide }) {
             </NavLink>
           </div>
         </div>
-        {setupIncomplete ? (
-          <button type="button" className="player-dash__sidebar-setup-link" onClick={onShowSetupGuide}>
-            Show setup guide
-          </button>
-        ) : null}
         <div className="player-dash__sidebar-actions">
-          <NavLink
-            to="/dashboard/tournaments"
-            className="player-dash__action player-dash__action--tournaments player-dash__action--stack"
-          >
-            <DashboardActionIcon name="tournaments" />
-            <span>Tournaments</span>
-          </NavLink>
-          <NavLink
-            to="/dashboard/settings"
-            className="player-dash__action player-dash__action--edit player-dash__action--stack"
-          >
-            <DashboardActionIcon name="edit" />
-            <span>Edit profile</span>
-          </NavLink>
-          <NavLink
-            to={`/player/${account.slug}`}
-            className="player-dash__action player-dash__action--public player-dash__action--stack"
-          >
-            <DashboardActionIcon name="public" />
-            <span>Public profile</span>
-          </NavLink>
-          <div className="player-dash__sidebar-actions-divider" aria-hidden="true" />
           <button
             type="button"
             className="player-dash__action player-dash__action--signout player-dash__action--stack"

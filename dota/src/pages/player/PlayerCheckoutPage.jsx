@@ -1,9 +1,7 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { CardTierPreviewImage } from "../../components/cards/CardTierPreviewImage.jsx";
-import { BpcCoin, BpcCoinIcon } from "../../components/coins/BpcCoin.jsx";
-import { BpcCoinSlider } from "../../components/coins/BpcCoinSlider.jsx";
-import { DashboardActionIcon } from "../../components/player/DashboardActionIcon.jsx";
+import { BundleCheckoutPanel } from "../../components/player/BundleCheckoutPanel.jsx";
 import { DashboardNavIcon } from "../../components/player/DashboardNavIcon.jsx";
 import {
   RegistrationBody,
@@ -11,22 +9,15 @@ import {
   RegistrationStepper,
   useRegistrationTournament,
 } from "../../components/player/RegistrationFlow.jsx";
-import { CARD_TIER_ORDER } from "../../constants/cardTierPreviews.js";
+import { CARD_TIER_ORDER, cardTierDisplayLabel } from "../../constants/cardTierPreviews.js";
 import { pollCheckoutPaid, playerApi } from "../../lib/playerApi";
-import { bundleTotalForTier, formatDiscountLabel } from "../../utils/commerceBundle.js";
+import { bundleTotalForTier } from "../../utils/commerceBundle.js";
 
 const CashfreeGatewayModal = lazy(() =>
   import("../../components/payment/CashfreeGatewayModal.jsx").then((m) => ({
     default: m.CashfreeGatewayModal,
   })),
 );
-
-const TIER_HINTS = {
-  default: "Standard season registration",
-  player: "Dark frame + stats",
-  gold: "Gold frame + Custom logo slot",
-  holo: "Holo frame, Custom Avatar slot + privileges*",
-};
 
 export function PlayerCheckoutPage() {
   const { slug } = useParams();
@@ -65,10 +56,6 @@ export function PlayerCheckoutPage() {
   const maxCoins = preview?.maxCoinsApplicable ?? 0;
   const coinBalance = preview?.coinBalance ?? 0;
   const coinSliderMax = Math.min(maxCoins, coinBalance);
-  const minCash = preview?.commerce?.minCashRupees ?? 100;
-  const subtotal = preview?.subtotal ?? 0;
-  const appliedCoins = Math.min(liveCoins, coinSliderMax);
-  const displayTotal = preview ? Math.max(minCash, subtotal - appliedCoins) : 0;
 
   useEffect(() => {
     if (!preview) return;
@@ -78,6 +65,24 @@ export function PlayerCheckoutPage() {
 
   const tiers = preview?.commerce?.cardTiers || {};
   const standardReg = preview?.commerce?.registrationFeeRupees ?? 300;
+
+  const tierEntries = useMemo(
+    () =>
+      CARD_TIER_ORDER.flatMap((id) => {
+        const t = tiers[id];
+        if (t && t.enabled === false) return [];
+        return [
+          {
+            id,
+            label: t?.label || cardTierDisplayLabel(id),
+            description: t?.description,
+            price: t?.bundleTotalRupees ?? bundleTotalForTier(t, id, standardReg),
+            discountPercent: t?.discountPercent,
+          },
+        ];
+      }),
+    [tiers, standardReg],
+  );
 
   async function pay() {
     setBusy(true);
@@ -130,7 +135,7 @@ export function PlayerCheckoutPage() {
   }
 
   if (step === "done") {
-    const tierLabel = tiers[cardTier]?.label || cardTier;
+    const tierLabel = tiers[cardTier]?.label || cardTierDisplayLabel(cardTier);
     const isPremiumCard = cardTier !== "default";
 
     return (
@@ -186,143 +191,24 @@ export function PlayerCheckoutPage() {
         </div>
       ) : null}
 
-      <div className="player-reg__layout player-reg__layout--checkout">
-        <section className="player-dash__card player-dash__section-card">
-          <header className="player-dash__card-head player-dash__card-head--compact">
-            <div className="player-dash__section-title-row">
-              <span className="player-dash__section-icon" aria-hidden="true">
-                <DashboardActionIcon name="tournaments" />
-              </span>
-              <div>
-                <h2 className="player-dash__card-title">Card bundle</h2>
-                <p className="player-dash__card-sub">Pick the player card style for this season</p>
-              </div>
-            </div>
-          </header>
-
-          <div className="player-reg__tier-grid">
-            {CARD_TIER_ORDER.map((id) => {
-              const t = tiers[id];
-              if (t && t.enabled === false) return null;
-              const bundleTotal =
-                t?.bundleTotalRupees ?? bundleTotalForTier(t, id, standardReg);
-              const discountLabel = formatDiscountLabel(t?.discountPercent);
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  className={`player-reg__tier-card player-reg__tier-card--${id}${cardTier === id ? " is-selected" : ""}`}
-                  onClick={() => setCardTier(id)}
-                  aria-pressed={cardTier === id}
-                >
-                  <span className="player-reg__tier-card-label">{t?.label || id}</span>
-                  <span className="player-reg__tier-card-price">₹{bundleTotal}</span>
-                  <span className="player-reg__tier-card-desc">
-                    {t?.description || TIER_HINTS[id] || ""}
-                  </span>
-                  {discountLabel ? (
-                    <span className="player-reg__tier-card-discount">{discountLabel}</span>
-                  ) : null}
-                  <span className="player-reg__tier-card-check" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75">
-                      <path d="M20 6 9 17l-5-5" />
-                    </svg>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="player-reg__card-preview">
-            <p className="player-reg__card-preview-label">Card preview</p>
-            <CardTierPreviewImage tier={cardTier} size="md" className="player-reg__card-preview-art" />
-          </div>
-        </section>
-
-        <aside className="player-reg__aside player-reg__aside--sticky">
-          <section className="player-dash__card player-dash__section-card player-reg__summary">
-            <header className="player-dash__card-head player-dash__card-head--compact">
-              <h2 className="player-dash__card-title">Order summary</h2>
-              <p className="player-dash__card-sub">
-                {preview?.tournament?.name || tournament?.name || "Tournament registration"}
-              </p>
-            </header>
-
-            {previewLoading && !preview ? (
-              <div className="player-dash__loading player-dash__loading--inline">
-                <span className="player-dash__loading-pulse" aria-hidden="true" />
-                <p className="player-auth__sub">Calculating total…</p>
-              </div>
-            ) : preview ? (
-              <>
-                <ul className="player-reg__line-items">
-                  {preview.lineItems?.length ? (
-                    <li className="player-reg__line-item">
-                      <span>{preview.lineItems[0]?.label || tiers[cardTier]?.label || "Bundle"}</span>
-                      <span>₹{preview.lineItems[0]?.amount ?? preview.subtotal}</span>
-                    </li>
-                  ) : null}
-                </ul>
-
-                {preview.subtotal != null ? (
-                  <div className="player-reg__line-item player-reg__line-item--muted">
-                    <span>Subtotal</span>
-                    <span>₹{preview.subtotal}</span>
-                  </div>
-                ) : null}
-
-                <div className="player-reg__coin-block">
-                  <div className="player-reg__coin-head">
-                    <BpcCoin size="xs">Apply BPC coins</BpcCoin>
-                    <span className="player-reg__coin-balance">
-                      Balance: <BpcCoinIcon size="xs" /> {coinBalance}
-                    </span>
-                  </div>
-                  <p className="player-reg__field-hint">
-                    {coinBalance === 0
-                      ? "No coins in your wallet yet."
-                      : coinSliderMax < maxCoins
-                        ? `Using up to ${coinSliderMax} of your ${coinBalance} coins (min ₹${minCash} cash due).`
-                        : `Up to ${coinSliderMax} coins · minimum ₹${minCash} cash due`}
-                  </p>
-                  <BpcCoinSlider
-                    value={coinsToApply}
-                    onChange={setCoinsToApply}
-                    onLiveChange={setLiveCoins}
-                    max={maxCoins}
-                    balance={coinBalance}
-                    disabled={!preview}
-                  />
-                </div>
-
-                <div className="player-reg__total">
-                  <span>Total due</span>
-                  <span className="player-reg__total-amount">₹{displayTotal}</span>
-                </div>
-
-                <button
-                  type="button"
-                  className="player-dash__action player-dash__action--tournaments player-dash__action--lead player-reg__pay-btn"
-                  onClick={pay}
-                  disabled={busy || confirmingPayment || !preview}
-                >
-                  <DashboardActionIcon name="tournaments" />
-                  <span>
-                    {busy ? "Processing…" : confirmingPayment ? "Confirming payment…" : "Pay & register"}
-                  </span>
-                </button>
-
-                <Link
-                  to={`/dashboard/register/${slug}`}
-                  className="player-dash__action player-dash__action--public player-reg__back-link"
-                >
-                  <span>← Edit details</span>
-                </Link>
-              </>
-            ) : null}
-          </section>
-        </aside>
-      </div>
+      <BundleCheckoutPanel
+        mode="registration"
+        selectedTier={cardTier}
+        onSelectTier={setCardTier}
+        tierEntries={tierEntries}
+        preview={preview}
+        previewLoading={previewLoading}
+        tournamentName={preview?.tournament?.name || tournament?.name}
+        coinsToApply={coinsToApply}
+        displayCoins={liveCoins}
+        onCoinsChange={setCoinsToApply}
+        onLiveCoinsChange={setLiveCoins}
+        onPay={pay}
+        busy={busy}
+        confirmingPayment={confirmingPayment}
+        payLabel="Pay & register"
+        footerLink={{ to: `/dashboard/register/${slug}`, label: "← Edit details" }}
+      />
       </RegistrationBody>
       {gateway ? (
         <Suspense fallback={null}>

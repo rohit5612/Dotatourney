@@ -144,17 +144,12 @@ function applyAccountPortraitToPayload(payload, account) {
   return payload;
 }
 
-function buildCardPayload(asset, account, registration, roles) {
-  const stored = parseManifestJson(asset?.manifest_json);
-  if (stored && Object.keys(stored).length > 0) {
-    return applyAccountPortraitToPayload({ ...stored }, account);
-  }
-  if (asset?.asset_url) {
-    return { template: asset.tier, imageUrl: asset.asset_url };
-  }
+function buildTemplateCardPayload(tier, account, registration, roles) {
   const primaryRole = roles[0] || "";
   return {
-    template: asset?.tier || "gold",
+    version: 1,
+    template: tier,
+    tier,
     playerName: account.display_name || account.steam_persona || account.slug,
     avatarUrl: resolveAccountPortraitUrl(account),
     stats: {
@@ -165,13 +160,26 @@ function buildCardPayload(asset, account, registration, roles) {
       role: primaryRole,
       mmr: registration?.mmr ?? account.mmr ?? null,
     },
+  };
+}
+
+function buildCardPayload(asset, account, registration, roles) {
+  const stored = parseManifestJson(asset?.manifest_json);
+  if (stored && Object.keys(stored).length > 0) {
+    return applyAccountPortraitToPayload({ ...stored }, account);
+  }
+  if (asset?.asset_url) {
+    return { template: asset.tier, imageUrl: asset.asset_url };
+  }
+  return {
+    ...buildTemplateCardPayload(asset?.tier || "gold", account, registration, roles),
     tagline: asset?.tagline || null,
   };
 }
 
 /**
  * Build card manifest JSON for web, Discord, and GSI overlay consumers.
- * Every account receives at least a default-season card; premium tiers render after admin upload.
+ * Default-season card for everyone; premium tiers render built-in templates immediately.
  */
 export async function buildCardManifest(accountRow, options = {}) {
   const account = accountRow?.id ? accountRow : await findAccountBySlug(accountRow);
@@ -217,18 +225,26 @@ export async function buildCardManifest(accountRow, options = {}) {
     : null;
   const assetApproved = isApprovedCardAsset(asset);
   const cardPending = PREMIUM_TIERS.has(effectiveTier) && !assetApproved;
+  const usesPremiumTemplate = PREMIUM_TIERS.has(effectiveTier);
 
-  const renderTier = assetApproved ? effectiveTier : "default";
+  const renderTier = usesPremiumTemplate ? effectiveTier : "default";
   const roles = parseRoles(registration, account);
   const primaryRole = roles[0] || "";
   const seasonValidity = seasonValidityFromContext({ season, tournament, asset });
+  const cardPayload = assetApproved
+    ? buildCardPayload(asset, account, registration, roles)
+    : usesPremiumTemplate
+      ? buildTemplateCardPayload(effectiveTier, account, registration, roles)
+      : null;
 
   const manifest = {
     tier: effectiveTier,
     purchasedTier,
     tierOverride: adminOverride,
     renderTier,
-    template: assetApproved ? parseManifestJson(asset.manifest_json)?.template || effectiveTier : "default",
+    template: usesPremiumTemplate
+      ? parseManifestJson(asset?.manifest_json)?.template || effectiveTier
+      : "default",
     bpcId: account.bpc_id,
     displayName: account.display_name || account.steam_persona || account.slug,
     slug: account.slug,
@@ -248,7 +264,7 @@ export async function buildCardManifest(accountRow, options = {}) {
     frameTheme: season?.theme_key || "emerald",
     assetStatus: asset?.status || (PREMIUM_TIERS.has(effectiveTier) ? "pending" : null),
     cardPending,
-    cardPayload: assetApproved ? buildCardPayload(asset, account, registration, roles) : null,
+    cardPayload,
   };
 
   return manifest;

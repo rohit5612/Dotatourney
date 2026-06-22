@@ -1,3 +1,5 @@
+import { cardTierDisplayLabel } from "../constants/cardTierPreviews.js";
+
 const TIER_DEFAULTS = {
   default: { registrationCostRupees: 300, cardCostRupees: 0, bundledPriceRupees: 0 },
   player: { registrationCostRupees: 300, cardCostRupees: 240, bundledPriceRupees: 240 },
@@ -47,4 +49,62 @@ export function formatDiscountLabel(value) {
 
 export function bundleTotalForTier(tier, tierKey, standardRegistrationRupees = 300) {
   return normalizeTierConfig(tier, tierKey, standardRegistrationRupees).bundleTotalRupees;
+}
+
+const CARD_TIER_KEYS = ["default", "player", "gold", "holo"];
+
+export function tierRank(tier) {
+  const idx = CARD_TIER_KEYS.indexOf(tier);
+  return idx === -1 ? CARD_TIER_KEYS.length : idx;
+}
+
+export function isTierEnabled(tierConfig, tierKey) {
+  if (tierKey === "default") return true;
+  return tierConfig?.enabled !== false;
+}
+
+export function getHighestEnabledTier(commerce) {
+  const standard = commerce?.registrationFeeRupees ?? 300;
+  const tiers = {};
+  for (const key of CARD_TIER_KEYS) {
+    tiers[key] = normalizeTierConfig(commerce?.cardTiers?.[key], key, standard);
+  }
+  let highest = "default";
+  for (const key of CARD_TIER_KEYS) {
+    if (isTierEnabled(tiers[key], key)) highest = key;
+  }
+  return highest;
+}
+
+export function computeUpgradeDelta(commerce, fromTier, toTier) {
+  const standard = commerce?.registrationFeeRupees ?? 300;
+  const fromKey = CARD_TIER_KEYS.includes(fromTier) ? fromTier : "default";
+  const toKey = CARD_TIER_KEYS.includes(toTier) ? toTier : "default";
+  if (tierRank(toKey) <= tierRank(fromKey)) return 0;
+  const fromTotal = bundleTotalForTier(commerce?.cardTiers?.[fromKey], fromKey, standard);
+  const toTotal = bundleTotalForTier(commerce?.cardTiers?.[toKey], toKey, standard);
+  return Math.max(0, toTotal - fromTotal);
+}
+
+export function getUpgradeableTiers(commerce, currentTier) {
+  const standard = commerce?.registrationFeeRupees ?? 300;
+  const fromKey = CARD_TIER_KEYS.includes(currentTier) ? currentTier : "default";
+  const fromRank = tierRank(fromKey);
+  const options = [];
+
+  for (const key of CARD_TIER_KEYS) {
+    if (tierRank(key) <= fromRank) continue;
+    const tierConfig = normalizeTierConfig(commerce?.cardTiers?.[key], key, standard);
+    if (!isTierEnabled(tierConfig, key)) continue;
+    const delta = computeUpgradeDelta(commerce, fromKey, key);
+    if (delta <= 0) continue;
+    options.push({
+      tier: key,
+      label: tierConfig.label || cardTierDisplayLabel(key),
+      description: tierConfig.description || "",
+      upgradeDeltaRupees: delta,
+      bundleTotalRupees: tierConfig.bundleTotalRupees,
+    });
+  }
+  return options;
 }

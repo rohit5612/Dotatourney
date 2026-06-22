@@ -40,6 +40,9 @@ import {
 import {
   previewCheckout,
   confirmCheckout,
+  previewUpgrade,
+  confirmUpgrade,
+  getUpgradeEligibility,
   getCheckoutOrderStatus,
   simulateManualPayment,
   createSubstituteSignup,
@@ -550,6 +553,42 @@ const checkoutConfirmSchema = checkoutPreviewSchema.extend({
   assetUrl: z.string().optional(),
   tagline: z.string().max(120).optional(),
   registrationDetails: registrationDetailsSchema.optional(),
+});
+
+const upgradePreviewSchema = z.object({
+  targetTier: z.enum(CARD_TIERS),
+  coinsToApply: z.number().int().min(0).optional(),
+});
+
+const upgradeConfirmSchema = upgradePreviewSchema;
+
+router.get("/card-upgrade/eligibility", requirePlayer, async (req, res, next) => {
+  try {
+    const payload = await getUpgradeEligibility(req.playerAccount);
+    res.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/tournaments/:slug/upgrade/preview", requirePlayer, async (req, res, next) => {
+  try {
+    const body = upgradePreviewSchema.parse(req.body);
+    const preview = await previewUpgrade(req.playerAccount, req.params.slug, body);
+    res.json(preview);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/tournaments/:slug/upgrade/confirm", requirePlayer, async (req, res, next) => {
+  try {
+    const body = upgradeConfirmSchema.parse(req.body);
+    const result = await confirmUpgrade(req.playerAccount, req.params.slug, body);
+    res.status(201).json(result);
+  } catch (error) {
+    next(error);
+  }
 });
 
 router.post("/tournaments/:slug/checkout/preview", requirePlayer, async (req, res, next) => {

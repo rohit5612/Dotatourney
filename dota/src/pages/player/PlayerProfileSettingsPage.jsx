@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import { DashboardActionIcon } from "../../components/player/DashboardActionIcon.jsx";
 import { DashboardNavIcon } from "../../components/player/DashboardNavIcon.jsx";
+import { ProfileSavedModal } from "../../components/player/ProfileSavedModal.jsx";
 import { roles } from "../../constants/tournament";
 import { playerApi } from "../../lib/playerApi";
 import { isValidPhoneNumber, PHONE_NUMBER_ERROR, sanitizePhoneInput } from "../../lib/phoneNumber";
@@ -60,6 +61,7 @@ export function PlayerProfileSettingsPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [profileSavedOpen, setProfileSavedOpen] = useState(false);
 
   useEffect(() => {
     if (!account) return;
@@ -102,7 +104,7 @@ export function PlayerProfileSettingsPage() {
         bio: form.bio,
       });
       await refreshMe();
-      setMessage("Profile saved.");
+      setProfileSavedOpen(true);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -357,6 +359,8 @@ export function PlayerProfileSettingsPage() {
           </form>
         </section>
       </div>
+
+      <ProfileSavedModal open={profileSavedOpen} onClose={() => setProfileSavedOpen(false)} />
     </div>
   );
 }

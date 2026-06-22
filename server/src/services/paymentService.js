@@ -19,7 +19,7 @@ import {
   getOrCreateCommerceConfig,
   publicCommerceConfig,
 } from "./commerceConfigRepository.js";
-import { resolveBundleLineItem } from "./commerceBundle.js";
+import { resolveBundleLineItem, resolveUpgradeLineItem, getUpgradeableTiers, getHighestEnabledTier, tierRank, enrichCardTiers } from "./commerceBundle.js";
 import { sendPaidRegistrationEmail } from "./emailService.js";
 
 export const CARD_TIERS = ["default", "player", "gold", "holo"];
@@ -128,6 +128,250 @@ export async function previewCheckout(account, tournamentSlug, body) {
     coinBalance,
     provider: cashfreeConfigured() ? "cashfree" : "manual",
   };
+}
+
+export async function getActiveSeasonTournamentId() {
+  const { rows } = await pool.query(
+    `SELECT tournament_id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1`,
+  );
+  return rows[0]?.tournament_id || null;
+}
+
+async function loadPaidActiveSeasonRegistration(client, playerAccountId) {
+  const tournamentId = await getActiveSeasonTournamentId();
+  if (!tournamentId) return null;
+
+  const queryClient = client || pool;
+  const { rows } = await queryClient.query(
+    `SELECT r.*, t.slug AS tournament_slug, t.name AS tournament_name
+     FROM player_registrations r
+     JOIN tournaments t ON t.id = r.tournament_id
+     WHERE r.tournament_id = $1
+       AND r.player_account_id = $2
+       AND r.archived_at IS NULL
+       AND r.payment_status = 'paid'
+       AND r.substitute_flag = FALSE
+     LIMIT 1`,
+    [tournamentId, playerAccountId],
+  );
+  return rows[0] || null;
+}
+
+function mapRegistrationForUpgrade(reg, commerce) {
+  const currentTier = reg.card_tier || "default";
+  const standard = commerce?.registrationFeeRupees ?? 300;
+  const tiers = enrichCardTiers(commerce?.cardTiers, standard);
+  const upgradeOptions = getUpgradeableTiers(commerce, currentTier);
+  const highestTier = getHighestEnabledTier(commerce);
+  const isMaxTier = tierRank(currentTier) >= tierRank(highestTier) || upgradeOptions.length === 0;
+  return {
+    id: reg.id,
+    cardTier: currentTier,
+    registrationStatus: reg.registration_status,
+    tournament: {
+      id: reg.tournament_id,
+      slug: reg.tournament_slug,
+      name: reg.tournament_name,
+    },
+    currentTierLabel: tiers[currentTier]?.label || currentTier,
+    upgradeOptions,
+    isMaxTier,
+  };
+}
+
+export async function getUpgradeEligibility(account) {
+  const reg = await loadPaidActiveSeasonRegistration(null, account.id);
+  if (!reg) {
+    return { eligible: false, reason: "no_active_season_registration" };
+  }
+
+  const commerce = await loadCommerceConfig(reg.tournament_id);
+  const registration = mapRegistrationForUpgrade(reg, commerce);
+
+  return {
+    eligible: !registration.isMaxTier && registration.upgradeOptions.length > 0,
+    commerce,
+    registration,
+    tournament: registration.tournament,
+    currentTier: registration.cardTier,
+    currentTierLabel: registration.currentTierLabel,
+    upgradeOptions: registration.upgradeOptions,
+    isMaxTier: registration.isMaxTier,
+  };
+}
+
+async function assertUpgradeEligible(account, tournamentSlug, targetTier) {
+  const tournament = await findTournamentBySlugOrId(tournamentSlug);
+  if (!tournament) {
+    const err = new Error("Tournament not found");
+    err.status = 404;
+    throw err;
+  }
+
+  const activeTournamentId = await getActiveSeasonTournamentId();
+  if (!activeTournamentId || activeTournamentId !== tournament.id) {
+    const err = new Error("Card upgrades are only available for the active season tournament");
+    err.status = 403;
+    err.code = "NOT_ACTIVE_SEASON";
+    throw err;
+  }
+
+  const reg = await loadPaidActiveSeasonRegistration(null, account.id);
+  if (!reg || reg.tournament_id !== tournament.id) {
+    const err = new Error("Paid registration required for card upgrade");
+    err.status = 403;
+    err.code = "NOT_REGISTERED";
+    throw err;
+  }
+
+  const commerce = await loadCommerceConfig(tournament.id);
+  const currentTier = reg.card_tier || "default";
+  const upgradeOptions = getUpgradeableTiers(commerce, currentTier);
+  const validTarget = upgradeOptions.find((o) => o.tier === targetTier);
+
+  if (!validTarget) {
+    const err = new Error("Invalid upgrade tier");
+    err.status = 400;
+    err.code = "INVALID_UPGRADE_TIER";
+    throw err;
+  }
+
+  return { tournament, registration: reg, commerce, currentTier, targetTier };
+}
+
+export function buildUpgradeLineItems(config, fromTier, toTier) {
+  return [resolveUpgradeLineItem(config, fromTier, toTier)];
+}
+
+export async function previewUpgrade(account, tournamentSlug, body) {
+  const targetTier = CARD_TIERS.includes(body.targetTier) ? body.targetTier : null;
+  if (!targetTier) {
+    const err = new Error("Target tier is required");
+    err.status = 400;
+    throw err;
+  }
+
+  const { tournament, currentTier, commerce } = await assertUpgradeEligible(account, tournamentSlug, targetTier);
+  const lineItems = buildUpgradeLineItems(commerce, currentTier, targetTier);
+  const coinBalance = await getCoinBalance(account.id);
+  const totals = computeCheckoutTotals(
+    lineItems,
+    coinBalance,
+    body.coinsToApply,
+    commerce?.minCashRupees ?? 100,
+  );
+
+  return {
+    tournament: { id: tournament.id, slug: tournament.slug, name: tournament.name },
+    commerce,
+    currentTier,
+    targetTier,
+    ...totals,
+    coinBalance,
+    provider: cashfreeConfigured() ? "cashfree" : "manual",
+    orderType: "upgrade",
+  };
+}
+
+export async function confirmUpgrade(account, tournamentSlug, body) {
+  const targetTier = CARD_TIERS.includes(body.targetTier) ? body.targetTier : null;
+  if (!targetTier) {
+    const err = new Error("Target tier is required");
+    err.status = 400;
+    throw err;
+  }
+
+  const preview = await previewUpgrade(account, tournamentSlug, { ...body, targetTier });
+  const { tournament, registration, currentTier } = await assertUpgradeEligible(
+    account,
+    tournamentSlug,
+    targetTier,
+  );
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+    await expireStaleCheckoutOrders(client, tournament.id, account.id);
+
+    const orderId = randomUUID();
+    const provider = cashfreeConfigured() ? "cashfree" : "manual";
+
+    const { rows: orderRows } = await client.query(
+      `INSERT INTO checkout_orders (
+        id, player_account_id, tournament_id, line_items, subtotal, coin_discount,
+        total_paise, currency, provider, status, card_tier, coins_applied,
+        order_type, upgrade_from_tier, registration_id
+      ) VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, 'pending', $10, $11, 'upgrade', $12, $13)
+      RETURNING *`,
+      [
+        orderId,
+        account.id,
+        tournament.id,
+        JSON.stringify(preview.lineItems),
+        preview.subtotal,
+        preview.coinDiscount,
+        preview.totalPaise,
+        preview.currency,
+        provider,
+        preview.targetTier,
+        preview.coinsApplied,
+        currentTier,
+        registration.id,
+      ],
+    );
+
+    let paymentSessionId = null;
+    let providerOrderId = null;
+
+    if (provider === "cashfree") {
+      const cfOrder = await createCashfreeOrder({
+        orderAmountPaise: preview.totalPaise,
+        currency: preview.currency,
+        orderId,
+        customer: {
+          id: account.id,
+          name: account.display_name || account.steam_persona || account.email?.split("@")[0] || "Player",
+          email: account.email,
+          phone: account.phone_number || "9999999999",
+        },
+        returnUrl: checkoutReturnUrl(orderId),
+        note: `upgrade:tournament:${tournament.id}`,
+      });
+      providerOrderId = cfOrder?.order_id || orderId;
+      paymentSessionId = cfOrder?.payment_session_id || null;
+      if (!paymentSessionId) {
+        const err = new Error("Cashfree did not return a payment session");
+        err.status = 502;
+        throw err;
+      }
+      await client.query(
+        `UPDATE checkout_orders
+         SET provider_order_id = $2, payment_session_id = $3, updated_at = NOW()
+         WHERE id = $1`,
+        [orderId, providerOrderId, paymentSessionId],
+      );
+    }
+
+    await client.query("COMMIT");
+
+    return {
+      orderId,
+      provider,
+      amount: preview.totalPaise,
+      currency: preview.currency,
+      paymentSessionId,
+      cashfreeMode: publicCashfreeMode(),
+      lineItems: preview.lineItems,
+      coinDiscount: preview.coinDiscount,
+      manualMode: provider === "manual",
+      orderType: "upgrade",
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function expireStaleCheckoutOrders(client, tournamentId, playerAccountId) {
@@ -369,6 +613,14 @@ export async function fulfillPaidCheckout({
     const regMmr = account.mmr ?? null;
     const regPhone = account.phone_number || "";
 
+    const isUpgrade = order.order_type === "upgrade";
+
+    if (isUpgrade && !existing) {
+      const err = new Error("Registration not found for upgrade order");
+      err.status = 409;
+      throw err;
+    }
+
     if (!existing) {
       registrationId = randomUUID();
       const bpcId = account.bpc_id || (await allocateBpcId(client));
@@ -406,6 +658,24 @@ export async function fulfillPaidCheckout({
           paymentProvider,
           paymentRef || paymentId || "",
           bpcId,
+        ],
+      );
+    } else if (isUpgrade) {
+      registrationId = existing.id;
+      await client.query(
+        `UPDATE player_registrations
+         SET card_tier = $2,
+             checkout_order_id = $3,
+             payment_provider = $4,
+             payment_ref = $5,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [
+          registrationId,
+          order.card_tier,
+          order.id,
+          paymentProvider,
+          paymentRef || paymentId || "",
         ],
       );
     } else {

@@ -65,3 +65,76 @@ export function resolveBundleLineItem(config, cardTier) {
     bundleLabel: tierConfig.label || `${tierKey} bundle`,
   };
 }
+
+export function tierRank(tier) {
+  const idx = CARD_TIER_KEYS.indexOf(tier);
+  return idx === -1 ? CARD_TIER_KEYS.length : idx;
+}
+
+export function isTierEnabled(tierConfig, tierKey) {
+  if (tierKey === "default") return true;
+  return tierConfig?.enabled !== false;
+}
+
+export function getHighestEnabledTier(commerce) {
+  const standard = commerce?.registrationFeeRupees ?? 300;
+  const tiers = enrichCardTiers(commerce?.cardTiers, standard);
+  let highest = "default";
+  for (const key of CARD_TIER_KEYS) {
+    if (isTierEnabled(tiers[key], key)) highest = key;
+  }
+  return highest;
+}
+
+export function computeUpgradeDelta(commerce, fromTier, toTier) {
+  const standard = commerce?.registrationFeeRupees ?? 300;
+  const tiers = enrichCardTiers(commerce?.cardTiers, standard);
+  const fromKey = tiers[fromTier] ? fromTier : "default";
+  const toKey = tiers[toTier] ? toTier : "default";
+  if (tierRank(toKey) <= tierRank(fromKey)) return 0;
+  const fromTotal = tiers[fromKey].bundleTotalRupees;
+  const toTotal = tiers[toKey].bundleTotalRupees;
+  return Math.max(0, toTotal - fromTotal);
+}
+
+export function getUpgradeableTiers(commerce, currentTier) {
+  const standard = commerce?.registrationFeeRupees ?? 300;
+  const tiers = enrichCardTiers(commerce?.cardTiers, standard);
+  const fromKey = tiers[currentTier] ? currentTier : "default";
+  const fromRank = tierRank(fromKey);
+  const options = [];
+
+  for (const key of CARD_TIER_KEYS) {
+    if (tierRank(key) <= fromRank) continue;
+    if (!isTierEnabled(tiers[key], key)) continue;
+    const delta = computeUpgradeDelta(commerce, fromKey, key);
+    if (delta <= 0) continue;
+    options.push({
+      tier: key,
+      label: tiers[key].label || key,
+      description: tiers[key].description || "",
+      upgradeDeltaRupees: delta,
+      bundleTotalRupees: tiers[key].bundleTotalRupees,
+    });
+  }
+  return options;
+}
+
+export function resolveUpgradeLineItem(config, fromTier, toTier) {
+  const standard = config?.registrationFeeRupees ?? 300;
+  const tiers = enrichCardTiers(config?.cardTiers, standard);
+  const fromKey = tiers[fromTier] ? fromTier : "default";
+  const toKey = tiers[toTier] ? toTier : "default";
+  const delta = computeUpgradeDelta(config, fromKey, toKey);
+  const fromLabel = tiers[fromKey].label || fromKey;
+  const toLabel = tiers[toKey].label || toKey;
+  return {
+    key: `upgrade_${fromKey}_to_${toKey}`,
+    label: `Card upgrade: ${fromLabel} → ${toLabel}`,
+    amount: delta,
+    tier: toKey,
+    fromTier: fromKey,
+    toTier: toKey,
+    bundleLabel: toLabel,
+  };
+}
