@@ -387,6 +387,12 @@ a.community-page__stat:hover {
   flex-direction: column;
   align-items: center;
   gap: 0.35rem;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 22rem;
+}
+
+.community-page__card-slot--holo {
+  contain: layout paint style;
 }
 
 .community-page__card-entry {

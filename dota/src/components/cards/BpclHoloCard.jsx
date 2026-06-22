@@ -8,9 +8,11 @@ import {
 } from "../../utils/holoCardEngine.js";
 import "./HoloCardStyles.css";
 
-function readDisplayDpr() {
+function readDisplayDpr(preview = false) {
   if (typeof window === "undefined") return 1;
-  return Math.min(Math.max(window.devicePixelRatio || 1, 1), 2.5);
+  const dpr = window.devicePixelRatio || 1;
+  if (preview) return Math.min(Math.max(dpr, 1), 1.25);
+  return Math.min(Math.max(dpr, 1), 2.5);
 }
 
 function isVideoPortraitUrl(url) {
@@ -52,7 +54,7 @@ function holoPortraitTransform(config, translate = { x: 0, y: 0 }) {
   return `translate3d(${x}px, ${y}px, 0) scale(${zoom})`;
 }
 
-export function BpclHoloCard({ manifest, size = "md", className = "", interactive = true }) {
+export function BpclHoloCard({ manifest, size = "md", className = "", interactive = true, showAura = true }) {
   const canvasRef = useRef(null);
   const shellRef = useRef(null);
   const portraitRef = useRef(null);
@@ -69,6 +71,7 @@ export function BpclHoloCard({ manifest, size = "md", className = "", interactiv
   const avatarUrl = resolveCardPortraitUrl(manifest);
   const isVideoPortrait = isVideoPortraitUrl(avatarUrl);
   const portraitStyle = useMemo(() => holoPortraitStyle(config), [config]);
+  const previewMode = !interactive;
 
   if (!engineRef.current) {
     engineRef.current = createHoloCardEngine();
@@ -77,7 +80,7 @@ export function BpclHoloCard({ manifest, size = "md", className = "", interactiv
   const syncCanvasSurface = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return null;
-    const dpr = readDisplayDpr();
+    const dpr = readDisplayDpr(previewMode);
     dprRef.current = dpr;
     const pixelW = Math.round(HOLO_WIDTH * dpr);
     const pixelH = Math.round(HOLO_HEIGHT * dpr);
@@ -91,7 +94,7 @@ export function BpclHoloCard({ manifest, size = "md", className = "", interactiv
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     return ctx;
-  }, []);
+  }, [previewMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,9 +120,17 @@ export function BpclHoloCard({ manifest, size = "md", className = "", interactiv
     const canvas = canvasRef.current;
     if (!canvas || !ready) return undefined;
 
-    const onResize = () => syncCanvasSurface();
+    const onResize = () => {
+      if (!previewMode) return;
+      const ctx = syncCanvasSurface();
+      if (ctx) engineRef.current.render(ctx, config, shineRef.current);
+    };
     onResize();
     window.addEventListener("resize", onResize);
+
+    if (previewMode) {
+      return () => window.removeEventListener("resize", onResize);
+    }
 
     const tick = () => {
       const ctx = syncCanvasSurface();
@@ -134,7 +145,7 @@ export function BpclHoloCard({ manifest, size = "md", className = "", interactiv
       window.removeEventListener("resize", onResize);
       cancelAnimationFrame(rafRef.current);
     };
-  }, [config, ready, syncCanvasSurface]);
+  }, [config, ready, syncCanvasSurface, previewMode]);
 
   useEffect(() => {
     return () => {
@@ -195,12 +206,13 @@ export function BpclHoloCard({ manifest, size = "md", className = "", interactiv
 
   return (
     <article
-      className={`bpcl-holo-card bpcl-holo-card--${size} ${className}`.trim()}
+      className={`bpcl-holo-card bpcl-holo-card--${size}${previewMode ? " bpcl-holo-card--preview" : ""} ${className}`.trim()}
       aria-label={`${playerName} holo card`}
       onMouseMove={onMove}
       onMouseLeave={onLeave}
     >
       <div ref={shellRef} className="bpcl-holo-card__tilt">
+        {showAura ? (
         <div className="bpcl-holo-card__aura" aria-hidden="true">
           <svg
             className="bpcl-holo-card__aura-svg"
@@ -274,6 +286,7 @@ export function BpclHoloCard({ manifest, size = "md", className = "", interactiv
             />
           </svg>
         </div>
+        ) : null}
         <div className="bpcl-holo-card__shell">
           <div className="bpcl-holo-card__portrait-slot">
             {avatarUrl && isVideoPortrait ? (
@@ -282,10 +295,11 @@ export function BpclHoloCard({ manifest, size = "md", className = "", interactiv
                 src={avatarUrl}
                 className="bpcl-holo-card__portrait"
                 style={portraitStyle}
-                autoPlay
+                autoPlay={!previewMode}
                 loop
                 muted
                 playsInline
+                preload={previewMode ? "none" : "metadata"}
                 aria-hidden="true"
               />
             ) : avatarUrl ? (
@@ -295,6 +309,7 @@ export function BpclHoloCard({ manifest, size = "md", className = "", interactiv
                 alt=""
                 className="bpcl-holo-card__portrait"
                 style={portraitStyle}
+                loading={previewMode ? "lazy" : "eager"}
                 decoding="async"
               />
             ) : (

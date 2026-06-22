@@ -86,7 +86,7 @@ function LazyTierCard({ template, manifest, size, interactive, showAura }) {
     return <Component manifest={manifest} size={size} />;
   }
   if (kind === "holo") {
-    return <Component manifest={manifest} size={size} interactive={interactive} />;
+    return <Component manifest={manifest} size={size} interactive={interactive} showAura={showAura} />;
   }
   if (kind === "legacy") {
     return <Component manifest={{ ...manifest, tier: effectiveTier }} size={size} />;
@@ -108,7 +108,15 @@ export function BpclCardRenderer({
   const pendingClass = manifest.cardPending ? " bpcl-card--pending" : "";
   const wrapClass = `bpcl-card-renderer${pendingClass}${className ? ` ${className}` : ""}`.trim();
 
-  const card = <LazyTierCard template={template} manifest={manifest} size={size} interactive={interactive} showAura={showAura} />;
+  const card = (
+    <LazyTierCard
+      template={template}
+      manifest={manifest}
+      size={size}
+      interactive={interactive}
+      showAura={showAura}
+    />
+  );
 
   if (!showMeta) return card;
 

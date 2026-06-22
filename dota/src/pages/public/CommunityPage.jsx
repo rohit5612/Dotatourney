@@ -1,22 +1,15 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { HiOutlineMagnifyingGlass } from "react-icons/hi2";
-import { BpclCardRenderer } from "../../components/cards/BpclCardRenderer.jsx";
 import { SITE_BRAND_SHORT } from "../../constants/siteMeta.js";
 import { usePublicTournament } from "../../context/PublicTournamentContext.jsx";
 import { api } from "../../lib/api";
-import { premiumCardGlowClass, premiumShineTextClass } from "../../utils/cardTierEffects.js";
+import { CommunityDirectoryCard } from "./CommunityDirectoryCard.jsx";
 import "../../components/cards/CardTierStyles.css";
 import "../../styles/card-tier-effects.css";
 import "../../styles/card-tier-effects-holo.css";
 
-const PAGE_SIZE = 24;
-
-function honorBadgeClass(kind) {
-  if (kind === "champion") return "community-page__honor-badge community-page__honor-badge--champion";
-  if (kind === "mvp") return "community-page__honor-badge community-page__honor-badge--mvp";
-  return "community-page__honor-badge";
-}
+const PAGE_SIZE = 16;
 
 export function CommunityPage() {
   const { event } = usePublicTournament();
@@ -156,55 +149,9 @@ export function CommunityPage() {
 
           {!loading && players.length > 0 ? (
             <ul className="community-page__grid">
-              {players.map((player) => {
-                const cardTier = player.cardTier || player.card?.tier || "default";
-                const badges = player.badges || [];
-                const cardGlowClass = premiumCardGlowClass(cardTier);
-                const nameShineClass = premiumShineTextClass(cardTier);
-                const idShineClass = premiumShineTextClass(cardTier, "id");
-                return (
-                  <li key={player.slug} className="community-page__grid-item">
-                    <Link to={`/player/${player.slug}`} className="community-page__card-entry">
-                      <div className={`community-page__card-slot${cardGlowClass ? ` ${cardGlowClass}` : ""}`}>
-                        <BpclCardRenderer
-                          manifest={
-                            player.card || {
-                              tier: cardTier,
-                              displayName: player.displayName,
-                              bpcId: player.bpcId,
-                              steamAvatar: player.avatarUrl,
-                            }
-                          }
-                          size="md"
-                          interactive={false}
-                          showMeta={false}
-                          showAura={false}
-                        />
-                      </div>
-                      <div className="community-page__card-caption">
-                        <p className={`community-page__card-name${nameShineClass ? ` ${nameShineClass}` : ""}`}>
-                          {player.displayName}
-                        </p>
-                        <p
-                          className={`community-page__card-id${idShineClass ? ` ${idShineClass}` : ""}`}
-                        >
-                          {player.bpcId}
-                        </p>
-                      </div>
-                    </Link>
-                    <div
-                      className={`community-page__honor-badges${badges.length ? "" : " community-page__honor-badges--empty"}`}
-                      aria-label={badges.length ? "Season honors" : undefined}
-                    >
-                      {badges.map((badge) => (
-                        <span key={`${player.slug}-${badge.label}`} className={honorBadgeClass(badge.kind)}>
-                          {badge.label}
-                        </span>
-                      ))}
-                    </div>
-                  </li>
-                );
-              })}
+              {players.map((player) => (
+                <CommunityDirectoryCard key={player.slug} player={player} />
+              ))}
             </ul>
           ) : null}
 

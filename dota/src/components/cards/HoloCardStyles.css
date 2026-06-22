@@ -299,6 +299,22 @@
   }
 }
 
+.bpcl-holo-card--preview .bpcl-holo-card__foil-shine {
+  animation: none;
+  background-position: 48% 50%;
+  opacity: 0.3;
+}
+
+.bpcl-holo-card--preview .bpcl-holo-card__frame-edge-soften::before,
+.bpcl-holo-card--preview .bpcl-holo-card__frame-edge-soften::after {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.bpcl-holo-card--preview .bpcl-holo-card__shell {
+  filter: drop-shadow(0 0.35rem 0.65rem rgba(8, 6, 22, 0.5));
+}
+
 @media (prefers-reduced-motion: reduce) {
   .bpcl-holo-card__aura-stroke--wide {
     animation: none;
