@@ -14,6 +14,11 @@
   --gold-stat-xpm-y: 89%;
   --gold-stat-winrate-x: 81%;
   --gold-stat-winrate-y: 89%;
+  /* Portrait window — generator 76×168 250×250 on 400×600; +0.75% left nudge aligns with frame cutout */
+  --gold-portrait-left: 19.75%;
+  --gold-portrait-top: 28%;
+  --gold-portrait-width: 62.5%;
+  --gold-portrait-height: 41.67%;
   width: var(--gold-card-width);
   max-width: 100%;
   aspect-ratio: 400 / 600;
@@ -70,10 +75,10 @@
 /* Portrait recess — generator: left 76, top 168, 250×250 on 400×600 */
 .bpcl-gold-card__portrait-slot {
   position: absolute;
-  left: 19%;
-  top: 28%;
-  width: 62.5%;
-  height: 41.67%;
+  left: var(--gold-portrait-left);
+  top: var(--gold-portrait-top);
+  width: var(--gold-portrait-width);
+  height: var(--gold-portrait-height);
   overflow: hidden;
   z-index: 1;
   border-radius: 0.125rem;
@@ -87,13 +92,14 @@
 
 .bpcl-gold-card__portrait {
   position: absolute;
-  inset: -4%;
-  width: 108%;
-  height: 108%;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   object-position: center center;
   display: block;
-  transform: scale(1.06);
+  transform: scale(1.04);
+  transform-origin: center center;
   transition: transform 0.12s ease-out;
   will-change: transform;
 }

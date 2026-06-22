@@ -77,9 +77,9 @@ export function BpclGoldCard({ manifest, size = "md", className = "", interactiv
         shimmerRef.current.style.background = `radial-gradient(ellipse 70% 70% at ${mx * 100}% ${my * 100}%, rgba(255,255,220,.18) 0%, transparent 58%)`;
       }
       if (portraitRef.current) {
-        const px = (mx - 0.5) * 10;
-        const py = (my - 0.5) * 8;
-        portraitRef.current.style.transform = `translate(${px}px, ${py}px) scale(1.06)`;
+        const px = (mx - 0.5) * 6;
+        const py = (my - 0.5) * 5;
+        portraitRef.current.style.transform = `translate3d(${px}px, ${py}px, 0) scale(1.04)`;
       }
     },
     [interactive],
@@ -89,7 +89,7 @@ export function BpclGoldCard({ manifest, size = "md", className = "", interactiv
     tilt.current.tx = 0;
     tilt.current.ty = 0;
     if (shimmerRef.current) shimmerRef.current.style.background = "";
-    if (portraitRef.current) portraitRef.current.style.transform = "scale(1.06)";
+    if (portraitRef.current) portraitRef.current.style.transform = "scale(1.04)";
   }, []);
 
   return (

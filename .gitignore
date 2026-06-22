@@ -34,3 +34,6 @@ Thumbs.db
 *.sqlite3
 tmp/
 temp/
+
+# Offline OpenDota stat engine (local tooling + cache)
+stat-engine/

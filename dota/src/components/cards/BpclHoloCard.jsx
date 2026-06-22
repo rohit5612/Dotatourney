@@ -311,6 +311,7 @@ export function BpclHoloCard({ manifest, size = "md", className = "", interactiv
             <div className="bpcl-holo-card__portrait-rim" />
             <div className="bpcl-holo-card__portrait-depth" />
           </div>
+          <div className="bpcl-holo-card__frame-edge-soften" aria-hidden="true" />
         </div>
         <div className="bpcl-holo-card__foil" aria-hidden="true">
           <span className="bpcl-holo-card__foil-shine" />
