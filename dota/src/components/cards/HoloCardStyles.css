@@ -300,9 +300,18 @@
 }
 
 .bpcl-holo-card--preview .bpcl-holo-card__foil-shine {
-  animation: none;
-  background-position: 48% 50%;
-  opacity: 0.3;
+  animation: bpcl-holo-foil-shine-sweep 7.5s ease-in-out infinite;
+  opacity: 0.32;
+}
+
+/* Gold-style cursor shine — lightweight, used in preview / directory / lightbox */
+.bpcl-holo-card__shimmer {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  pointer-events: none;
+  clip-path: var(--holo-card-clip);
+  mix-blend-mode: screen;
 }
 
 .bpcl-holo-card--preview .bpcl-holo-card__frame-edge-soften::before,

@@ -856,6 +856,33 @@
   color: color-mix(in srgb, var(--muted-foreground) 92%, white);
 }
 
+.player-auth__password-wrap {
+  position: relative;
+}
+
+.player-auth__password-wrap input {
+  width: 100%;
+  padding-right: 3.25rem;
+}
+
+.player-auth__password-toggle {
+  position: absolute;
+  right: 0.35rem;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--muted-foreground) 92%, white);
+  cursor: pointer;
+}
+
+.player-auth__password-toggle:hover {
+  color: var(--foreground);
+}
+
 .player-auth__glass--form .player-auth__field input,
 .player-auth__glass--form .player-auth__field textarea,
 .player-auth__field input,

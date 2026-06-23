@@ -58,6 +58,45 @@ function AuthFormHeader({ badge, title, sub }) {
   );
 }
 
+function PasswordField({
+  id,
+  label,
+  value,
+  onChange,
+  autoComplete = "current-password",
+  required = true,
+  minLength = 8,
+}) {
+  const [visible, setVisible] = useState(false);
+
+  return (
+    <div className="player-auth__field">
+      <label htmlFor={id}>{label}</label>
+      <div className="player-auth__password-wrap">
+        <input
+          id={id}
+          type={visible ? "text" : "password"}
+          required={required}
+          minLength={minLength}
+          autoComplete={autoComplete}
+          value={value}
+          onChange={onChange}
+        />
+        <button
+          type="button"
+          className="player-auth__password-toggle"
+          onClick={() => setVisible((show) => !show)}
+          aria-label={visible ? "Hide password" : "Show password"}
+          aria-pressed={visible}
+          tabIndex={-1}
+        >
+          {visible ? "Hide" : "Show"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function PlayerLoginPage() {
   const navigate = useNavigate();
   const [identifier, setIdentifier] = useState("");
@@ -117,17 +156,12 @@ export function PlayerLoginPage() {
             onChange={(e) => setIdentifier(e.target.value)}
           />
         </div>
-        <div className="player-auth__field">
-          <label htmlFor="password">Password</label>
-          <input
-            id="password"
-            type="password"
-            required
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
+        <PasswordField
+          id="password"
+          label="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
         <div className="player-auth__actions">
           <button type="submit" className="btn btn-primary player-auth__submit w-full" disabled={loading}>
             {loading ? "Signing in…" : "Sign in"}

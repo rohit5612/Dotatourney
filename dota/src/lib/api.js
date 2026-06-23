@@ -329,6 +329,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  removePlayerCard: (id) =>
+    request(`/admin/player-accounts/${id}/card`, {
+      method: "DELETE",
+    }),
   getSubstitutes: (tournamentId, params = {}) => {
     const q = new URLSearchParams();
     if (params.search) q.set("search", params.search);

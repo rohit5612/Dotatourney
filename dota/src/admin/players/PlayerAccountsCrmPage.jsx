@@ -5,7 +5,9 @@ import { BpclCardRenderer, BpclCardMini } from "../../components/cards/BpclCardR
 import { readPortraitUploadFile, isHostedPortraitGifUrl } from "../../utils/readPortraitUploadFile.js";
 import { resolveAccountAvatarUrl } from "../../utils/resolvePlayerAvatar.js";
 import { PortraitGifPickerModal } from "./PortraitGifPickerModal.jsx";
+import { ConfirmDialog } from "../users/ConfirmDialog.jsx";
 import "../../components/cards/CardTierStyles.css";
+import "../../styles/admin-user-mgmt.css";
 import "../../styles/player-crm.css";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
@@ -61,6 +63,9 @@ function PlayerAccountDetailModal({
   onApplyProfileTierChange,
   onUploadCard,
   uploadingCard,
+  onRequestRemoveCard,
+  removingCard,
+  canRemoveCard,
   onCardPortraitFileSelect,
   onOpenGifPicker,
   cardPortraitBusy,
@@ -320,6 +325,16 @@ function PlayerAccountDetailModal({
                     >
                       {uploadingCard ? "Uploading…" : "Upload card JSON"}
                     </button>
+                    {canRemoveCard ? (
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm text-destructive"
+                        disabled={!canWrite || removingCard || uploadingCard}
+                        onClick={onRequestRemoveCard}
+                      >
+                        {removingCard ? "Removing…" : "Remove card & tier"}
+                      </button>
+                    ) : null}
                     {cardTierUpload === "holo" ? (
                       <>
                         <label className="btn btn-outline btn-sm">
@@ -547,6 +562,8 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
   const [avatarUploadBusy, setAvatarUploadBusy] = useState(false);
   const [cardPortraitBusy, setCardPortraitBusy] = useState(false);
   const [gifPickerTarget, setGifPickerTarget] = useState(null);
+  const [removeCardConfirmOpen, setRemoveCardConfirmOpen] = useState(false);
+  const [removingCard, setRemovingCard] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -622,6 +639,7 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
     setCardJson("");
     setCardTierUpload("gold");
     setAvatarUrlDraft("");
+    setRemoveCardConfirmOpen(false);
   }
 
   async function saveAdminNotes() {
@@ -679,6 +697,29 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
       setMessage?.(error.message || "Could not upload card JSON.");
     } finally {
       setUploadingCard(false);
+    }
+  }
+
+  const canRemoveCard = Boolean(
+    detail?.cardAssets?.length ||
+      detail?.card?.tierOverride ||
+      detail?.account?.cardTierOverride,
+  );
+
+  async function confirmRemoveCard() {
+    if (!selectedId) return;
+    setRemovingCard(true);
+    try {
+      await api.removePlayerCard(selectedId);
+      const data = await api.getPlayerAccount(selectedId);
+      setDetail(data);
+      setCardJson("");
+      setRemoveCardConfirmOpen(false);
+      setMessage?.("Player card and admin tier override removed.");
+    } catch (error) {
+      setMessage?.(error.message || "Could not remove player card.");
+    } finally {
+      setRemovingCard(false);
     }
   }
 
@@ -941,6 +982,9 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
           onApplyProfileTierChange={setApplyProfileTier}
           onUploadCard={uploadCardJson}
           uploadingCard={uploadingCard}
+          onRequestRemoveCard={() => setRemoveCardConfirmOpen(true)}
+          removingCard={removingCard}
+          canRemoveCard={canRemoveCard}
           onCardPortraitFileSelect={handleCardPortraitFileSelect}
           onOpenGifPicker={openGifPicker}
           cardPortraitBusy={cardPortraitBusy}
@@ -966,6 +1010,21 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
         selectedUrl={resolveGifPickerSelectedUrl()}
         onSelect={handleGifPickerSelect}
         canWrite={canWrite}
+      />
+
+      <ConfirmDialog
+        open={removeCardConfirmOpen}
+        title="Remove player card?"
+        description={
+          detail?.account?.displayName
+            ? `This deletes all uploaded card assets and clears the admin tier override for ${detail.account.displayName}. Their profile will fall back to the purchased registration tier (or default). Registration payment records are not changed.`
+            : "This deletes all uploaded card assets and clears the admin tier override. Their profile will fall back to the purchased registration tier (or default). Registration payment records are not changed."
+        }
+        confirmLabel="Remove card & tier"
+        tone="danger"
+        busy={removingCard}
+        onConfirm={confirmRemoveCard}
+        onCancel={() => setRemoveCardConfirmOpen(false)}
       />
     </div>
   );

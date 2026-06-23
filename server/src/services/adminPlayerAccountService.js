@@ -167,6 +167,22 @@ export async function uploadPlayerCardAdmin(accountId, body, adminUserId) {
   return { asset, card, cardAssets };
 }
 
+export async function removePlayerCardAdmin(accountId) {
+  const account = await findAccountById(accountId);
+  if (!account) return null;
+
+  await pool.query(`DELETE FROM player_card_assets WHERE player_account_id = $1`, [accountId]);
+  await pool.query(
+    `UPDATE player_accounts SET card_tier_override = NULL, updated_at = NOW() WHERE id = $1`,
+    [accountId],
+  );
+  account.card_tier_override = null;
+
+  const card = await buildCardManifest(account);
+  const cardAssets = await listCardAssetsForAccount(accountId);
+  return { card, cardAssets };
+}
+
 export async function patchPlayerAccountAdmin(id, { adminNotes, displayName, avatarUrl }) {
   const fields = [];
   const values = [id];

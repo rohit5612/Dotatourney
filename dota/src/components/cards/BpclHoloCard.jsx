@@ -58,6 +58,7 @@ export function BpclHoloCard({ manifest, size = "md", className = "", interactiv
   const canvasRef = useRef(null);
   const shellRef = useRef(null);
   const portraitRef = useRef(null);
+  const shimmerRef = useRef(null);
   const engineRef = useRef(null);
   const rafRef = useRef(0);
   const shineRef = useRef({ x: 0.5, y: 0.5 });
@@ -179,10 +180,16 @@ export function BpclHoloCard({ manifest, size = "md", className = "", interactiv
 
   const onMove = useCallback(
     (event) => {
-      if (!interactive) return;
       const rect = event.currentTarget.getBoundingClientRect();
       const mx = (event.clientX - rect.left) / rect.width;
       const my = (event.clientY - rect.top) / rect.height;
+
+      if (previewMode && shimmerRef.current) {
+        shimmerRef.current.style.background = `radial-gradient(ellipse 70% 70% at ${mx * 100}% ${my * 100}%, rgba(220,240,255,.18) 0%, rgba(255,200,240,.12) 32%, transparent 58%)`;
+      }
+
+      if (!interactive) return;
+
       shineRef.current = { x: mx, y: my };
       tilt.current.tx = (my - 0.5) * 14;
       tilt.current.ty = (0.5 - mx) * 14;
@@ -192,10 +199,11 @@ export function BpclHoloCard({ manifest, size = "md", className = "", interactiv
         portraitRef.current.style.transform = holoPortraitTransform(config, { x: px, y: py });
       }
     },
-    [interactive, config],
+    [interactive, previewMode, config],
   );
 
   const onLeave = useCallback(() => {
+    if (shimmerRef.current) shimmerRef.current.style.background = "";
     shineRef.current = { x: 0.5, y: 0.5 };
     tilt.current.tx = 0;
     tilt.current.ty = 0;
@@ -331,6 +339,7 @@ export function BpclHoloCard({ manifest, size = "md", className = "", interactiv
         <div className="bpcl-holo-card__foil" aria-hidden="true">
           <span className="bpcl-holo-card__foil-shine" />
         </div>
+        <div ref={shimmerRef} className="bpcl-holo-card__shimmer" aria-hidden="true" />
       </div>
     </article>
   );

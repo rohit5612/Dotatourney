@@ -7,6 +7,7 @@ import {
   listPlayerAccountsAdmin,
   patchPlayerAccountAdmin,
   uploadPlayerCardAdmin,
+  removePlayerCardAdmin,
 } from "../../services/adminPlayerAccountService.js";
 import { findAccountById } from "../../services/playerAccountRepository.js";
 import { listHostedPortraitGifs, saveCatalogPortraitGif, savePlayerPortraitGif } from "../../services/portraitGifService.js";
@@ -109,6 +110,23 @@ router.post("/:id/portrait-gif", requireAdmin, requirePermission("playerCrm.acco
       payload: { filename: saved.filename, bytes: saved.bytes },
     });
     return res.status(201).json(saved);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.delete("/:id/card", requireAdmin, requirePermission("playerCrm.accounts.update"), async (req, res, next) => {
+  try {
+    const result = await removePlayerCardAdmin(req.params.id);
+    if (!result) return res.status(404).json({ message: "Player account not found" });
+    await writeAuditLog({
+      adminUserId: req.adminUser.id,
+      action: "player_card.remove",
+      entityType: "player_account",
+      entityId: req.params.id,
+      payload: {},
+    });
+    return res.json(result);
   } catch (error) {
     return next(error);
   }
