@@ -5,12 +5,101 @@ import { BpclCardRenderer, BpclCardMini } from "../../components/cards/BpclCardR
 import { readPortraitUploadFile, isHostedPortraitGifUrl } from "../../utils/readPortraitUploadFile.js";
 import { resolveAccountAvatarUrl } from "../../utils/resolvePlayerAvatar.js";
 import { PortraitGifPickerModal } from "./PortraitGifPickerModal.jsx";
+import { PortraitFrameModal } from "./PortraitFrameModal.jsx";
+import { defaultPortraitCropMap, normalizePortraitCropMap } from "../../utils/portraitCropStyle.js";
 import { ConfirmDialog } from "../users/ConfirmDialog.jsx";
 import "../../components/cards/CardTierStyles.css";
 import "../../styles/admin-user-mgmt.css";
 import "../../styles/player-crm.css";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const CARD_TIER_RANK = { holo: 3, gold: 2, player: 1, default: 0 };
+
+function hasEditableManifest(value) {
+  return value && typeof value === "object" && Object.keys(value).length > 0;
+}
+
+function pickCardAssetForEditor(data) {
+  const assets = data?.cardAssets || [];
+  const effectiveTier =
+    data?.card?.tierOverride ||
+    data?.account?.cardTierOverride ||
+    data?.card?.tier ||
+    data?.card?.renderTier;
+
+  const withManifest = assets
+    .filter((asset) => hasEditableManifest(asset.manifestJson))
+    .sort((a, b) => {
+      const tierDiff = (CARD_TIER_RANK[b.tier] || 0) - (CARD_TIER_RANK[a.tier] || 0);
+      if (tierDiff !== 0) return tierDiff;
+      if (a.status === "approved" && b.status !== "approved") return -1;
+      if (b.status === "approved" && a.status !== "approved") return 1;
+      return new Date(b.updatedAt || b.approvedAt || 0) - new Date(a.updatedAt || a.approvedAt || 0);
+    });
+
+  return (
+    withManifest.find((asset) => asset.tier === effectiveTier) ||
+    withManifest.find((asset) => asset.status === "approved") ||
+    withManifest[0] ||
+    null
+  );
+}
+
+function serializeCardManifestForEditor(data) {
+  const asset = pickCardAssetForEditor(data);
+  if (asset?.manifestJson) {
+    return JSON.stringify(asset.manifestJson, null, 2);
+  }
+
+  const payload = data?.card?.cardPayload;
+  if (hasEditableManifest(payload) && (payload.version || payload.template || payload.playerName)) {
+    return JSON.stringify(payload, null, 2);
+  }
+
+  return "";
+}
+
+function resolveCardTierForEditor(data, asset) {
+  if (asset?.tier && ["player", "gold", "holo"].includes(asset.tier)) {
+    return asset.tier;
+  }
+
+  const preferredTier =
+    data?.card?.tierOverride ||
+    data?.account?.cardTierOverride ||
+    data?.card?.purchasedTier ||
+    data?.registrations?.find((r) => r.cardTier && r.cardTier !== "default")?.cardTier ||
+    "gold";
+  return ["player", "gold", "holo"].includes(preferredTier) ? preferredTier : "gold";
+}
+
+function hydrateCardEditorState(data, { setCardJson, setCardTierUpload, draftCache }) {
+  const accountId = data?.account?.id;
+  if (!accountId) return;
+
+  const cached = draftCache.get(accountId);
+  if (cached) {
+    setCardJson(cached.json ?? "");
+    if (cached.tier) setCardTierUpload(cached.tier);
+    return;
+  }
+
+  const asset = pickCardAssetForEditor(data);
+  const json = serializeCardManifestForEditor(data);
+  const tier = resolveCardTierForEditor(data, asset);
+  setCardJson(json);
+  setCardTierUpload(tier);
+  draftCache.set(accountId, { json, tier });
+}
+
+function persistCardEditorDraft(draftCache, accountId, { json, tier }) {
+  if (!accountId) return;
+  const prev = draftCache.get(accountId) || {};
+  draftCache.set(accountId, {
+    json: json !== undefined ? json : (prev.json ?? ""),
+    tier: tier !== undefined ? tier : prev.tier,
+  });
+}
 
 function formatDate(value) {
   if (!value) return "—";
@@ -21,6 +110,39 @@ function formatDate(value) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+const CARD_STATUS_FILTERS = [
+  { value: "", label: "All card statuses" },
+  { value: "not_purchased", label: "Not purchased (—/—)" },
+  { value: "purchased", label: "Purchased (any)" },
+  { value: "pending_issue", label: "Purchased, not issued (✓/✕)" },
+  { value: "issued", label: "Purchased & issued (✓/✓)" },
+];
+
+function CardStatusMarks({ purchased, issued }) {
+  if (!purchased) {
+    return (
+      <span className="player-crm__card-status" aria-label="Card not purchased">
+        <span className="player-crm__card-status-mark is-neutral">—</span>
+        <span className="player-crm__card-status-sep">/</span>
+        <span className="player-crm__card-status-mark is-neutral">—</span>
+      </span>
+    );
+  }
+
+  const label = issued ? "Card purchased and issued" : "Card purchased, not yet issued";
+  return (
+    <span className="player-crm__card-status" aria-label={label}>
+      <span className="player-crm__card-status-mark is-yes" title="Purchased">
+        ✓
+      </span>
+      <span className="player-crm__card-status-sep">/</span>
+      <span className={`player-crm__card-status-mark ${issued ? "is-yes" : "is-no"}`} title={issued ? "Issued" : "Not issued"}>
+        {issued ? "✓" : "✕"}
+      </span>
+    </span>
+  );
 }
 
 function LinkBadge({ linked, label }) {
@@ -200,6 +322,7 @@ function PlayerAccountDetailModal({
                       <strong>Choose hosted GIF</strong> to pick from{" "}
                       <code className="text-[0.7rem]">/cards/gifs</code> (faster than inline data URLs).
                       Static images can use inline upload; very large GIFs should be hosted.
+                      Uploading opens a positioning editor.
                     </p>
                   </div>
                 </div>
@@ -282,7 +405,8 @@ function PlayerAccountDetailModal({
                 ) : null}
                 <div className="mt-4 space-y-2">
                   <p className="text-xs text-muted-foreground">
-                    Paste JSON from the offline card builder. Choose any tier — it does not have to match what the
+                    Paste JSON from the offline card builder. The last uploaded manifest loads here automatically
+                    so you can tweak and re-upload. Choose any tier — it does not have to match what the
                     player purchased. Uploading sets their profile card and premium status to the selected tier.
                     {cardTierUpload === "holo" ? (
                       <>
@@ -540,6 +664,7 @@ function PlayerAccountDetailModal({
 export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [cardStatusFilter, setCardStatusFilter] = useState("");
   const [accounts, setAccounts] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -558,6 +683,10 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
   const [applyProfileTier, setApplyProfileTier] = useState(true);
   const [uploadingCard, setUploadingCard] = useState(false);
   const [avatarUrlDraft, setAvatarUrlDraft] = useState("");
+  const [avatarCropDraft, setAvatarCropDraft] = useState(null);
+  const [portraitFrameSession, setPortraitFrameSession] = useState(null);
+  const portraitFrameCropsRef = useRef(defaultPortraitCropMap());
+  const cardJsonDraftsRef = useRef(new Map());
   const [savingAvatar, setSavingAvatar] = useState(false);
   const [avatarUploadBusy, setAvatarUploadBusy] = useState(false);
   const [cardPortraitBusy, setCardPortraitBusy] = useState(false);
@@ -572,7 +701,7 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, pageSize]);
+  }, [debouncedSearch, pageSize, cardStatusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -583,12 +712,21 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
+  useEffect(() => {
+    if (!selectedId) return;
+    persistCardEditorDraft(cardJsonDraftsRef.current, selectedId, {
+      json: cardJson,
+      tier: cardTierUpload,
+    });
+  }, [selectedId, cardJson, cardTierUpload]);
+
   async function loadList(pageOverride = currentPage) {
     setLoadingList(true);
     try {
       const safePage = Math.max(1, pageOverride);
       const data = await api.listPlayerAccounts({
         search: debouncedSearch,
+        cardStatus: cardStatusFilter || undefined,
         limit: pageSize,
         offset: (safePage - 1) * pageSize,
       });
@@ -603,7 +741,7 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
 
   useEffect(() => {
     loadList(page).catch(() => {});
-  }, [debouncedSearch, page, pageSize]);
+  }, [debouncedSearch, page, pageSize, cardStatusFilter]);
 
   async function openDetail(id) {
     setSelectedId(id);
@@ -615,13 +753,17 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
       setDetail(data);
       setAdminNotes(data.account?.adminNotes || "");
       setAvatarUrlDraft(data.account?.avatarUrl || "");
-      const preferredTier =
-        data.card?.tierOverride ||
-        data.account?.cardTierOverride ||
-        data.card?.purchasedTier ||
-        data.registrations?.find((r) => r.cardTier && r.cardTier !== "default")?.cardTier ||
-        "gold";
-      setCardTierUpload(["player", "gold", "holo"].includes(preferredTier) ? preferredTier : "gold");
+      const savedCrop = data.account?.avatarPortraitCrop;
+      setAvatarCropDraft(
+        savedCrop && Object.keys(savedCrop).length > 0
+          ? normalizePortraitCropMap(savedCrop)
+          : null,
+      );
+      hydrateCardEditorState(data, {
+        setCardJson,
+        setCardTierUpload,
+        draftCache: cardJsonDraftsRef.current,
+      });
       setApplyProfileTier(true);
     } catch (error) {
       setMessage?.(error.message);
@@ -636,9 +778,10 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
     setDetail(null);
     setAdminNotes("");
     setCoinDelta("");
-    setCardJson("");
     setCardTierUpload("gold");
     setAvatarUrlDraft("");
+    setAvatarCropDraft(defaultPortraitCropMap());
+    setPortraitFrameSession(null);
     setRemoveCardConfirmOpen(false);
   }
 
@@ -688,6 +831,10 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
       });
       const data = await api.getPlayerAccount(selectedId);
       setDetail(data);
+      persistCardEditorDraft(cardJsonDraftsRef.current, selectedId, {
+        json: cardJson,
+        tier: cardTierUpload,
+      });
       setMessage?.(
         applyProfileTier
           ? `Player card uploaded as ${cardTierUpload} — profile tier updated.`
@@ -713,7 +860,9 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
       await api.removePlayerCard(selectedId);
       const data = await api.getPlayerAccount(selectedId);
       setDetail(data);
+      cardJsonDraftsRef.current.delete(selectedId);
       setCardJson("");
+      setCardTierUpload("gold");
       setRemoveCardConfirmOpen(false);
       setMessage?.("Player card and admin tier override removed.");
     } catch (error) {
@@ -721,6 +870,23 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
     } finally {
       setRemovingCard(false);
     }
+  }
+
+  function openPortraitFrameSession(imageUrl) {
+    portraitFrameCropsRef.current = defaultPortraitCropMap();
+    setPortraitFrameSession({ imageUrl });
+  }
+
+  function closePortraitFrameSession() {
+    setPortraitFrameSession(null);
+  }
+
+  function applyPortraitFrameSession() {
+    if (!portraitFrameSession) return;
+    setAvatarUrlDraft(portraitFrameSession.imageUrl);
+    setAvatarCropDraft(normalizePortraitCropMap(portraitFrameCropsRef.current));
+    closePortraitFrameSession();
+    setMessage?.("Portrait positioned. Click Save avatar to apply.");
   }
 
   function openGifPicker(target) {
@@ -746,8 +912,9 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
 
   function handleGifPickerSelect(url) {
     if (gifPickerTarget === "avatar") {
-      setAvatarUrlDraft(url);
-      setMessage?.("Hosted GIF selected. Click Save avatar to apply.");
+      closeGifPicker();
+      openPortraitFrameSession(url);
+      return;
     } else if (gifPickerTarget === "cardJson") {
       let manifest = {};
       if (cardJson.trim()) {
@@ -792,7 +959,7 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
     setAvatarUploadBusy(true);
     try {
       const dataUrl = await readPortraitUploadFile(file, { maxEdge: 512, quality: 0.88 });
-      setAvatarUrlDraft(dataUrl);
+      openPortraitFrameSession(dataUrl);
     } catch (error) {
       setMessage?.(error.message || "Could not process image.");
     } finally {
@@ -804,10 +971,19 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
     if (!selectedId) return;
     setSavingAvatar(true);
     try {
-      await api.patchPlayerAccount(selectedId, { avatarUrl: avatarUrlDraft });
+      await api.patchPlayerAccount(selectedId, {
+        avatarUrl: avatarUrlDraft,
+        ...(avatarCropDraft ? { avatarPortraitCrop: avatarCropDraft } : {}),
+      });
       const data = await api.getPlayerAccount(selectedId);
       setDetail(data);
       setAvatarUrlDraft(data.account?.avatarUrl || "");
+      const savedCrop = data.account?.avatarPortraitCrop;
+      setAvatarCropDraft(
+        savedCrop && Object.keys(savedCrop).length > 0
+          ? normalizePortraitCropMap(savedCrop)
+          : null,
+      );
       setMessage?.("Avatar saved.");
       await loadList();
     } catch (error) {
@@ -821,8 +997,9 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
     if (!selectedId) return;
     setSavingAvatar(true);
     try {
-      await api.patchPlayerAccount(selectedId, { avatarUrl: "" });
+      await api.patchPlayerAccount(selectedId, { avatarUrl: "", avatarPortraitCrop: {} });
       setAvatarUrlDraft("");
+      setAvatarCropDraft(null);
       const data = await api.getPlayerAccount(selectedId);
       setDetail(data);
       setMessage?.("Custom avatar cleared.");
@@ -841,16 +1018,33 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
         <p className="mb-3 text-sm text-muted-foreground">
           Global BPC accounts — search, open a profile view, and keep internal admin notes.
         </p>
-        <input
-          className="w-full max-w-md rounded border border-input bg-background/80 p-2 text-sm"
-          placeholder="Search email, BPC ID, name, slug…"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <input
+            className="w-full max-w-md rounded border border-input bg-background/80 p-2 text-sm"
+            placeholder="Search email, BPC ID, name, slug…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+          <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+            Card status
+            <select
+              className="min-w-[14rem] rounded border border-input bg-background/80 p-2 text-sm text-foreground"
+              value={cardStatusFilter}
+              onChange={(event) => setCardStatusFilter(event.target.value)}
+            >
+              {CARD_STATUS_FILTERS.map((option) => (
+                <option key={option.value || "all"} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <p className="mt-2 text-xs text-muted-foreground">
+          Card status shows purchased / issued. Example: ✓/✓ = bought and card uploaded.{" "}
           {loadingList
             ? "Loading…"
-            : `Showing ${total ? pageStart + 1 : 0}-${pageEnd} of ${total} account${total === 1 ? "" : "s"}`}
+            : `Showing ${total ? pageStart + 1 : 0}-${pageEnd} of ${total} account${total === 1 ? "" : "s"}.`}
         </p>
 
         <div className="player-crm__table-wrap mt-4">
@@ -861,6 +1055,7 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
                 <th>Player</th>
                 <th>Email</th>
                 <th>Links</th>
+                <th>Card status</th>
                 <th>MMR</th>
                 <th>Regs</th>
                 <th>Joined</th>
@@ -886,6 +1081,9 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
                       <span className={account.steamId ? "is-on" : ""}>S</span>
                       <span className={account.discordId ? "is-on" : ""}>D</span>
                     </div>
+                  </td>
+                  <td>
+                    <CardStatusMarks purchased={account.cardPurchased} issued={account.cardIssued} />
                   </td>
                   <td>{account.mmr ?? "—"}</td>
                   <td>{account.registrationCount ?? 0}</td>
@@ -998,6 +1196,18 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
           canWrite={canWrite}
         />
       ) : null}
+
+      <PortraitFrameModal
+        key={portraitFrameSession?.imageUrl || "closed"}
+        open={Boolean(portraitFrameSession)}
+        imageUrl={portraitFrameSession?.imageUrl || ""}
+        cropsRef={portraitFrameCropsRef}
+        baseManifest={detail?.card}
+        playerName={detail?.account?.displayName || ""}
+        onCancel={closePortraitFrameSession}
+        onApply={applyPortraitFrameSession}
+        disabled={!canWrite}
+      />
 
       <PortraitGifPickerModal
         open={Boolean(gifPickerTarget)}

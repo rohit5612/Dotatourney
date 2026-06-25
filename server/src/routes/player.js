@@ -66,6 +66,7 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "../services/playerNotificationService.js";
+import { getClientIp, logAction, logError } from "../utils/serverLogger.js";
 
 const router = express.Router();
 
@@ -112,6 +113,7 @@ router.post("/auth/register", async (req, res, next) => {
     const { account, verifyToken } = await registerPlayerWithPassword(payload);
     const verifyUrl = `${frontendUrl("/verify-email")}?token=${encodeURIComponent(verifyToken)}&email=${encodeURIComponent(account.email)}`;
     await sendPlayerEmailVerificationEmail({ to: account.email, verifyUrl, displayName: account.display_name });
+    logAction("auth", "player.register", { email: account.email, playerId: account.id, ip: getClientIp(req) });
     res.status(201).json({
       message: "Account created. Check your email to verify before signing in.",
       email: account.email,
@@ -132,8 +134,9 @@ router.get("/auth/verify-email", async (req, res, next) => {
     try {
       await maybeSendPlayerWelcomeEmail(account);
     } catch (emailErr) {
-      console.error("[email] welcome mail failed:", emailErr?.message || emailErr);
+      logError("email", "welcome mail failed", emailErr, { playerId: account.id, email: account.email });
     }
+    logAction("auth", "player.email_verified", { playerId: account.id, bpcId: account.bpc_id, email: account.email, ip: getClientIp(req) });
     res.json({
       message: "Email verified successfully",
       token: session.token,
@@ -171,6 +174,12 @@ router.post("/auth/login", async (req, res, next) => {
   try {
     const payload = loginSchema.parse(req.body);
     const { account, session } = await loginPlayer(payload);
+    logAction("auth", "player.login.success", {
+      playerId: account.id,
+      bpcId: account.bpc_id,
+      email: account.email,
+      ip: getClientIp(req),
+    });
     res.json({
       token: session.token,
       expiresAt: session.expiresAt,
@@ -190,6 +199,11 @@ router.post("/auth/logout", requirePlayer, async (req, res, next) => {
     const header = req.get("authorization") || "";
     const token = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
     await deletePlayerSession(token);
+    logAction("auth", "player.logout", {
+      playerId: req.playerAccount.id,
+      bpcId: req.playerAccount.bpc_id,
+      ip: getClientIp(req),
+    });
     res.json({ ok: true });
   } catch (error) {
     next(error);
@@ -345,8 +359,9 @@ router.post("/auth/claim/set-password", async (req, res, next) => {
     try {
       await maybeSendPlayerWelcomeEmail(account);
     } catch (emailErr) {
-      console.error("[email] welcome mail failed:", emailErr?.message || emailErr);
+      logError("email", "welcome mail failed", emailErr, { playerId: account.id, email: account.email });
     }
+    logAction("auth", "player.claim.completed", { playerId: account.id, bpcId: account.bpc_id, ip: getClientIp(req) });
     res.json({
       message: "Account claimed successfully",
       token: session.token,
@@ -429,6 +444,13 @@ router.get("/auth/google/callback", async (req, res, next) => {
     });
     await recordAccountLink(account.id, "google", profile.googleSub);
     const session = await createPlayerSession(account.id);
+    logAction("auth", "player.oauth.google", {
+      playerId: account.id,
+      bpcId: account.bpc_id,
+      email: account.email,
+      mode: state.mode,
+      ip: getClientIp(req),
+    });
     return redirectWithToken(res, session.token);
   } catch (error) {
     return redirectWithError(res, error.message || "Google sign-in failed");
@@ -473,6 +495,12 @@ router.get("/auth/steam/callback", async (req, res, next) => {
     });
     await recordAccountLink(account.id, "steam", steamId);
     const session = await createPlayerSession(account.id);
+    logAction("auth", "player.oauth.steam_linked", {
+      playerId: account.id,
+      bpcId: account.bpc_id,
+      steamId,
+      ip: getClientIp(req),
+    });
     return res.redirect(`${frontendUrl("/dashboard")}?linked=steam&token=${encodeURIComponent(session.token)}`);
   } catch (error) {
     return redirectWithError(res, error.message || "Steam link failed");
@@ -524,6 +552,13 @@ router.get("/auth/discord/callback", async (req, res, next) => {
     });
     const session = await createPlayerSession(account.id);
     const joinParam = joinedGuild ? "" : "&discord_join=failed";
+    logAction("auth", "player.oauth.discord_linked", {
+      playerId: account.id,
+      bpcId: account.bpc_id,
+      discordId: profile.discordId,
+      guildJoined: joinedGuild,
+      ip: getClientIp(req),
+    });
     return res.redirect(
       `${frontendUrl("/dashboard")}?linked=discord&token=${encodeURIComponent(session.token)}${joinParam}`,
     );

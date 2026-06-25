@@ -73,6 +73,10 @@ export function publicPlayerAccount(row) {
     discordUsername: row.discord_username || "",
     discordAvatarUrl: row.discord_avatar_url || "",
     avatarUrl: row.avatar_url || "",
+    avatarPortraitCrop:
+      row.avatar_portrait_crop && typeof row.avatar_portrait_crop === "object"
+        ? row.avatar_portrait_crop
+        : {},
     bio: row.bio || "",
     mmr: row.mmr ?? null,
     preferredRoles: Array.isArray(row.preferred_roles) ? row.preferred_roles : [],

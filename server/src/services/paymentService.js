@@ -21,6 +21,7 @@ import {
 } from "./commerceConfigRepository.js";
 import { resolveBundleLineItem, resolveUpgradeLineItem, getUpgradeableTiers, getHighestEnabledTier, tierRank, enrichCardTiers } from "./commerceBundle.js";
 import { sendPaidRegistrationEmail } from "./emailService.js";
+import { logAction, logError, logWarn } from "../utils/serverLogger.js";
 
 export const CARD_TIERS = ["default", "player", "gold", "holo"];
 
@@ -354,6 +355,17 @@ export async function confirmUpgrade(account, tournamentSlug, body) {
 
     await client.query("COMMIT");
 
+    logAction("payment", "upgrade.order_created", {
+      orderId,
+      playerId: account.id,
+      bpcId: account.bpc_id,
+      tournamentId: tournament.id,
+      provider,
+      amountPaise: preview.totalPaise,
+      targetTier,
+      fromTier: currentTier,
+    });
+
     return {
       orderId,
       provider,
@@ -475,6 +487,16 @@ export async function confirmCheckout(account, tournamentSlug, body) {
 
     await client.query("COMMIT");
 
+    logAction("payment", "checkout.order_created", {
+      orderId,
+      playerId: account.id,
+      bpcId: account.bpc_id,
+      tournamentId: tournament.id,
+      provider,
+      amountPaise: preview.totalPaise,
+      cardTier: body.cardTier || "default",
+    });
+
     return {
       orderId,
       provider,
@@ -512,7 +534,7 @@ export async function reconcileCashfreeCheckoutOrder(orderId, playerAccountId) {
   try {
     cfOrder = await fetchCashfreeOrder(cfOrderId);
   } catch (err) {
-    console.error("[cashfree] reconcile fetch order failed:", err?.message || err);
+    logError("payment", "cashfree reconcile fetch order failed", err, { orderId, playerAccountId });
     return false;
   }
 
@@ -526,6 +548,7 @@ export async function reconcileCashfreeCheckoutOrder(orderId, playerAccountId) {
     paymentProvider: "cashfree",
     paymentRef: paymentId,
   });
+  logAction("payment", "checkout.reconciled", { orderId, playerAccountId, cfOrderId });
   return true;
 }
 
@@ -533,7 +556,7 @@ export async function getCheckoutOrderStatus(orderId, playerAccountId) {
   try {
     await reconcileCashfreeCheckoutOrder(orderId, playerAccountId);
   } catch (err) {
-    console.error("[cashfree] reconcile failed:", err?.message || err);
+    logError("payment", "cashfree reconcile failed", err, { orderId, playerAccountId });
   }
 
   const { rows } = await pool.query(
@@ -580,6 +603,7 @@ export async function fulfillPaidCheckout({
       ]);
       if (dup.rows.length) {
         await client.query("COMMIT");
+        logWarn("payment", "checkout.duplicate_webhook", { checkoutOrderId, paymentId });
         return { ok: true, duplicate: true };
       }
     }
@@ -595,6 +619,10 @@ export async function fulfillPaidCheckout({
     }
     if (order.status === "paid") {
       await client.query("COMMIT");
+      logWarn("payment", "checkout.already_paid", {
+        checkoutOrderId,
+        registrationId: order.registration_id,
+      });
       return { ok: true, duplicate: true, registrationId: order.registration_id };
     }
 
@@ -770,8 +798,20 @@ export async function fulfillPaidCheckout({
         });
       }
     } catch (emailErr) {
-      console.error("[email] paid registration mail failed:", emailErr?.message || emailErr);
+      logError("email", "paid registration mail failed", emailErr, { checkoutOrderId, registrationId });
     }
+
+    logAction("payment", "checkout.fulfilled", {
+      checkoutOrderId: order.id,
+      registrationId,
+      playerId: order.player_account_id,
+      tournamentId: order.tournament_id,
+      paymentProvider,
+      paymentId,
+      orderType: order.order_type || "checkout",
+      cardTier: order.card_tier,
+      totalPaise: order.total_paise,
+    });
 
     return { ok: true, registrationId, orderId: order.id };
   } catch (error) {
@@ -829,6 +869,14 @@ export async function handleCashfreeWebhook(rawBody, signature, timestamp) {
   const paymentId = paymentEntity.cf_payment_id || paymentEntity.payment_id || null;
   const paymentStatus = String(paymentEntity.payment_status || orderEntity.order_status || "").toUpperCase();
 
+  logAction("payment", "webhook.received", {
+    eventType,
+    paymentStatus,
+    providerOrderId,
+    paymentId,
+    signatureVerified: verified,
+  });
+
   const webhookId = randomUUID();
   await pool.query(
     `INSERT INTO payment_webhooks (id, provider, event_type, payment_id, order_id, signature_verified, payload)
@@ -837,6 +885,7 @@ export async function handleCashfreeWebhook(rawBody, signature, timestamp) {
   );
 
   if (!verified) {
+    logWarn("payment", "webhook.invalid_signature", { eventType, providerOrderId });
     const err = new Error("Invalid webhook signature");
     err.status = 400;
     throw err;
@@ -854,10 +903,12 @@ export async function handleCashfreeWebhook(rawBody, signature, timestamp) {
     String(orderEntity.order_status || "").toUpperCase() === "PAID";
 
   if (!isPaid) {
+    logAction("payment", "webhook.ignored", { eventType, paymentStatus, providerOrderId });
     return { ok: true, ignored: true, eventType, paymentStatus };
   }
 
   if (!providerOrderId) {
+    logWarn("payment", "webhook.missing_order_id", { eventType, paymentStatus });
     return { ok: true, ignored: true, reason: "missing order id" };
   }
 
@@ -867,6 +918,7 @@ export async function handleCashfreeWebhook(rawBody, signature, timestamp) {
   );
   const checkoutOrder = rows[0];
   if (!checkoutOrder) {
+    logWarn("payment", "webhook.order_not_found", { providerOrderId, eventType });
     return { ok: true, ignored: true, reason: "checkout order not found" };
   }
 
@@ -878,8 +930,21 @@ export async function handleCashfreeWebhook(rawBody, signature, timestamp) {
       paymentRef: paymentId,
     });
     await pool.query(`UPDATE payment_webhooks SET processed = TRUE WHERE id = $1`, [webhookId]);
+    logAction("payment", "webhook.processed", {
+      checkoutOrderId: checkoutOrder.id,
+      providerOrderId,
+      paymentId,
+      eventType,
+      duplicate: Boolean(result?.duplicate),
+    });
     return { ok: true, ...result };
   } catch (error) {
+    logError("payment", "webhook.processing_failed", error, {
+      checkoutOrderId: checkoutOrder.id,
+      providerOrderId,
+      paymentId,
+      eventType,
+    });
     await pool.query(`UPDATE payment_webhooks SET error_message = $2 WHERE id = $1`, [
       webhookId,
       error.message || "processing failed",

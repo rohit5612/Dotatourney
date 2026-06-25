@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { resolveCardPortraitUrl } from "../../utils/resolvePlayerAvatar.js";
+import { portraitCropTransform, resolvePortraitCropForTier } from "../../utils/portraitCropStyle.js";
 import { ResponsiveCardName } from "./ResponsiveCardName.jsx";
 import "./PlayerCardStyles.css";
 
@@ -18,6 +19,11 @@ export function BpclPlayerCard({ manifest, size = "md", className = "", interact
   const stats = payload.stats || manifest?.stats || {};
   const playerName = payload.playerName || manifest?.displayName || "Player";
   const avatarUrl = resolveCardPortraitUrl(manifest);
+  const portraitCrop = useMemo(() => resolvePortraitCropForTier(manifest, "player"), [manifest]);
+  const portraitStyle = useMemo(
+    () => (portraitCrop ? portraitCropTransform(portraitCrop) : undefined),
+    [portraitCrop],
+  );
 
   const statRows = [
     { key: "kda", label: "KDA", value: statValue(stats, "kda") },
@@ -101,6 +107,7 @@ export function BpclPlayerCard({ manifest, size = "md", className = "", interact
               {...(avatarUrl ? { src: avatarUrl } : {})}
               alt=""
               className="bpcl-player-card__portrait"
+              style={portraitStyle}
               hidden={!avatarUrl}
               decoding="async"
             />

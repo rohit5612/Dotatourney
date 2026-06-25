@@ -75,9 +75,12 @@
     flex-wrap: nowrap;
     overflow-x: auto;
     gap: 0.35rem;
-    padding-bottom: 0.25rem;
+    padding: 0 0.15rem 0.35rem;
+    scroll-padding-inline: 0.85rem;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    mask-image: linear-gradient(90deg, transparent, #000 0.75rem, #000 calc(100% - 0.75rem), transparent);
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 0.75rem, #000 calc(100% - 0.75rem), transparent);
   }
   .player-dash__nav::-webkit-scrollbar {
     display: none;
@@ -86,7 +89,8 @@
     flex-shrink: 0;
     white-space: nowrap;
     font-size: 0.82rem;
-    padding: 0.45rem 0.7rem;
+    min-height: 44px;
+    padding: 0.5rem 0.85rem;
   }
   .player-dash__sidebar-meta {
     display: none;
@@ -1104,12 +1108,12 @@
 
 .player-dash__overview-grid--wide {
   grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
-  align-items: stretch;
+  align-items: start;
 }
 
 .player-dash__overview-grid--wide > .player-dash__overview-panel {
   align-self: stretch;
-  height: 100%;
+  height: auto;
 }
 
 .player-dash__reg-snapshot {
@@ -1423,15 +1427,19 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 100%;
-  height: 100%;
+  min-height: 0;
+  height: auto;
 }
 
 .player-dash__overview-panel-body {
-  flex: 1;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  min-height: 30rem;
+  min-height: 0;
+}
+
+.player-dash__overview-panel-body--team {
+  min-height: 18rem;
 }
 
 .player-dash__overview-panel-body--team .teams-card {
@@ -1519,6 +1527,36 @@
     height: 70%;
     right: -6%;
     opacity: 0.42;
+    clip-path: inset(0 -12% 0 0);
+  }
+
+  .player-dash__identity-hero.player-dash__hero {
+    overflow: visible;
+  }
+
+  .player-dash__card-pedestal {
+    width: 100%;
+    max-width: min(88vw, 17rem);
+    --bpcl-card-slot-width: min(88vw, 17rem);
+    overflow: visible;
+    padding-bottom: 1.15rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .player-dash__identity-grid {
+    overflow: visible;
+  }
+
+  .player-dash__overview .player-dash__card,
+  .player-dash__overview .player-dash__panel {
+    overflow: visible;
+  }
+
+  .player-dash__overview .player-dash__card::before,
+  .player-dash__overview .player-dash__card::after,
+  .player-dash__overview .player-dash__panel::before,
+  .player-dash__overview .player-dash__panel::after {
+    border-radius: inherit;
   }
 
   .player-dash__hero--team::after {
@@ -2174,6 +2212,25 @@
 
   .player-dash__hero-actions .player-dash__action {
     width: 100%;
+  }
+}
+
+@media (max-width: 767px) {
+  .player-dash__history,
+  .player-dash__settings,
+  .player-dash__wallet-page {
+    min-width: 0;
+    overflow-x: clip;
+  }
+
+  .player-dash__section-card,
+  .player-dash__settings-form,
+  .player-dash__history-card {
+    min-width: 0;
+  }
+
+  .player-reg__body {
+    overflow-x: clip;
   }
 }
 
@@ -3818,25 +3875,40 @@
 .player-dash__matches-panel {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
+  height: auto;
+  min-height: 0;
+}
+
+.player-dash__overview-grid--wide > .player-dash__matches-panel {
+  align-self: start;
+  height: auto;
 }
 
 .player-dash__matches-panel .player-dash__card-head {
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
+  gap: 0.75rem;
   flex-shrink: 0;
 }
 
+.player-dash__matches-panel .player-dash__card-head > div:first-child {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
 .player-dash__matches-panel .player-dash__matches-body {
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  overflow: visible;
 }
 
 .player-match-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.35rem;
+  flex: 1 1 auto;
+  justify-content: flex-end;
 }
 
 .player-match-tabs__btn {
@@ -4063,6 +4135,56 @@
   justify-content: space-between;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+@media (max-width: 1280px) {
+  .player-dash__matches-panel .player-dash__card-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .player-match-tabs {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .player-match-tabs__btn {
+    flex: 1 1 0;
+    min-width: 0;
+    text-align: center;
+  }
+}
+
+@media (max-width: 720px) {
+  .player-match-card__head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .player-dash__match-banner-badge {
+    align-self: flex-start;
+  }
+
+  .player-match-card__matchup {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.45rem;
+  }
+
+  .player-match-card__team {
+    flex-direction: row;
+    justify-content: flex-start;
+    text-align: left;
+    width: 100%;
+  }
+
+  .player-dash__match-vs {
+    align-self: center;
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
 }
 
 .player-match-roster {
@@ -4461,7 +4583,7 @@
 }
 
 /* —— Laptop / compact desktop (typical 15" @ 100–125% zoom) —— */
-@media (max-width: 1440px) and (min-width: 768px) {
+@media (max-width: 1600px) and (min-width: 768px) {
   .player-dash {
     grid-template-columns: minmax(12.5rem, 14.5rem) minmax(0, 1fr);
     gap: 1.15rem;
@@ -4590,6 +4712,10 @@
 
   .player-dash__overview-grid {
     grid-template-columns: 1fr;
+  }
+
+  .player-dash__overview-panel-body--team {
+    min-height: 0;
   }
 }
 

@@ -53,6 +53,7 @@ router.get("/", requireAdmin, async (req, res, next) => {
       .object({
         search: z.string().optional().default(""),
         verified: z.enum(["true", "false"]).optional(),
+        cardStatus: z.enum(["not_purchased", "purchased", "pending_issue", "issued"]).optional(),
         limit: z.coerce.number().int().min(1).max(200).optional().default(50),
         offset: z.coerce.number().int().min(0).optional().default(0),
       })
@@ -81,6 +82,7 @@ router.patch("/:id", requireAdmin, requirePermission("playerCrm.accounts.update"
         adminNotes: z.string().max(2000).optional(),
         displayName: z.string().max(80).optional(),
         avatarUrl: z.string().max(4_000_000).optional(),
+        avatarPortraitCrop: z.record(z.string(), z.record(z.string(), z.union([z.string(), z.number()]))).optional(),
       })
       .parse(req.body);
     const account = await patchPlayerAccountAdmin(req.params.id, body);

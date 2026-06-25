@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { pool } from "../db/pool.js";
+import { logAction } from "../utils/serverLogger.js";
 
 export async function writeAuditLog({ adminUserId, action, entityType = "", entityId = "", payload = {} }) {
   const id = randomUUID();
@@ -8,6 +9,7 @@ export async function writeAuditLog({ adminUserId, action, entityType = "", enti
      VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
     [id, adminUserId || null, action, entityType, String(entityId || ""), JSON.stringify(payload || {})],
   );
+  logAction("admin", action, { adminUserId, entityType, entityId, payload });
   return { id };
 }
 

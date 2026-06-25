@@ -257,6 +257,10 @@ export async function buildCardManifest(accountRow, options = {}) {
     },
     avatarUrl: resolveAccountPortraitUrl(account),
     customAvatarUrl: account.avatar_url || "",
+    customAvatarCrop:
+      account.avatar_portrait_crop && typeof account.avatar_portrait_crop === "object"
+        ? account.avatar_portrait_crop
+        : {},
     steamAvatarUrl: account.steam_avatar_url || "",
     steamAvatar: resolveAccountPortraitUrl(account),
     customImage: assetApproved ? asset.asset_url || null : null,

@@ -16,6 +16,7 @@ import { requireAdmin, requirePermission } from "../services/authService.js";
 import { syncCrmRegistrationsToGoogleSheet } from "../services/googleSheetsSync.js";
 import { invalidatePublicCache } from "../services/publicCache.js";
 import { writeAuditLog } from "../services/auditLogService.js";
+import { logAction, logError } from "../utils/serverLogger.js";
 import { listTeamProfileHistory, listPlayerTeamStints } from "../services/teamHistoryService.js";
 import {
   listSubstitutePool,
@@ -1036,6 +1037,15 @@ router.patch("/:id/registrations/:registrationId", requirePermission("playerCrm.
     }
     const registration = await updatePlayerRegistration(req.params.id, req.params.registrationId, payload);
     if (!registration) return res.status(404).json({ message: "Registration not found" });
+    logAction("registration", "admin.updated", {
+      adminId: req.adminUser.id,
+      tournamentId: req.params.id,
+      registrationId: registration.id,
+      email: registration.email,
+      changes: payload,
+      previousPaymentStatus: prev?.paymentStatus,
+      previousRegistrationStatus: prev?.registrationStatus,
+    });
     const registrationStatusChanged =
       payload.registrationStatus && payload.registrationStatus !== prev?.registrationStatus;
     const paymentStatusChanged = payload.paymentStatus && payload.paymentStatus !== prev?.paymentStatus;
@@ -1050,7 +1060,10 @@ router.patch("/:id/registrations/:registrationId", requirePermission("playerCrm.
         const tour = await getTournament(req.params.id);
         tournamentName = tour?.tournament?.name || tournamentName;
       } catch (err) {
-        console.error("[tournament] load for registration notify failed:", err?.message || err);
+        logError("tournament", "load for registration notify failed", err, {
+          tournamentId: req.params.id,
+          registrationId: registration.id,
+        });
       }
 
       if (registration.email && !registration.email.includes("@migrated.")) {
@@ -1064,7 +1077,10 @@ router.patch("/:id/registrations/:registrationId", requirePermission("playerCrm.
             paymentStatus: registration.paymentStatus,
           });
         } catch (err) {
-          console.error("[email] player registration status update failed:", err?.message || err);
+          logError("email", "player registration status update failed", err, {
+            registrationId: registration.id,
+            email: registration.email,
+          });
         }
       }
 
@@ -1079,7 +1095,10 @@ router.patch("/:id/registrations/:registrationId", requirePermission("playerCrm.
             publicCode: registration.publicCode,
           });
         } catch (err) {
-          console.error("[notifications] registration decision failed:", err?.message || err);
+          logError("notifications", "registration decision failed", err, {
+            playerAccountId: registration.playerAccountId,
+            registrationId: registration.id,
+          });
         }
       }
     }

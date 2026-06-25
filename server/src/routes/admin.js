@@ -44,6 +44,7 @@ import {
   listEngineTemplates,
   updateEngineTemplate,
 } from "../services/engineTemplateRepository.js";
+import { getClientIp, logAction, logWarn } from "../utils/serverLogger.js";
 
 const router = express.Router();
 
@@ -90,6 +91,7 @@ router.post("/bootstrap", async (req, res, next) => {
     const payload = adminRegistrationSchema.parse(req.body);
     const user = await createBootstrapSuperadmin(payload);
     const session = await createSession(user.id);
+    logAction("auth", "admin.bootstrap", { adminId: user.id, email: user.email, ip: getClientIp(req) });
     res.status(201).json({ user: publicAdminUser(user), token: session.token, expiresAt: session.expiresAt });
   } catch (error) {
     next(error);
@@ -101,19 +103,24 @@ router.post("/login", async (req, res, next) => {
     const payload = credentialsSchema.parse(req.body);
     const user = await findAdminByEmail(payload.email);
     if (!user || !verifyPassword(payload.password, user.password_hash)) {
+      logWarn("auth", "admin.login.failed", { email: payload.email, ip: getClientIp(req) });
       return res.status(401).json({ message: "Invalid email or password" });
     }
     if (user.status === "rejected") {
+      logWarn("auth", "admin.login.rejected", { adminId: user.id, email: user.email, ip: getClientIp(req) });
       return res.status(403).json({ message: "Your admin registration was not approved." });
     }
     if (user.status === "revoked") {
+      logWarn("auth", "admin.login.revoked", { adminId: user.id, email: user.email, ip: getClientIp(req) });
       return res.status(403).json({ message: "Your admin access has been revoked." });
     }
     if (user.status !== "approved") {
+      logWarn("auth", "admin.login.pending", { adminId: user.id, email: user.email, ip: getClientIp(req) });
       return res.status(403).json({ message: "Admin account is waiting for approval" });
     }
 
     const session = await createSession(user.id);
+    logAction("auth", "admin.login.success", { adminId: user.id, email: user.email, ip: getClientIp(req) });
     return res.json({ user: publicAdminUser(user), token: session.token, expiresAt: session.expiresAt });
   } catch (error) {
     return next(error);
@@ -124,6 +131,7 @@ router.post("/logout", requireAdmin, async (req, res, next) => {
   try {
     const header = req.get("authorization") || "";
     await deleteSession(header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "");
+    logAction("auth", "admin.logout", { adminId: req.adminUser.id, email: req.adminUser.email, ip: getClientIp(req) });
     res.json({ ok: true });
   } catch (error) {
     next(error);
@@ -179,6 +187,13 @@ router.patch("/users/:id/status", requireAdmin, requireSuperadmin, async (req, r
     if (prev.status !== updated.status) {
       const emailTo = updated.email;
       const name = updated.name;
+      logAction("admin", "admin.user_status.changed", {
+        adminUserId: req.adminUser.id,
+        targetAdminId: updated.id,
+        targetEmail: updated.email,
+        fromStatus: prev.status,
+        toStatus: updated.status,
+      });
       const notify = async () => {
         if (updated.status === "approved") await sendAdminApprovedEmail({ to: emailTo, name });
         else if (updated.status === "rejected") await sendAdminRejectedEmail({ to: emailTo, name });

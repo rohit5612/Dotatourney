@@ -167,8 +167,17 @@ function cardTierRankSql(column = "card_tier") {
   END`;
 }
 
-export async function getCommunityDirectory({ search = "", limit = 48, offset = 0 } = {}) {
+export async function getCommunityDirectory({ search = "", tier = "", limit = 48, offset = 0 } = {}) {
   const params = [];
+  const lateralJoin = `LEFT JOIN LATERAL (
+       SELECT pr.card_tier
+       FROM player_registrations pr
+       WHERE pr.player_account_id = pa.id AND pr.archived_at IS NULL
+       ORDER BY ${cardTierRankSql("pr.card_tier")}, pr.created_at DESC
+       LIMIT 1
+     ) best_card ON TRUE`;
+  const effectiveTierExpr = `COALESCE(NULLIF(TRIM(pa.card_tier_override), ''), best_card.card_tier, 'default')`;
+
   let where = `WHERE pa.email_verified_at IS NOT NULL
     AND pa.steam_id IS NOT NULL
     AND TRIM(pa.steam_id) <> ''`;
@@ -176,10 +185,15 @@ export async function getCommunityDirectory({ search = "", limit = 48, offset = 
     params.push(`%${search.trim().toLowerCase()}%`);
     where += ` AND (lower(pa.display_name) LIKE $${params.length} OR lower(pa.slug) LIKE $${params.length} OR lower(pa.bpc_id) LIKE $${params.length})`;
   }
+  const tierFilter = String(tier || "").trim().toLowerCase();
+  if (tierFilter === "gold" || tierFilter === "holo") {
+    params.push(tierFilter);
+    where += ` AND lower(${effectiveTierExpr}) = $${params.length}`;
+  }
 
   const countParams = [...params];
   const { rows: countRows } = await pool.query(
-    `SELECT COUNT(*)::int AS total FROM player_accounts pa ${where}`,
+    `SELECT COUNT(*)::int AS total FROM player_accounts pa ${lateralJoin} ${where}`,
     countParams,
   );
   const total = countRows[0]?.total ?? 0;
@@ -189,17 +203,11 @@ export async function getCommunityDirectory({ search = "", limit = 48, offset = 
   params.push(safeLimit);
   params.push(safeOffset);
 
-  const tierRank = cardTierRankSql("COALESCE(NULLIF(TRIM(pa.card_tier_override), ''), best_card.card_tier)");
+  const tierRank = cardTierRankSql(effectiveTierExpr);
   const { rows } = await pool.query(
     `SELECT pa.*, best_card.card_tier AS directory_card_tier
      FROM player_accounts pa
-     LEFT JOIN LATERAL (
-       SELECT pr.card_tier
-       FROM player_registrations pr
-       WHERE pr.player_account_id = pa.id AND pr.archived_at IS NULL
-       ORDER BY ${cardTierRankSql("pr.card_tier")}, pr.created_at DESC
-       LIMIT 1
-     ) best_card ON TRUE
+     ${lateralJoin}
      ${where}
      ORDER BY ${tierRank}, pa.display_name ASC NULLS LAST, pa.created_at ASC
      LIMIT $${params.length - 1} OFFSET $${params.length}`,

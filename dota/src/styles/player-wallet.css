@@ -13,6 +13,9 @@
 
 .player-wallet-table-wrap {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-inline: -0.25rem;
+  padding-inline: 0.25rem;
 }
 
 .player-wallet-table {

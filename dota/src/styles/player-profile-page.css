@@ -1201,6 +1201,35 @@ a.player-profile__stint-season-title:hover {
   gap: 0.65rem;
 }
 
+@media (max-width: 720px) {
+  .player-profile__match-main {
+    grid-template-columns: 1fr;
+    justify-items: stretch;
+    gap: 0.55rem;
+  }
+
+  .player-profile__match-side,
+  .player-profile__match-side--away {
+    flex-direction: row;
+    text-align: left;
+  }
+
+  .player-profile__match-score-toast {
+    justify-self: center;
+  }
+
+  .player-profile__match-team {
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .player-profile__match-foot {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
+}
+
 .player-profile__show-more-wrap {
   display: flex;
   justify-content: center;

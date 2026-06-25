@@ -72,6 +72,32 @@
   background: color-mix(in srgb, var(--primary) 10%, transparent);
 }
 
+.player-crm__card-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.player-crm__card-status-sep {
+  color: rgb(148 163 184 / 0.75);
+}
+
+.player-crm__card-status-mark.is-yes {
+  color: #4ade80;
+}
+
+.player-crm__card-status-mark.is-no {
+  color: #f87171;
+}
+
+.player-crm__card-status-mark.is-neutral {
+  color: rgb(148 163 184 / 0.85);
+}
+
 .player-crm__modal {
   background: var(--card);
 }
@@ -314,9 +340,346 @@
 
 .player-crm__avatar-override-hint {
   margin: 0;
-  font-size: 0.6875rem;
-  line-height: 1.4;
+  font-size: 0.72rem;
+  line-height: 1.45;
   color: var(--muted-foreground);
+}
+
+/* Portrait framing editor (CRM avatar upload) */
+.portrait-frame-editor {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.65rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.portrait-frame-editor__tier-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.portrait-frame-editor__tier-tab {
+  min-height: 1.85rem;
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--background) 70%, transparent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+
+.portrait-frame-editor__tier-tab.is-active {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--foreground);
+}
+
+.portrait-frame-editor__workspace {
+  display: grid;
+  gap: 1rem;
+}
+
+.portrait-frame-editor__controls {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.portrait-frame-editor__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.portrait-frame-editor__toolbar .portrait-frame-editor__zoom {
+  flex: 1 1 14rem;
+}
+
+.portrait-frame-editor__card-section {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.portrait-frame-editor__preview-label {
+  margin: 0;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.portrait-frame-editor__crop-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  will-change: transform;
+}
+
+.portrait-frame-editor__card-preview {
+  display: flex;
+  justify-content: center;
+  padding: 0.75rem;
+  border-radius: 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  background: color-mix(in srgb, var(--background) 65%, transparent);
+}
+
+.portrait-frame-editor__card-preview .bpcl-card-renderer,
+.portrait-frame-editor__card-preview .bpcl-player-card,
+.portrait-frame-editor__card-preview .bpcl-gold-card,
+.portrait-frame-editor__card-preview .bpcl-holo-card {
+  width: min(100%, 10rem);
+  max-width: 10rem;
+}
+
+.portrait-frame-editor__hint {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--muted-foreground);
+}
+
+.portrait-frame-editor__canvas-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  min-height: 16rem;
+  padding: 0.75rem;
+  border-radius: 0.55rem;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--background) 55%, #1a1c24);
+}
+
+.portrait-frame-editor__stage {
+  position: relative;
+  width: 100%;
+  min-height: 18rem;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  border-radius: 0.35rem;
+  background: color-mix(in srgb, var(--background) 40%, #14161c);
+}
+
+.portrait-frame-editor__stage:active {
+  cursor: grabbing;
+}
+
+.portrait-frame-editor__media {
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  z-index: 2;
+}
+
+.portrait-frame-editor__selection-backdrop {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  pointer-events: none;
+  background: #000;
+}
+
+.portrait-frame-editor__selection-backdrop--player {
+  border-radius: 999px;
+}
+
+.portrait-frame-editor__selection-mask {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  pointer-events: none;
+  background: transparent;
+  border: 2px dashed color-mix(in srgb, var(--primary) 75%, white);
+  box-shadow: 0 0 0 9999px rgb(0 0 0 / 0.58);
+}
+
+.portrait-frame-editor__selection-mask--player {
+  border-radius: 999px;
+}
+
+.portrait-frame-editor__selection-mask--gold,
+.portrait-frame-editor__selection-mask--holo {
+  border-radius: 0.5rem;
+}
+
+.portrait-frame-editor__canvas {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 0.55rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: #080a10;
+  cursor: grab;
+  touch-action: none;
+  contain: layout paint;
+}
+
+.portrait-frame-editor__canvas:active {
+  cursor: grabbing;
+}
+
+.portrait-frame-editor__canvas-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  will-change: transform, object-position;
+}
+
+.portrait-frame-editor__frame-overlay {
+  position: absolute;
+  pointer-events: none;
+  border: 2px dashed color-mix(in srgb, var(--primary) 55%, white);
+  box-shadow: 0 0 0 9999px rgb(0 0 0 / 0.35);
+}
+
+.portrait-frame-editor__frame-overlay--player,
+.portrait-frame-editor__frame-overlay--gold,
+.portrait-frame-editor__frame-overlay--holo {
+  /* Position/size set inline from TIER_FRAME_GUIDES */
+}
+
+.portrait-frame-editor__zoom {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.78rem;
+  color: var(--muted-foreground);
+}
+
+.portrait-frame-editor__zoom input[type="range"] {
+  width: 100%;
+}
+
+.portrait-frame-editor__zoom-value {
+  font-variant-numeric: tabular-nums;
+  min-width: 2.75rem;
+  text-align: right;
+}
+
+/* Full-screen portrait positioning modal (upload flow only) */
+.portrait-frame-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.portrait-frame-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: rgb(0 0 0 / 0.78);
+  cursor: default;
+}
+
+.portrait-frame-modal__panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 62rem);
+  max-height: min(96dvh, 58rem);
+  border-radius: 1rem;
+  border: 1px solid var(--border);
+  background: var(--card);
+  box-shadow: 0 28px 80px rgb(0 0 0 / 0.55);
+  overflow: hidden;
+}
+
+.portrait-frame-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.15rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.portrait-frame-modal__title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  font-weight: 650;
+}
+
+.portrait-frame-modal__subtitle {
+  margin: 0.35rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--muted-foreground);
+}
+
+.portrait-frame-modal__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1rem 1.15rem;
+}
+
+.portrait-frame-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  padding: 0.85rem 1.15rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  background: color-mix(in srgb, var(--background) 40%, var(--card));
+}
+
+.portrait-frame-editor--modal {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+  gap: 1rem;
+}
+
+.portrait-frame-editor--modal .portrait-frame-editor__workspace {
+  gap: 1.15rem;
+}
+
+.portrait-frame-editor--modal .portrait-frame-editor__canvas-wrap {
+  min-height: 22rem;
+  padding: 1rem 1.25rem;
+}
+
+.portrait-frame-editor--modal .portrait-frame-editor__stage {
+  min-height: 24rem;
+}
+
+.portrait-frame-editor--modal .portrait-frame-editor__card-preview {
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.portrait-frame-editor--modal .portrait-frame-editor__card-preview .bpcl-card-renderer,
+.portrait-frame-editor--modal .portrait-frame-editor__card-preview .bpcl-player-card,
+.portrait-frame-editor--modal .portrait-frame-editor__card-preview .bpcl-gold-card,
+.portrait-frame-editor--modal .portrait-frame-editor__card-preview .bpcl-holo-card {
+  width: min(100%, 18rem);
+  max-width: 18rem;
+}
+
+.portrait-frame-editor--modal .portrait-frame-editor__toolbar {
+  gap: 0.85rem;
 }
 
 .player-crm__card-layout {

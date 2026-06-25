@@ -3,6 +3,55 @@ import { publicPlayerAccount, findAccountById } from "./playerAccountRepository.
 import { getCoinBalance } from "./playerAccountRepository.js";
 import { buildCardManifest, listCardAssetsForAccount } from "./cardManifestService.js";
 import { getPublicPlayerProfile } from "./playerProfileService.js";
+import { demoAccessCardTier, isDemoAccessAccount } from "../utils/demoAccessAccount.js";
+
+const CARD_TIER_RANK_SQL = `CASE COALESCE(NULLIF(TRIM(pr.card_tier), ''), 'default')
+  WHEN 'holo' THEN 0
+  WHEN 'gold' THEN 1
+  WHEN 'player' THEN 2
+  ELSE 3
+END`;
+
+const BEST_REGISTRATION_JOIN = `LEFT JOIN LATERAL (
+  SELECT pr.card_tier
+  FROM player_registrations pr
+  WHERE pr.player_account_id = pa.id AND pr.archived_at IS NULL
+  ORDER BY ${CARD_TIER_RANK_SQL}, pr.created_at DESC
+  LIMIT 1
+) best_reg ON TRUE`;
+
+const PURCHASED_TIER_EXPR = `COALESCE(NULLIF(TRIM(best_reg.card_tier), ''), 'default')`;
+const CARD_PURCHASED_EXPR = `${PURCHASED_TIER_EXPR} IN ('player', 'gold', 'holo')`;
+const CARD_ISSUED_EXPR = `EXISTS (
+  SELECT 1 FROM player_card_assets pca
+  WHERE pca.player_account_id = pa.id
+    AND pca.tier = ${PURCHASED_TIER_EXPR}
+    AND pca.status = 'approved'
+    AND (
+      NULLIF(TRIM(pca.asset_url), '') IS NOT NULL
+      OR (
+        pca.manifest_json->>'version' IS NOT NULL
+        AND pca.manifest_json->>'template' IS NOT NULL
+      )
+    )
+)`;
+
+function mapAdminListCardStatus(row) {
+  let cardPurchased = Boolean(row.card_purchased);
+  let purchasedTier = row.purchased_tier || "default";
+  if (!cardPurchased && isDemoAccessAccount(row)) {
+    const demoTier = demoAccessCardTier(row);
+    if (demoTier) {
+      cardPurchased = true;
+      purchasedTier = demoTier;
+    }
+  }
+  return {
+    cardPurchased,
+    cardIssued: cardPurchased ? Boolean(row.card_issued) : false,
+    purchasedTier: cardPurchased ? purchasedTier : null,
+  };
+}
 
 function mapRegistrationRow(row) {
   return {
@@ -28,7 +77,13 @@ function mapLedgerRow(row) {
   };
 }
 
-export async function listPlayerAccountsAdmin({ search = "", verified, limit = 50, offset = 0 } = {}) {
+export async function listPlayerAccountsAdmin({
+  search = "",
+  verified,
+  cardStatus = "",
+  limit = 50,
+  offset = 0,
+} = {}) {
   const params = [];
   const where = ["1=1"];
   if (search.trim()) {
@@ -37,19 +92,30 @@ export async function listPlayerAccountsAdmin({ search = "", verified, limit = 5
   }
   if (verified === "true") where.push("email_verified_at IS NOT NULL");
   if (verified === "false") where.push("email_verified_at IS NULL");
+  if (cardStatus === "not_purchased") where.push(`NOT (${CARD_PURCHASED_EXPR})`);
+  if (cardStatus === "purchased") where.push(`(${CARD_PURCHASED_EXPR})`);
+  if (cardStatus === "pending_issue") where.push(`(${CARD_PURCHASED_EXPR}) AND NOT (${CARD_ISSUED_EXPR})`);
+  if (cardStatus === "issued") where.push(`(${CARD_PURCHASED_EXPR}) AND (${CARD_ISSUED_EXPR})`);
   params.push(Math.min(Number(limit) || 50, 200));
   params.push(Math.max(Number(offset) || 0, 0));
   const { rows } = await pool.query(
     `SELECT pa.*,
             (SELECT COUNT(*)::int FROM player_registrations pr
-             WHERE pr.player_account_id = pa.id AND pr.archived_at IS NULL) AS registration_count
+             WHERE pr.player_account_id = pa.id AND pr.archived_at IS NULL) AS registration_count,
+            ${PURCHASED_TIER_EXPR} AS purchased_tier,
+            (${CARD_PURCHASED_EXPR}) AS card_purchased,
+            (${CARD_ISSUED_EXPR}) AS card_issued
      FROM player_accounts pa
+     ${BEST_REGISTRATION_JOIN}
      WHERE ${where.join(" AND ")}
      ORDER BY pa.created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params,
   );
   const { rows: countRows } = await pool.query(
-    `SELECT COUNT(*)::int AS total FROM player_accounts WHERE ${where.join(" AND ")}`,
+    `SELECT COUNT(*)::int AS total
+     FROM player_accounts pa
+     ${BEST_REGISTRATION_JOIN}
+     WHERE ${where.join(" AND ")}`,
     params.slice(0, -2),
   );
   return {
@@ -58,6 +124,7 @@ export async function listPlayerAccountsAdmin({ search = "", verified, limit = 5
       adminNotes: row.admin_notes || "",
       googleLinked: Boolean(row.google_sub),
       registrationCount: row.registration_count ?? 0,
+      ...mapAdminListCardStatus(row),
     })),
     total: countRows[0]?.total || 0,
   };
@@ -183,7 +250,7 @@ export async function removePlayerCardAdmin(accountId) {
   return { card, cardAssets };
 }
 
-export async function patchPlayerAccountAdmin(id, { adminNotes, displayName, avatarUrl }) {
+export async function patchPlayerAccountAdmin(id, { adminNotes, displayName, avatarUrl, avatarPortraitCrop }) {
   const fields = [];
   const values = [id];
   if (adminNotes !== undefined) {
@@ -197,6 +264,10 @@ export async function patchPlayerAccountAdmin(id, { adminNotes, displayName, ava
   if (avatarUrl !== undefined) {
     values.push(avatarUrl);
     fields.push(`avatar_url = $${values.length}`);
+  }
+  if (avatarPortraitCrop !== undefined) {
+    values.push(JSON.stringify(avatarPortraitCrop && typeof avatarPortraitCrop === "object" ? avatarPortraitCrop : {}));
+    fields.push(`avatar_portrait_crop = $${values.length}::jsonb`);
   }
   if (!fields.length) return findAccountById(id);
   const { rows } = await pool.query(

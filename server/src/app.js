@@ -8,6 +8,8 @@ import publicRouter from "./routes/public.js";
 import tournamentsRouter from "./routes/tournaments.js";
 import playerRouter from "./routes/player.js";
 import { handleCashfreeWebhook } from "./services/paymentService.js";
+import { actionLoggingMiddleware } from "./middleware/actionLogging.js";
+import { getClientIp, logError } from "./utils/serverLogger.js";
 
 function buildAllowedOrigins() {
   const fromEnv = Array.isArray(env.corsOrigin) ? env.corsOrigin : [env.corsOrigin];
@@ -67,6 +69,7 @@ app.post(
 );
 
 app.use(express.json({ limit: "25mb" }));
+app.use(actionLoggingMiddleware);
 
 app.use(
   "/cards/gifs",
@@ -97,8 +100,16 @@ function httpErrorStatus(err) {
   return 500;
 }
 
-app.use((err, _req, res, _next) => {
+app.use((err, req, res, _next) => {
   const status = httpErrorStatus(err);
+  logError("api", err?.message || "Unhandled request error", err, {
+    method: req.method,
+    path: (req.originalUrl || req.url || "").split("?")[0],
+    status,
+    ip: getClientIp(req),
+    adminId: req.adminUser?.id,
+    playerId: req.playerAccount?.id,
+  });
   const exposeMessage = env.nodeEnv !== "production" || status < 500;
   const body = {
     message: exposeMessage ? err?.message || "Unexpected server error" : "Unexpected server error",

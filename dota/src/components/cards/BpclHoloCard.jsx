@@ -6,6 +6,7 @@ import {
   createHoloCardEngine,
   holoPayloadFromManifest,
 } from "../../utils/holoCardEngine.js";
+import { portraitCropTransform, resolvePortraitCropForTier } from "../../utils/portraitCropStyle.js";
 import "./HoloCardStyles.css";
 
 function readDisplayDpr(preview = false) {
@@ -68,10 +69,14 @@ export function BpclHoloCard({ manifest, size = "md", className = "", interactiv
   const auraId = useId().replace(/:/g, "");
 
   const config = useMemo(() => holoPayloadFromManifest(manifest), [manifest]);
+  const portraitCrop = useMemo(() => resolvePortraitCropForTier(manifest, "holo"), [manifest]);
   const playerName = config.playerName || manifest?.displayName || "Player";
   const avatarUrl = resolveCardPortraitUrl(manifest);
   const isVideoPortrait = isVideoPortraitUrl(avatarUrl);
-  const portraitStyle = useMemo(() => holoPortraitStyle(config), [config]);
+  const portraitStyle = useMemo(
+    () => (portraitCrop ? portraitCropTransform(portraitCrop) : holoPortraitStyle(config)),
+    [portraitCrop, config],
+  );
   const previewMode = !interactive;
 
   if (!engineRef.current) {
@@ -193,13 +198,13 @@ export function BpclHoloCard({ manifest, size = "md", className = "", interactiv
       shineRef.current = { x: mx, y: my };
       tilt.current.tx = (my - 0.5) * 14;
       tilt.current.ty = (0.5 - mx) * 14;
-      if (portraitRef.current) {
+      if (portraitRef.current && interactive && !portraitCrop) {
         const px = (mx - 0.5) * 6;
         const py = (my - 0.5) * 5;
         portraitRef.current.style.transform = holoPortraitTransform(config, { x: px, y: py });
       }
     },
-    [interactive, previewMode, config],
+    [interactive, previewMode, config, portraitCrop],
   );
 
   const onLeave = useCallback(() => {
@@ -207,10 +212,10 @@ export function BpclHoloCard({ manifest, size = "md", className = "", interactiv
     shineRef.current = { x: 0.5, y: 0.5 };
     tilt.current.tx = 0;
     tilt.current.ty = 0;
-    if (portraitRef.current) {
+    if (portraitRef.current && interactive && !portraitCrop) {
       portraitRef.current.style.transform = holoPortraitTransform(config);
     }
-  }, [config]);
+  }, [config, interactive, portraitCrop]);
 
   return (
     <article

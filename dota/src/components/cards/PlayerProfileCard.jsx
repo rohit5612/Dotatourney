@@ -28,7 +28,7 @@ export function PlayerProfileCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const isPedestal = variant === "pedestal";
-  const cardGlowClass = isPedestal ? "" : premiumCardGlowClass(cardTier);
+  const cardGlowClass = premiumCardGlowClass(cardTier);
 
   useBodyScrollLock(expanded);
 

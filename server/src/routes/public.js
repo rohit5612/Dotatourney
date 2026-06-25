@@ -28,6 +28,7 @@ import {
   sendPlayerRegistrationVerifiedEmail,
 } from "../services/emailService.js";
 import { resolvePublicTeamLogo } from "../utils/teamLogoUrl.js";
+import { getClientIp, logAction, logError } from "../utils/serverLogger.js";
 import { getOrCreateCommerceConfig, publicCommerceConfig } from "../services/commerceConfigRepository.js";
 import { getPublicPlayerProfile, getCommunityDirectory } from "../services/playerProfileService.js";
 import {
@@ -398,11 +399,21 @@ router.post("/tournaments/:identifier/register/request-otp", async (req, res, ne
         otp,
       });
     } catch (err) {
-      console.error("[email] OTP send failed:", err?.message || err);
+      logError("email", "registration OTP send failed", err, {
+        tournamentId: data.tournament.id,
+        email: body.email,
+      });
       const e = new Error(err?.message || "Failed to send verification email");
       e.status = 502;
       throw e;
     }
+    logAction("registration", "otp.requested", {
+      tournamentId: data.tournament.id,
+      tournamentSlug: req.params.identifier,
+      registrationId,
+      email: body.email,
+      ip: getClientIp(req),
+    });
     const out = { ok: true, registrationId };
     if (env.emailSkipSend) out.devOtp = otp;
     return res.status(202).json(out);
@@ -439,8 +450,18 @@ router.post("/tournaments/:identifier/register/verify-otp", async (req, res, nex
         continueUrl: contUrl,
       });
     } catch (err) {
-      console.error("[email] verified registration mail failed:", err?.message || err);
+      logError("email", "registration verified mail failed", err, {
+        tournamentId: data.tournament.id,
+        email: body.email,
+      });
     }
+    logAction("registration", "otp.verified", {
+      tournamentId: data.tournament.id,
+      tournamentSlug: req.params.identifier,
+      registrationId: registration.id,
+      email: registration.email,
+      ip: getClientIp(req),
+    });
     return res.status(200).json({ registration, publicCode, continueUrl: contUrl });
   } catch (error) {
     return next(error);
@@ -481,8 +502,19 @@ router.post("/tournaments/:identifier/register/complete", async (req, res, next)
         publicCode: registration.publicCode,
       });
     } catch (err) {
-      console.error("[email] submitted registration mail failed:", err?.message || err);
+      logError("email", "registration submitted mail failed", err, {
+        tournamentId: data.tournament.id,
+        email: body.email,
+      });
     }
+    logAction("registration", "payment.submitted", {
+      tournamentId: data.tournament.id,
+      tournamentSlug: req.params.identifier,
+      registrationId: registration.id,
+      email: registration.email,
+      publicCode: registration.publicCode,
+      ip: getClientIp(req),
+    });
     invalidatePublicCache();
     return res.status(200).json({ registration });
   } catch (error) {
@@ -623,18 +655,21 @@ router.get("/community", async (req, res, next) => {
       .object({
         search: z.string().optional().default(""),
         q: z.string().optional().default(""),
+        tier: z.enum(["gold", "holo"]).optional(),
         limit: z.coerce.number().int().min(1).max(100).optional().default(48),
         offset: z.coerce.number().int().min(0).optional().default(0),
       })
       .parse(req.query);
     const cacheKey = publicQueryCacheKey("community", {
       search: query.search || query.q || "",
+      tier: query.tier || "",
       limit: query.limit,
       offset: query.offset,
     });
     return await cachedPublicJson(res, cacheKey, async () =>
       getCommunityDirectory({
         search: query.search || query.q || "",
+        tier: query.tier || "",
         limit: query.limit,
         offset: query.offset,
       }),

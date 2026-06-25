@@ -275,11 +275,179 @@ a.community-page__stat:hover {
   color: var(--muted-foreground);
 }
 
+.community-page__directory-controls {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: min(100%, 38rem);
+  flex-shrink: 0;
+}
+
+.community-page__tier-filters {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.community-page__tier-filter {
+  min-height: 2.65rem;
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--community-glass-border-soft);
+  background: color-mix(in srgb, var(--background) 55%, transparent);
+  font-size: 0.8125rem;
+  font-weight: 550;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.community-page__tier-filter:hover {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--community-glass-border-soft));
+  color: var(--foreground);
+}
+
+.community-page__tier-filter.is-active:not(.community-page__tier-filter--gold):not(.community-page__tier-filter--holo) {
+  border-color: color-mix(in srgb, var(--primary) 50%, var(--community-glass-border-soft));
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--foreground);
+}
+
+.community-page__tier-filter--gold,
+.community-page__tier-filter--holo {
+  font-weight: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+
+.community-page__tier-filters .community-page__tier-filter.player-profile__tier-badge {
+  padding: 0.2rem 0.75rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.community-page__tier-filters .community-page__tier-filter--gold.player-profile__tier-badge {
+  border-color: color-mix(in srgb, #d4a017 50%, transparent);
+  color: #d4af37;
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, #d4a017 24%, rgb(15 18 28)) 0%,
+    color-mix(in srgb, #ffc84d 14%, rgb(15 18 28)) 52%,
+    color-mix(in srgb, #c9a227 20%, rgb(15 18 28)) 100%
+  );
+}
+
+.community-page__tier-filters .community-page__tier-filter--holo.player-profile__bpc-id {
+  min-height: 2.65rem;
+  padding: 0.28rem 0.7rem;
+  border-radius: 0.45rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, #c8b8ff 88%, #f0ecff);
+  border-color: color-mix(in srgb, #8b7cf8 42%, var(--community-glass-border-soft));
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, #6b5bff 18%, rgb(12 14 24)) 0%,
+    color-mix(in srgb, #5ed8ff 12%, rgb(12 14 24)) 48%,
+    color-mix(in srgb, #c878ff 16%, rgb(12 14 24)) 100%
+  );
+}
+
+.community-page__tier-filters .community-page__tier-filter--holo.player-profile__bpc-id:hover {
+  color: #ece6ff;
+  border-color: color-mix(in srgb, #5ed8ff 55%, #8b7cf8);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, #6b5bff 26%, rgb(12 14 24)) 0%,
+    color-mix(in srgb, #5ed8ff 18%, rgb(12 14 24)) 48%,
+    color-mix(in srgb, #e879f9 16%, rgb(12 14 24)) 100%
+  );
+  box-shadow: 0 0 14px rgba(110, 220, 255, 0.18);
+}
+
+.community-page__tier-filter--gold {
+  min-height: 2.65rem;
+}
+
+.community-page__tier-filters .community-page__tier-filter--gold.player-profile__tier-badge:hover {
+  border-color: color-mix(in srgb, #ffc84d 72%, transparent);
+  color: #f0d060;
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, #d4a017 34%, rgb(15 18 28)) 0%,
+    color-mix(in srgb, #ffc84d 24%, rgb(15 18 28)) 100%
+  );
+  box-shadow: 0 0 14px rgba(255, 196, 72, 0.22);
+}
+
+.community-page__tier-filters .community-page__tier-filter--gold.player-profile__tier-badge.is-active {
+  border-color: color-mix(in srgb, #ffc84d 88%, #d4a017);
+  color: #ffe08a;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, #b8860b 62%, rgb(22 16 6)) 0%,
+    color-mix(in srgb, #ffc84d 52%, rgb(32 24 8)) 42%,
+    color-mix(in srgb, #e8a820 48%, rgb(26 18 6)) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 236, 160, 0.4),
+    0 0 0 2px color-mix(in srgb, #ffc84d 42%, transparent),
+    0 0 18px rgba(255, 196, 72, 0.48),
+    0 0 30px rgba(255, 174, 0, 0.28);
+}
+
+.community-page__tier-filters .community-page__tier-filter--gold.player-profile__tier-badge.is-active .bpcl-tier-fx__shine-text {
+  font-weight: 800;
+}
+
+.community-page__tier-filter--holo {
+  cursor: pointer;
+}
+
+.community-page__tier-filters .community-page__tier-filter--holo.player-profile__bpc-id--holo.is-active {
+  border-color: color-mix(in srgb, #5ed8ff 62%, #c878ff);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, #4a3a8a 58%, rgb(14 12 28)) 0%,
+    color-mix(in srgb, #2878a8 40%, rgb(12 16 28)) 40%,
+    color-mix(in srgb, #984878 34%, rgb(18 12 24)) 72%,
+    color-mix(in srgb, #6b5bff 44%, rgb(14 12 28)) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 0 0 2px color-mix(in srgb, #5ed8ff 45%, transparent),
+    0 0 22px rgba(110, 220, 255, 0.42),
+    0 0 34px rgba(200, 120, 255, 0.32);
+}
+
+.community-page__tier-filters .community-page__tier-filter--holo.player-profile__bpc-id--holo.is-active .bpcl-tier-fx-holo__shine-text {
+  display: inline;
+  filter: none;
+  font-weight: 700;
+}
+
 .community-page__search-wrap {
   position: relative;
-  width: 100%;
-  max-width: 26rem;
-  flex-shrink: 0;
+  flex: 1 1 11rem;
+  min-width: 0;
+  width: auto;
+  flex-shrink: 1;
 }
 
 .community-page__search {

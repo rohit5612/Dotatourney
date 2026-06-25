@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { resolveCardPortraitUrl } from "../../utils/resolvePlayerAvatar.js";
+import { portraitCropTransform, resolvePortraitCropForTier } from "../../utils/portraitCropStyle.js";
 import { ResponsiveCardName } from "./ResponsiveCardName.jsx";
 import "./GoldCardStyles.css";
 
@@ -19,6 +20,11 @@ export function BpclGoldCard({ manifest, size = "md", className = "", interactiv
   const stats = payload.stats || manifest?.stats || {};
   const playerName = payload.playerName || manifest?.displayName || "Player";
   const avatarUrl = resolveCardPortraitUrl(manifest);
+  const portraitCrop = useMemo(() => resolvePortraitCropForTier(manifest, "gold"), [manifest]);
+  const portraitStyle = useMemo(
+    () => (portraitCrop ? portraitCropTransform(portraitCrop) : undefined),
+    [portraitCrop],
+  );
   const statRows = [
     { key: "kda", label: "KDA", value: statValue(stats, "kda") },
     { key: "gpm", label: "AVG GPM", value: statValue(stats, "gpm") },
@@ -76,21 +82,23 @@ export function BpclGoldCard({ manifest, size = "md", className = "", interactiv
       if (shimmerRef.current) {
         shimmerRef.current.style.background = `radial-gradient(ellipse 70% 70% at ${mx * 100}% ${my * 100}%, rgba(255,255,220,.18) 0%, transparent 58%)`;
       }
-      if (portraitRef.current) {
+      if (portraitRef.current && interactive && !portraitCrop) {
         const px = (mx - 0.5) * 6;
         const py = (my - 0.5) * 5;
         portraitRef.current.style.transform = `translate3d(${px}px, ${py}px, 0) scale(1.04)`;
       }
     },
-    [interactive],
+    [interactive, portraitCrop],
   );
 
   const onLeave = useCallback(() => {
     tilt.current.tx = 0;
     tilt.current.ty = 0;
     if (shimmerRef.current) shimmerRef.current.style.background = "";
-    if (portraitRef.current) portraitRef.current.style.transform = "scale(1.04)";
-  }, []);
+    if (portraitRef.current && interactive && !portraitCrop) {
+      portraitRef.current.style.transform = "scale(1.04)";
+    }
+  }, [interactive, portraitCrop]);
 
   return (
     <article
@@ -109,6 +117,7 @@ export function BpclGoldCard({ manifest, size = "md", className = "", interactiv
                 src={avatarUrl}
                 alt=""
                 className="bpcl-gold-card__portrait"
+                style={portraitStyle}
                 decoding="async"
               />
             ) : (

@@ -5,11 +5,22 @@ import { SITE_BRAND_SHORT } from "../../constants/siteMeta.js";
 import { usePublicTournament } from "../../context/PublicTournamentContext.jsx";
 import { api } from "../../lib/api";
 import { CommunityDirectoryCard } from "./CommunityDirectoryCard.jsx";
+import { premiumShineTextClass } from "../../utils/cardTierEffects.js";
 import "../../components/cards/CardTierStyles.css";
+import "../../styles/card-tier-badge.css";
 import "../../styles/card-tier-effects.css";
 import "../../styles/card-tier-effects-holo.css";
 
-const PAGE_SIZE = 16;
+const PAGE_SIZE = 20;
+
+const TIER_FILTERS = [
+  { id: "all", label: "All" },
+  { id: "gold", label: "Gold" },
+  { id: "holo", label: "Holo" },
+];
+
+const HOLO_FILTER_SHINE_CLASS = premiumShineTextClass("holo");
+const GOLD_FILTER_SHINE_CLASS = premiumShineTextClass("gold");
 
 export function CommunityPage() {
   const { event } = usePublicTournament();
@@ -18,6 +29,7 @@ export function CommunityPage() {
 
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [tierFilter, setTierFilter] = useState("all");
   const [page, setPage] = useState(0);
   const [players, setPlayers] = useState([]);
   const [total, setTotal] = useState(0);
@@ -31,7 +43,7 @@ export function CommunityPage() {
 
   useEffect(() => {
     setPage(0);
-  }, [debouncedQuery]);
+  }, [debouncedQuery, tierFilter]);
 
   useEffect(() => {
     let active = true;
@@ -41,6 +53,7 @@ export function CommunityPage() {
     api
       .getPublicCommunity({
         search: debouncedQuery || undefined,
+        tier: tierFilter !== "all" ? tierFilter : undefined,
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
       })
@@ -62,7 +75,7 @@ export function CommunityPage() {
     return () => {
       active = false;
     };
-  }, [debouncedQuery, page]);
+  }, [debouncedQuery, tierFilter, page]);
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
@@ -108,16 +121,52 @@ export function CommunityPage() {
               <h2 className="community-page__directory-title">Player directory</h2>
               <p className="community-page__directory-copy">Search by name, slug, or BPC ID.</p>
             </div>
-            <div className="community-page__search-wrap">
-              <HiOutlineMagnifyingGlass className="community-page__search-icon" aria-hidden="true" />
-              <input
-                type="search"
-                className="community-page__search"
-                placeholder="Search players…"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                aria-label="Search players by name, slug, or BPC ID"
-              />
+            <div className="community-page__directory-controls">
+              <div className="community-page__tier-filters" role="group" aria-label="Filter by card tier">
+                {TIER_FILTERS.map((filter) => {
+                  const isActive = tierFilter === filter.id;
+                  const tierClass =
+                    filter.id === "gold"
+                      ? "community-page__tier-filter community-page__tier-filter--gold player-profile__tier-badge player-profile__tier-badge--gold"
+                      : filter.id === "holo"
+                        ? "community-page__tier-filter community-page__tier-filter--holo player-profile__bpc-id"
+                        : "community-page__tier-filter";
+                  const activeClass =
+                    filter.id === "holo" && isActive
+                      ? " player-profile__bpc-id--holo is-active"
+                      : isActive
+                        ? " is-active"
+                        : "";
+                  return (
+                    <button
+                      key={filter.id}
+                      type="button"
+                      className={`${tierClass}${activeClass}`}
+                      aria-pressed={isActive}
+                      onClick={() => setTierFilter(filter.id)}
+                    >
+                      {filter.id === "holo" && isActive ? (
+                        <span className={HOLO_FILTER_SHINE_CLASS}>{filter.label}</span>
+                      ) : filter.id === "gold" && isActive ? (
+                        <span className={GOLD_FILTER_SHINE_CLASS}>{filter.label}</span>
+                      ) : (
+                        filter.label
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="community-page__search-wrap">
+                <HiOutlineMagnifyingGlass className="community-page__search-icon" aria-hidden="true" />
+                <input
+                  type="search"
+                  className="community-page__search"
+                  placeholder="Search players…"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  aria-label="Search players by name, slug, or BPC ID"
+                />
+              </div>
             </div>
           </header>
 
@@ -125,6 +174,7 @@ export function CommunityPage() {
             <p className="community-page__status-line">
               Showing {showingFrom}–{showingTo} of {total}
               {debouncedQuery ? ` · “${debouncedQuery}”` : ""}
+              {tierFilter !== "all" ? ` · ${tierFilter}` : ""}
             </p>
           ) : null}
 
@@ -132,7 +182,7 @@ export function CommunityPage() {
 
           {loading ? (
             <div className="community-page__loading" aria-busy="true" aria-label="Loading players">
-              {Array.from({ length: 8 }, (_, index) => (
+              {Array.from({ length: 10 }, (_, index) => (
                 <div key={index} className="community-page__skeleton" />
               ))}
             </div>

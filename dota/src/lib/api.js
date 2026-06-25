@@ -121,6 +121,7 @@ export const api = {
     const q = new URLSearchParams();
     const search = params.search ?? params.q;
     if (search) q.set("search", String(search));
+    if (params.tier) q.set("tier", String(params.tier));
     if (params.limit) q.set("limit", String(params.limit));
     if (params.offset) q.set("offset", String(params.offset));
     const suffix = q.toString() ? `?${q}` : "";
@@ -302,6 +303,7 @@ export const api = {
     const q = new URLSearchParams();
     if (params.search) q.set("search", params.search);
     if (params.verified) q.set("verified", params.verified);
+    if (params.cardStatus) q.set("cardStatus", params.cardStatus);
     if (params.limit != null) q.set("limit", String(params.limit));
     if (params.offset != null) q.set("offset", String(params.offset));
     const suffix = q.toString() ? `?${q}` : "";
