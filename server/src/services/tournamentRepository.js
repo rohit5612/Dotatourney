@@ -149,10 +149,10 @@ export async function createTournament(payload) {
       description, prize_pool, prize_pool_breakdown, entry_fee, start_date, end_date, registration_deadline,
       discord_url, rulebook, live_youtube_url, announcements, banner_announcements, tournament_honors, visibility_mode, bracket_active, status,
       registration_code_prefix, registration_code_seq, payment_qr_image, payment_upi_id, registrations_open, registration_cap, engine_config,
-      season_card_bg, season_card_badge, engine_template_id
+      season_card_bg, season_card_badge, engine_template_id, google_sheet_spreadsheet_id, google_sheet_tab_name
     )
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
-      $25, $26, $27, $28, $29, $30, $31::jsonb, $32, $33, $34)
+      $25, $26, $27, $28, $29, $30, $31::jsonb, $32, $33, $34, $35, $36)
     RETURNING *;
   `;
   const values = [
@@ -190,6 +190,8 @@ export async function createTournament(payload) {
     payload.seasonCardBg || "",
     String(payload.seasonCardBadge || "").trim().slice(0, 16),
     payload.engineTemplateId || payload.engine_template_id || null,
+    payload.googleSheetSpreadsheetId || payload.google_sheet_spreadsheet_id || "",
+    payload.googleSheetTabName || payload.google_sheet_tab_name || "",
   ];
   const { rows } = await pool.query(query, values);
   return rows[0];
@@ -230,6 +232,8 @@ export async function updateTournament(tournamentId, payload) {
         season_card_bg = $31,
         season_card_badge = $32,
         engine_template_id = COALESCE($33, engine_template_id),
+        google_sheet_spreadsheet_id = $34,
+        google_sheet_tab_name = $35,
         updated_at = NOW()
     WHERE id = $1
     RETURNING *;
@@ -274,6 +278,8 @@ export async function updateTournament(tournamentId, payload) {
       Object.prototype.hasOwnProperty.call(payload, "engine_template_id")
       ? payload.engineTemplateId ?? payload.engine_template_id ?? null
       : undefined,
+    payload.googleSheetSpreadsheetId ?? payload.google_sheet_spreadsheet_id ?? "",
+    payload.googleSheetTabName ?? payload.google_sheet_tab_name ?? "",
   ];
   const { rows } = await pool.query(query, values);
   if (rows[0]) {

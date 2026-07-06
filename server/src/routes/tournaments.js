@@ -113,6 +113,8 @@ const tournamentSchema = z.object({
   registrationCodePrefix: z.string().max(12).optional().default("BPC"),
   paymentQrImage: z.string().optional().default(""),
   paymentUpiId: z.string().optional().default(""),
+  googleSheetSpreadsheetId: z.string().optional().default(""),
+  googleSheetTabName: z.string().optional().default(""),
   seasonCardBg: z.string().max(2_500_000).optional().default(""),
   seasonCardBadge: z.string().max(16).optional().default(""),
   registrationsOpen: z.boolean().optional().default(false),

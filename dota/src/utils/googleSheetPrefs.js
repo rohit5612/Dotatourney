@@ -46,9 +46,11 @@ export function setGoogleSheetPrefs(tournamentId, { spreadsheetId = "", sheetTab
 
 export function buildCrmSheetSyncConfirmMessage({ rowCount, sheetTabName }) {
   const tabHint = sheetTabName ? `the “${sheetTabName}” tab` : "the first worksheet tab";
+  const endRow = rowCount > 0 ? 4 + rowCount : 5;
+  const rangeHint = rowCount > 0 ? `C5:K${endRow}` : "the existing C5:K… block";
   return (
     `Sync ${rowCount} registration row(s) to Google Sheets?\n\n` +
-    `${tabHint} will be cleared from C5 through K2004, then filled from row 5:\n` +
+    `${tabHint} will be cleared for ${rangeHint}, then filled from row 5:\n` +
     CRM_SHEET_COLUMN_HINT
   );
 }

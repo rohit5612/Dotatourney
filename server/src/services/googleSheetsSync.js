@@ -10,8 +10,6 @@ const CELL_MAX = 49000;
 
 /** First data row for CRM layout (1-based). Columns C–K only. */
 const CRM_SHEET_START_ROW = 5;
-/** Rows of C:K to clear before write. */
-const CRM_SHEET_CLEAR_ROW_COUNT = 2000;
 
 function assertGoogleSheetsConfigured() {
   if (
@@ -161,6 +159,25 @@ function escapeSheetTitleForRange(title) {
 }
 
 /**
+ * Last row in column C from startRow downward that still has CRM data.
+ * @returns {number} 1-based row index, or startRow - 1 when the block is empty
+ */
+async function findLastPopulatedCrmRow(sheetsApi, spreadsheetId, safeTitle, startRow) {
+  const { data } = await sheetsApi.spreadsheets.values.get({
+    spreadsheetId,
+    range: `'${safeTitle}'!C${startRow}:C`,
+  });
+  const rows = data.values || [];
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const cell = rows[i]?.[0];
+    if (cell != null && String(cell).trim() !== "") {
+      return startRow + i;
+    }
+  }
+  return startRow - 1;
+}
+
+/**
  * Writes CRM registration rows only: C{start}:K{start+n-1} on one worksheet tab.
  * No other tabs, columns, or tournament data are written.
  *
@@ -206,31 +223,35 @@ export async function syncCrmRegistrationsToGoogleSheet(tournamentId, spreadshee
 
   const safeTitle = escapeSheetTitleForRange(sheetTitle);
   const start = CRM_SHEET_START_ROW;
-  const clearEndRow = start + CRM_SHEET_CLEAR_ROW_COUNT - 1;
+
+  const values = registrations.map((r) => [
+    cellValue(r.name),
+    cellValue(r.steamName),
+    cellValue(r.mmr),
+    Array.isArray(r.roles) ? r.roles.join("; ") : cellValue(r.roles),
+    cellValue(r.discordHandle),
+    cellValue(r.phoneNumber),
+    cellValue(r.steamProfile),
+    cellValue(r.registrationStatus),
+    cellValue(r.notes),
+  ]);
+
+  const rowCount = values.length;
+  const writeEndRow = rowCount > 0 ? start + rowCount - 1 : start - 1;
 
   try {
+    const lastExistingRow = await findLastPopulatedCrmRow(sheetsApi, spreadsheetId, safeTitle, start);
+    const clearEndRow = Math.max(writeEndRow, lastExistingRow, start);
+
     await sheetsApi.spreadsheets.values.clear({
       spreadsheetId,
       range: `'${safeTitle}'!C${start}:K${clearEndRow}`,
     });
 
-    const values = registrations.map((r) => [
-      cellValue(r.name),
-      cellValue(r.steamName),
-      cellValue(r.mmr),
-      Array.isArray(r.roles) ? r.roles.join("; ") : cellValue(r.roles),
-      cellValue(r.discordHandle),
-      cellValue(r.phoneNumber),
-      cellValue(r.steamProfile),
-      cellValue(r.registrationStatus),
-      cellValue(r.notes),
-    ]);
-
-    if (values.length > 0) {
-      const endRow = start + values.length - 1;
+    if (rowCount > 0) {
       await sheetsApi.spreadsheets.values.update({
         spreadsheetId,
-        range: `'${safeTitle}'!C${start}:K${endRow}`,
+        range: `'${safeTitle}'!C${start}:K${writeEndRow}`,
         valueInputOption: "RAW",
         resource: { values },
       });
@@ -240,8 +261,8 @@ export async function syncCrmRegistrationsToGoogleSheet(tournamentId, spreadshee
       ok: true,
       spreadsheetId,
       sheetTitle,
-      range: values.length ? `C${start}:K${start + values.length - 1}` : `C${start}:K${start} (cleared)`,
-      rowsWritten: values.length,
+      range: rowCount ? `C${start}:K${writeEndRow}` : `C${start}:K${clearEndRow} (cleared)`,
+      rowsWritten: rowCount,
       syncedAt: new Date().toISOString(),
     };
   } catch (err) {
