@@ -6,14 +6,8 @@ import {
   getGoogleSheetPrefs,
   parseSpreadsheetId,
 } from "../utils/googleSheetPrefs.js";
+import { isRegistrationCrmEligible } from "../utils/registrationCrmEligibility.js";
 import { sortRolesByDefault } from "../utils/teamPage.js";
-
-/** Hide in-progress legacy OTP/payment steps — account setup lives in Player accounts CRM. */
-function isRegistrationCrmVisible(registration) {
-  if (registration.substituteFlag) return false;
-  const stage = registration.registrationFlowStage || "submitted";
-  return stage !== "awaiting_otp" && stage !== "awaiting_payment";
-}
 
 function registrationStageLabel(registration) {
   if (registration.substituteFlag) return "Substitute signup";
@@ -62,7 +56,7 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
 
   const filtered = useMemo(() => {
     const list = (registrations || [])
-      .filter(isRegistrationCrmVisible)
+      .filter(isRegistrationCrmEligible)
       .filter((registration) => (showArchived ? Boolean(registration.archivedAt) : !registration.archivedAt))
       .filter((registration) => !roleFilter || registration.roles?.includes(roleFilter))
       .filter((registration) => !statusFilter || registration.registrationStatus === statusFilter)
@@ -94,6 +88,16 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
       return 0;
     });
   }, [registrations, roleFilter, statusFilter, paymentFilter, minMmr, maxMmr, search, showArchived, sortMode]);
+
+  const statusCounts = useMemo(() => {
+    const counts = { approved: 0, pending: 0, waitlisted: 0, rejected: 0 };
+    for (const registration of registrations || []) {
+      if (!isRegistrationCrmEligible(registration) || registration.archivedAt) continue;
+      const status = registration.registrationStatus;
+      if (status in counts) counts[status] += 1;
+    }
+    return counts;
+  }, [registrations]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -218,8 +222,8 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
               {crmSheetSyncPending ? "Syncing…" : "Sync to Google Sheet"}
             </button>
             <p className="max-w-md text-right text-xs text-muted-foreground">
-              Uses spreadsheet link + worksheet tab from Setup → Admin (per tournament). Syncs the filtered rows below to{" "}
-              <span className="font-mono text-foreground">C5:K…</span>; leave tab name empty in Setup to use the first tab.
+              Syncs the filtered rows below to <span className="font-mono text-foreground">C5:K{filtered.length ? 4 + filtered.length : 5}</span>{" "}
+              (row 5 = first player). Uses spreadsheet link + tab from Setup → Admin.
             </p>
           </div>
         </div>
@@ -247,10 +251,10 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
             </select>
             <select className="rounded-md border border-input bg-background p-2" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
               <option value="">All statuses</option>
-              <option value="pending">Pending</option>
-              <option value="approved">Approved</option>
-              <option value="waitlisted">Waitlisted</option>
-              <option value="rejected">Rejected</option>
+              <option value="pending">Pending ({statusCounts.pending})</option>
+              <option value="approved">Approved ({statusCounts.approved})</option>
+              <option value="waitlisted">Waitlisted ({statusCounts.waitlisted})</option>
+              <option value="rejected">Rejected ({statusCounts.rejected})</option>
             </select>
             <select className="rounded-md border border-input bg-background p-2" value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value)}>
               <option value="">All payments</option>

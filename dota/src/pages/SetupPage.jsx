@@ -22,6 +22,7 @@ import {
   parseSpreadsheetId,
   setGoogleSheetPrefs,
 } from "../utils/googleSheetPrefs.js";
+import { isRegistrationCrmEligible } from "../utils/registrationCrmEligibility.js";
 import "../styles/setup-page.css";
 
 export function SetupPage({
@@ -118,7 +119,7 @@ export function SetupPage({
     setMessage?.("");
     try {
       const { registrations = [] } = await api.getRegistrations(tournamentId);
-      const rowCount = registrations.filter((r) => !r.archivedAt && !r.substituteFlag).length;
+      const rowCount = registrations.filter((r) => !r.archivedAt && isRegistrationCrmEligible(r)).length;
       const confirmed = window.confirm(buildCrmSheetSyncConfirmMessage({ rowCount, sheetTabName: sheetTab }));
       if (!confirmed) return;
       setGoogleSheetSyncPending(true);

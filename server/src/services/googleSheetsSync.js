@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { google } from "googleapis";
 import { env } from "../config/env.js";
+import { filterRegistrationCrmEligible, isRegistrationCrmEligible } from "../utils/registrationCrmEligibility.js";
 import { listPlayerRegistrations } from "./registrationRepository.js";
 import { getTournament } from "./tournamentRepository.js";
 
@@ -159,18 +160,18 @@ function escapeSheetTitleForRange(title) {
 }
 
 /**
- * Last row in column C from startRow downward that still has CRM data.
+ * Last CRM data row (any of C–K) from startRow downward.
  * @returns {number} 1-based row index, or startRow - 1 when the block is empty
  */
 async function findLastPopulatedCrmRow(sheetsApi, spreadsheetId, safeTitle, startRow) {
   const { data } = await sheetsApi.spreadsheets.values.get({
     spreadsheetId,
-    range: `'${safeTitle}'!C${startRow}:C`,
+    range: `'${safeTitle}'!C${startRow}:K`,
   });
   const rows = data.values || [];
   for (let i = rows.length - 1; i >= 0; i--) {
-    const cell = rows[i]?.[0];
-    if (cell != null && String(cell).trim() !== "") {
+    const row = rows[i] || [];
+    if (row.some((cell) => cell != null && String(cell).trim() !== "")) {
       return startRow + i;
     }
   }
@@ -204,8 +205,13 @@ export async function syncCrmRegistrationsToGoogleSheet(tournamentId, spreadshee
       registrations = ids.map((id) => byId.get(id)).filter(Boolean);
     }
   } else {
-    registrations = registrations.filter((r) => !r.archivedAt && !r.substituteFlag);
+    registrations = filterRegistrationCrmEligible(registrations).filter((r) => !r.archivedAt);
     registrations.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }
+
+  // When CRM passes explicit IDs, drop ineligible rows so counts stay aligned with the list.
+  if (ids != null && ids.length > 0) {
+    registrations = registrations.filter((r) => !r.archivedAt && isRegistrationCrmEligible(r));
   }
 
   const sheetsApi = await getSheetsClient();
