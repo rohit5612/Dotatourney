@@ -16,6 +16,12 @@ import {
   tournamentStatusClass,
   tournamentStatusLabel,
 } from "../admin/setup/setupUtils.js";
+import {
+  buildCrmSheetSyncConfirmMessage,
+  getGoogleSheetPrefs,
+  parseSpreadsheetId,
+  setGoogleSheetPrefs,
+} from "../utils/googleSheetPrefs.js";
 import "../styles/setup-page.css";
 
 export function SetupPage({
@@ -45,6 +51,7 @@ export function SetupPage({
   const [engineTemplates, setEngineTemplates] = useState([]);
   const [googleSheetId, setGoogleSheetId] = useState("");
   const [googleSheetTabName, setGoogleSheetTabName] = useState("");
+  const [googleSheetSyncPending, setGoogleSheetSyncPending] = useState(false);
   const [seasonCardUploadBusy, setSeasonCardUploadBusy] = useState(false);
 
   const grouped = useMemo(() => categorizeTournaments(tournaments), [tournaments]);
@@ -86,22 +93,45 @@ export function SetupPage({
       setGoogleSheetTabName("");
       return;
     }
-    try {
-      setGoogleSheetId(window.localStorage.getItem(`bpcl-google-sheet-id:${tournamentId}`) || "");
-      setGoogleSheetTabName(window.localStorage.getItem(`bpcl-google-sheet-tab:${tournamentId}`) || "");
-    } catch {
-      setGoogleSheetId("");
-      setGoogleSheetTabName("");
-    }
+    const prefs = getGoogleSheetPrefs(tournamentId);
+    setGoogleSheetId(prefs.spreadsheetId);
+    setGoogleSheetTabName(prefs.sheetTabName);
   }, [tournamentId]);
 
   function persistGoogleSheetPrefsToStorage() {
     if (!tournamentId) return;
+    setGoogleSheetPrefs(tournamentId, {
+      spreadsheetId: googleSheetId,
+      sheetTabName: googleSheetTabName,
+    });
+  }
+
+  async function syncGoogleSheetFromSetup() {
+    if (!tournamentId || googleSheetSyncPending) return;
+    const spreadsheetId = parseSpreadsheetId(googleSheetId);
+    if (!spreadsheetId) {
+      setMessage?.("Enter a spreadsheet ID or full Google Sheets link, then try again.");
+      return;
+    }
+    const sheetTab = googleSheetTabName.trim();
+    persistGoogleSheetPrefsToStorage();
+    setMessage?.("");
     try {
-      window.localStorage.setItem(`bpcl-google-sheet-id:${tournamentId}`, googleSheetId.trim());
-      window.localStorage.setItem(`bpcl-google-sheet-tab:${tournamentId}`, googleSheetTabName.trim());
-    } catch {
-      // Ignore storage write errors.
+      const { registrations = [] } = await api.getRegistrations(tournamentId);
+      const rowCount = registrations.filter((r) => !r.archivedAt && !r.substituteFlag).length;
+      const confirmed = window.confirm(buildCrmSheetSyncConfirmMessage({ rowCount, sheetTabName: sheetTab }));
+      if (!confirmed) return;
+      setGoogleSheetSyncPending(true);
+      const payload = { spreadsheetId };
+      if (sheetTab) payload.sheetName = sheetTab;
+      const result = await api.syncGoogleSheetsRegistrations(tournamentId, payload);
+      setMessage?.(
+        `Google Sheet updated — tab “${result.sheetTitle}”, ${result.rowsWritten} row(s) written (${result.range}).`,
+      );
+    } catch (error) {
+      setMessage?.(error.message || "Google Sheets sync failed.");
+    } finally {
+      setGoogleSheetSyncPending(false);
     }
   }
 
@@ -377,6 +407,8 @@ export function SetupPage({
         setGoogleSheetId={setGoogleSheetId}
         setGoogleSheetTabName={setGoogleSheetTabName}
         persistGoogleSheetPrefsToStorage={persistGoogleSheetPrefsToStorage}
+        onSyncGoogleSheet={() => void syncGoogleSheetFromSetup()}
+        googleSheetSyncPending={googleSheetSyncPending}
       />
     </div>
   );

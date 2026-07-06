@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
 import { AdminGlassPanel } from "../admin/components/AdminGlassPanel.jsx";
+import {
+  buildCrmSheetSyncConfirmMessage,
+  getGoogleSheetPrefs,
+  parseSpreadsheetId,
+} from "../utils/googleSheetPrefs.js";
 import { sortRolesByDefault } from "../utils/teamPage.js";
 
 /** Hide in-progress legacy OTP/payment steps — account setup lives in Player accounts CRM. */
@@ -156,39 +161,16 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
     }
   }
 
-  function getStoredSpreadsheetId() {
-    if (!tournamentId) return "";
-    try {
-      return window.localStorage.getItem(`bpcl-google-sheet:${tournamentId}`)?.trim() || "";
-    } catch {
-      return "";
-    }
-  }
-
-  function getStoredSheetTabName() {
-    if (!tournamentId) return "";
-    try {
-      return window.localStorage.getItem(`bpcl-google-sheet-tab:${tournamentId}`)?.trim() || "";
-    } catch {
-      return "";
-    }
-  }
-
   async function syncCrmToGoogleSheet() {
     if (!tournamentId) return;
-    const spreadsheetId = getStoredSpreadsheetId();
+    const { spreadsheetId: storedId, sheetTabName: sheetTab } = getGoogleSheetPrefs(tournamentId);
+    const spreadsheetId = parseSpreadsheetId(storedId);
     if (!spreadsheetId) {
-      setMessage("Set the spreadsheet ID under Admin → Setup → Google Sheets, then try again.");
+      setMessage("Set the spreadsheet link under Admin → Setup → Admin tab → Google Sheets, then try again.");
       return;
     }
-    const sheetTab = getStoredSheetTabName();
     const n = filtered.length;
-    const tabHint = sheetTab ? `the “${sheetTab}” tab` : "the first worksheet tab";
-    const confirmed = window.confirm(
-      `Sync ${n} registration row(s) to Google Sheets?\n\n` +
-        `${tabHint} will be cleared from C5 through K2004, then filled from row 5:\n` +
-        "C name · D Steam name · E MMR · F roles · G Discord · H phone · I Steam profile link · J status · K notes",
-    );
+    const confirmed = window.confirm(buildCrmSheetSyncConfirmMessage({ rowCount: n, sheetTabName: sheetTab }));
     if (!confirmed) return;
     setMessage("");
     setCrmSheetSyncPending(true);
@@ -236,8 +218,8 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
               {crmSheetSyncPending ? "Syncing…" : "Sync to Google Sheet"}
             </button>
             <p className="max-w-md text-right text-xs text-muted-foreground">
-              Uses spreadsheet ID + worksheet tab from Setup (per tournament). CRM writes <span className="font-mono text-foreground">C5:K…</span> on that tab; leave tab
-              name empty in Setup to use the first tab.
+              Uses spreadsheet link + worksheet tab from Setup → Admin (per tournament). Syncs the filtered rows below to{" "}
+              <span className="font-mono text-foreground">C5:K…</span>; leave tab name empty in Setup to use the first tab.
             </p>
           </div>
         </div>

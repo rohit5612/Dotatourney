@@ -58,6 +58,8 @@ export function TournamentDraftModal({
   setGoogleSheetId,
   setGoogleSheetTabName,
   persistGoogleSheetPrefsToStorage,
+  onSyncGoogleSheet,
+  googleSheetSyncPending = false,
 }) {
   const [activeTab, setActiveTab] = useState("identity");
 
@@ -449,15 +451,16 @@ export function TournamentDraftModal({
               <div className="setup-draft-callout">
                 <strong>Google Sheets</strong>
                 <p>
-                  CRM sync only — fixed block <code>C5:K…</code> on the tab you name below. Run sync from Registrations.
+                  CRM sync — writes registration rows to <code>C5:K…</code> on the worksheet tab below. Settings are saved per
+                  tournament (spreadsheet link + tab name).
                 </p>
                 <div className="setup-draft-admin-grid">
                   <label className="setup-draft-field">
-                    <span className="setup-draft-field__label">Spreadsheet ID</span>
+                    <span className="setup-draft-field__label">Spreadsheet link or ID</span>
                     <input
                       type="text"
                       className="setup-draft-field__input"
-                      placeholder="From the sheet URL"
+                      placeholder="https://docs.google.com/spreadsheets/d/… or spreadsheet ID"
                       value={googleSheetId}
                       onChange={(event) => setGoogleSheetId(event.target.value)}
                       onBlur={persistGoogleSheetPrefsToStorage}
@@ -471,7 +474,7 @@ export function TournamentDraftModal({
                     <input
                       type="text"
                       className="setup-draft-field__input"
-                      placeholder="Exact tab name"
+                      placeholder="Exact tab name (leave empty for first tab)"
                       value={googleSheetTabName}
                       onChange={(event) => setGoogleSheetTabName(event.target.value)}
                       onBlur={persistGoogleSheetPrefsToStorage}
@@ -480,6 +483,16 @@ export function TournamentDraftModal({
                       disabled={!tournamentId}
                     />
                   </label>
+                </div>
+                <div className="setup-draft-admin-actions mt-3">
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    onClick={onSyncGoogleSheet}
+                    disabled={!tournamentId || googleSheetSyncPending || !googleSheetId.trim()}
+                  >
+                    {googleSheetSyncPending ? "Syncing…" : "Sync registrations to sheet"}
+                  </button>
                 </div>
               </div>
               <div className="setup-draft-admin-actions">
