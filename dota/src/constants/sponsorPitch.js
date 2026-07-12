@@ -2,6 +2,8 @@ export const SPONSOR_AMOUNT_PRESETS = [500, 1000, 2000, 5000];
 
 export const MIN_SPONSOR_AMOUNT_RUPEES = 500;
 
+export const MAX_SPONSOR_AMOUNT_RUPEES = 100_000;
+
 export const SPONSOR_BENEFITS = [
   {
     id: "discord",

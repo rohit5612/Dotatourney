@@ -10,6 +10,7 @@ import {
 import { PUBLIC_CONTACT_EMAIL } from "../../constants/legal.js";
 import { SITE_BRAND_SHORT } from "../../constants/siteMeta.js";
 import {
+  MAX_SPONSOR_AMOUNT_RUPEES,
   MIN_SPONSOR_AMOUNT_RUPEES,
   SPONSOR_AMOUNT_PRESETS,
   SPONSOR_BENEFITS,
@@ -41,6 +42,19 @@ const FLOW_STEP_LABELS = {
 
 function formatRupees(amount) {
   return `₹${Number(amount).toLocaleString("en-IN")}`;
+}
+
+function sanitizeSponsorAmountInput(value) {
+  return String(value || "")
+    .replace(/\D/g, "")
+    .slice(0, String(MAX_SPONSOR_AMOUNT_RUPEES).length);
+}
+
+function parseCustomSponsorAmount(raw) {
+  const digits = sanitizeSponsorAmountInput(raw);
+  if (!digits) return null;
+  const value = Number(digits);
+  return Number.isInteger(value) && value > 0 ? value : null;
 }
 
 function SponsorField({ label, children }) {
@@ -120,8 +134,7 @@ export function SponsorsPage() {
 
   const resolvedAmount = useMemo(() => {
     if (form.amountMode === "custom") {
-      const value = Number(form.customAmount);
-      return Number.isInteger(value) ? value : null;
+      return parseCustomSponsorAmount(form.customAmount);
     }
     return form.presetAmount;
   }, [form.amountMode, form.customAmount, form.presetAmount]);
@@ -195,8 +208,13 @@ export function SponsorsPage() {
     if (!form.email.trim()) return "Email is required.";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return "Enter a valid email address.";
     if (form.amountMode === "custom" && !form.customAmount.trim()) return "Enter a custom sponsor amount.";
-    if (!resolvedAmount || resolvedAmount < MIN_SPONSOR_AMOUNT_RUPEES) {
-      return `Sponsor amount must be at least ${formatRupees(MIN_SPONSOR_AMOUNT_RUPEES)}.`;
+    if (
+      !resolvedAmount ||
+      !Number.isInteger(resolvedAmount) ||
+      resolvedAmount < MIN_SPONSOR_AMOUNT_RUPEES ||
+      resolvedAmount > MAX_SPONSOR_AMOUNT_RUPEES
+    ) {
+      return `Sponsor amount must be a whole number between ${formatRupees(MIN_SPONSOR_AMOUNT_RUPEES)} and ${formatRupees(MAX_SPONSOR_AMOUNT_RUPEES)}.`;
     }
     return "";
   }
@@ -446,16 +464,25 @@ export function SponsorsPage() {
                     </button>
                   </div>
                   {form.amountMode === "custom" ? (
-                    <input
-                      className="sponsors-page__input"
-                      type="number"
-                      min={MIN_SPONSOR_AMOUNT_RUPEES}
-                      step={1}
-                      placeholder={`Min ${formatRupees(MIN_SPONSOR_AMOUNT_RUPEES)}`}
-                      value={form.customAmount}
-                      onChange={(e) => setForm((prev) => ({ ...prev, customAmount: e.target.value }))}
-                      required
-                    />
+                    <>
+                      <input
+                        className="sponsors-page__input"
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        placeholder={`${formatRupees(MIN_SPONSOR_AMOUNT_RUPEES)} – ${formatRupees(MAX_SPONSOR_AMOUNT_RUPEES)}`}
+                        value={form.customAmount}
+                        onChange={(e) =>
+                          setForm((prev) => ({ ...prev, customAmount: sanitizeSponsorAmountInput(e.target.value) }))
+                        }
+                        required
+                        aria-describedby="sponsors-custom-amount-hint"
+                      />
+                      <p id="sponsors-custom-amount-hint" className="sponsors-page__amount-selected">
+                        Whole rupees only · {formatRupees(MIN_SPONSOR_AMOUNT_RUPEES)}–
+                        {formatRupees(MAX_SPONSOR_AMOUNT_RUPEES)}
+                      </p>
+                    </>
                   ) : (
                     <p className="sponsors-page__amount-selected">
                       Selected: <strong>{formatRupees(resolvedAmount || 0)}</strong>

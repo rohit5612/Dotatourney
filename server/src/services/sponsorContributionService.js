@@ -15,6 +15,7 @@ const MAX_OTP_ATTEMPTS = 5;
 const RATE_WINDOW_MS = 15 * 60 * 1000;
 const MAX_OTP_REQUESTS_PER_WINDOW = 5;
 const MIN_SPONSOR_AMOUNT_RUPEES = 500;
+const MAX_SPONSOR_AMOUNT_RUPEES = 100_000;
 
 const otpRequestBuckets = new Map();
 
@@ -51,6 +52,11 @@ function assertValidAmount(amountRupees) {
   const amount = Number(amountRupees);
   if (!Number.isInteger(amount) || amount < MIN_SPONSOR_AMOUNT_RUPEES) {
     const err = new Error(`Sponsor amount must be at least ₹${MIN_SPONSOR_AMOUNT_RUPEES}`);
+    err.status = 400;
+    throw err;
+  }
+  if (amount > MAX_SPONSOR_AMOUNT_RUPEES) {
+    const err = new Error(`Sponsor amount cannot exceed ₹${MAX_SPONSOR_AMOUNT_RUPEES.toLocaleString("en-IN")}`);
     err.status = 400;
     throw err;
   }

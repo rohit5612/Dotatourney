@@ -707,7 +707,7 @@ const sponsorFormSchema = z.object({
   name: z.string().trim().min(1).max(120),
   phone: phoneNumberSchema,
   email: z.string().email(),
-  amountRupees: z.coerce.number().int().min(500),
+  amountRupees: z.coerce.number().int().min(500).max(100_000),
 });
 
 router.post("/sponsors/request-otp", async (req, res, next) => {
