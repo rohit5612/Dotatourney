@@ -9,6 +9,8 @@ import {
   DEFAULT_SPONSORS_SECTION,
   normalizeOrgRoster,
   normalizeSponsorsConfig,
+  normalizeSponsorsConfigDraft,
+  prepareSponsorsConfigForSave,
   normalizeArchiveEmbeds,
 } from "../../utils/seasonContentSchema.js";
 import { compressCoverImage } from "../../utils/compressCoverImage.js";
@@ -45,7 +47,9 @@ export function SeasonsAdminPage() {
         const drafts = {};
         for (const season of data.seasons || []) {
           drafts[season.id] = {
-            sponsorsConfig: normalizeSponsorsConfig(season.sponsorsConfig || { section: DEFAULT_SPONSORS_SECTION }),
+            sponsorsConfig: normalizeSponsorsConfigDraft(
+              season.sponsorsConfig || { section: DEFAULT_SPONSORS_SECTION },
+            ),
             archiveEmbeds: normalizeArchiveEmbeds(season.archiveEmbeds || []),
           };
         }
@@ -130,15 +134,17 @@ export function SeasonsAdminPage() {
     setBusyId(season.id);
     setMessage("");
     try {
+      const sponsorsConfig = prepareSponsorsConfigForSave(draft.sponsorsConfig);
       const { season: updated } = await api.updateAdminSeasonContent(season.id, {
-        sponsorsConfig: draft.sponsorsConfig,
+        sponsorsConfig,
         archiveEmbeds: draft.archiveEmbeds,
       });
+      api.clearPublicContentCaches(updated.slug || season.slug);
       setSeasons((list) => list.map((entry) => (entry.id === updated.id ? updated : entry)));
       setSeasonDrafts((prev) => ({
         ...prev,
         [season.id]: {
-          sponsorsConfig: normalizeSponsorsConfig(updated.sponsorsConfig || {}),
+          sponsorsConfig: normalizeSponsorsConfigDraft(updated.sponsorsConfig || {}),
           archiveEmbeds: normalizeArchiveEmbeds(updated.archiveEmbeds || []),
         },
       }));
@@ -215,7 +221,7 @@ export function SeasonsAdminPage() {
               {sortedSeasons.map((season, index) => {
                 const busy = busyId === season.id;
                 const draft = seasonDrafts[season.id] || {
-                  sponsorsConfig: normalizeSponsorsConfig({ section: DEFAULT_SPONSORS_SECTION }),
+                  sponsorsConfig: normalizeSponsorsConfigDraft({ section: DEFAULT_SPONSORS_SECTION }),
                   archiveEmbeds: [],
                 };
 

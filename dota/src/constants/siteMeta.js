@@ -70,6 +70,10 @@ const ROUTE_META = {
     title: `Rules & Conduct${TITLE_SUFFIX}`,
     description: "General rules and player conduct for BPC League tournaments.",
   },
+  "/sponsors": {
+    title: `Sponsors${TITLE_SUFFIX}`,
+    description: "Support BPC League as a sponsor — Discord perks, stream shoutouts, and website branding.",
+  },
   "/privacy": {
     title: `Privacy Policy${TITLE_SUFFIX}`,
     description: "How BPC League collects, uses, and protects your personal data.",

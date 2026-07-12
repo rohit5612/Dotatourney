@@ -362,6 +362,7 @@ export function AdminConsole() {
     }
     const wasPublished = Boolean(state?.tournament?.is_published);
     await api.updateTournament(tournamentId, payload);
+    api.clearPublicTournamentCache();
     await refreshTournament(tournamentId);
     await loadTournaments();
     setMessage(wasPublished ? "Changes saved to the public site." : "Tournament updated.");

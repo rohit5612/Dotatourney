@@ -108,7 +108,8 @@ export function bannerAnnouncementsToApiPayload(row) {
   if (!row || typeof row !== "object") return [];
   const body = String(row.body ?? "").trim();
   if (!body) return [];
-  return [{ body, postedAt: datetimeLocalToIso(row.postedAt) }];
+  const postedAt = datetimeLocalToIso(row.postedAt) || new Date().toISOString();
+  return [{ body, postedAt }];
 }
 
 /** Public landing page: one banner — newest by posted time. */

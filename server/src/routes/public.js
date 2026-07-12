@@ -26,7 +26,14 @@ import {
   sendPlayerRegistrationOtpEmail,
   sendPlayerRegistrationSubmittedEmail,
   sendPlayerRegistrationVerifiedEmail,
+  sendSponsorOtpEmail,
 } from "../services/emailService.js";
+import {
+  createSponsorCheckout,
+  getSponsorCheckoutStatus,
+  requestSponsorOtp,
+  verifySponsorOtp,
+} from "../services/sponsorContributionService.js";
 import { resolvePublicTeamLogo } from "../utils/teamLogoUrl.js";
 import { getClientIp, logAction, logError } from "../utils/serverLogger.js";
 import { getOrCreateCommerceConfig, publicCommerceConfig } from "../services/commerceConfigRepository.js";
@@ -46,7 +53,7 @@ import {
   buildMatchRosterCards,
   CARD_PNG_STUB,
 } from "../services/cardManifestService.js";
-import { isValidPhoneNumber, PHONE_NUMBER_ERROR } from "../utils/phoneNumber.js";
+import { isValidPhoneNumber, PHONE_NUMBER_ERROR, phoneNumberSchema } from "../utils/phoneNumber.js";
 
 const router = express.Router();
 
@@ -690,6 +697,101 @@ router.get("/announcements", async (req, res, next) => {
       .parse(req.query);
     const cacheKey = publicQueryCacheKey("announcements", query);
     return await cachedPublicJson(res, cacheKey, async () => listAnnouncements(query));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+const sponsorFormSchema = z.object({
+  entityType: z.enum(["person", "org"]),
+  name: z.string().trim().min(1).max(120),
+  phone: phoneNumberSchema,
+  email: z.string().email(),
+  amountRupees: z.coerce.number().int().min(500),
+});
+
+router.post("/sponsors/request-otp", async (req, res, next) => {
+  try {
+    if (!env.emailSkipSend && !env.smtpConfigured) {
+      return res.status(503).json({
+        message:
+          "Verification emails are not configured. Set EMAIL_USER and EMAIL_PASS (and SMTP_*), or EMAIL_SKIP_SEND=true for local development.",
+      });
+    }
+    const body = sponsorFormSchema.parse(req.body);
+    const { contributionId, otp } = await requestSponsorOtp(body);
+    try {
+      await sendSponsorOtpEmail({
+        to: body.email.toLowerCase(),
+        name: body.name,
+        otp,
+      });
+    } catch (err) {
+      logError("email", "sponsor OTP send failed", err, { contributionId, email: body.email });
+      const e = new Error(err?.message || "Failed to send verification email");
+      e.status = 502;
+      throw e;
+    }
+    logAction("sponsor", "otp.requested", {
+      contributionId,
+      email: body.email,
+      amountRupees: body.amountRupees,
+      ip: getClientIp(req),
+    });
+    const out = { ok: true, contributionId };
+    if (env.emailSkipSend) out.devOtp = otp;
+    return res.status(202).json(out);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post("/sponsors/verify-otp", async (req, res, next) => {
+  try {
+    if (!env.emailSkipSend && !env.smtpConfigured) {
+      return res.status(503).json({
+        message:
+          "Verification emails are not configured. Set EMAIL_USER and EMAIL_PASS (and SMTP_*), or EMAIL_SKIP_SEND=true for local development.",
+      });
+    }
+    const body = z
+      .object({
+        email: z.string().email(),
+        otp: z.string().min(4).max(8),
+      })
+      .parse(req.body);
+    const { contribution, contributionId } = await verifySponsorOtp(body.email, body.otp);
+    logAction("sponsor", "otp.verified", {
+      contributionId,
+      email: contribution.email,
+      ip: getClientIp(req),
+    });
+    return res.status(200).json({ contribution, contributionId });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post("/sponsors/create-checkout", async (req, res, next) => {
+  try {
+    const body = z.object({ email: z.string().email() }).parse(req.body);
+    const checkout = await createSponsorCheckout(body.email);
+    logAction("sponsor", "checkout.created", {
+      contributionId: checkout.contributionId,
+      email: checkout.email,
+      amountRupees: checkout.amountRupees,
+      ip: getClientIp(req),
+    });
+    return res.status(200).json(checkout);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/sponsors/checkout/:id/status", async (req, res, next) => {
+  try {
+    const status = await getSponsorCheckoutStatus(req.params.id);
+    return res.json(status);
   } catch (error) {
     return next(error);
   }

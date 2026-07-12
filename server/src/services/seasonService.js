@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { pool } from "../db/pool.js";
-import { normalizeArchiveEmbeds, normalizeSponsorsConfig } from "./seasonContentSchema.js";
+import {
+  normalizeArchiveEmbeds,
+  normalizeSponsorsConfig,
+  parseSponsorsConfigLenient,
+} from "./seasonContentSchema.js";
 import { applyBlastGroupSeeding } from "./blastSeeding.js";
 import { getTournament, hydrateMatchRow } from "./tournamentRepository.js";
 import { resolveSeasonStatusFromTournament } from "./seasonUpsert.js";
@@ -10,12 +14,7 @@ import { buildGroupedStandings, buildStandings } from "./standingsEngine.js";
 import { buildTeamsWithActivePlayers, mergeSnapshotTeamsWithRoster } from "./rosterMembershipService.js";
 
 function parseSponsorsConfig(raw) {
-  if (!raw || typeof raw !== "object") return { section: {}, sponsors: [] };
-  try {
-    return normalizeSponsorsConfig(raw);
-  } catch {
-    return { section: {}, sponsors: [] };
-  }
+  return parseSponsorsConfigLenient(raw);
 }
 
 function parseArchiveEmbeds(raw) {
@@ -28,6 +27,9 @@ function parseArchiveEmbeds(raw) {
 }
 
 function sponsorsConfigFromSeason(season) {
+  const live = parseSponsorsConfig(season.sponsors_config);
+  if (live.sponsors?.length > 0) return live;
+
   if (season.status === "concluded" && season.snapshot) {
     try {
       const snapshot = typeof season.snapshot === "object" ? season.snapshot : JSON.parse(season.snapshot || "{}");
@@ -36,7 +38,7 @@ function sponsorsConfigFromSeason(season) {
       // fall through
     }
   }
-  return parseSponsorsConfig(season.sponsors_config);
+  return live;
 }
 
 function mapSeasonRow(row) {
@@ -208,7 +210,10 @@ export async function updateSeasonHeroMedia(seasonId, patch) {
 }
 
 export async function updateSeasonContent(seasonId, patch) {
-  const { rows } = await pool.query(`SELECT sponsors_config, archive_embeds FROM seasons WHERE id = $1`, [seasonId]);
+  const { rows } = await pool.query(
+    `SELECT sponsors_config, archive_embeds, status, snapshot FROM seasons WHERE id = $1`,
+    [seasonId],
+  );
   const row = rows[0];
   if (!row) return null;
 
@@ -219,9 +224,20 @@ export async function updateSeasonContent(seasonId, patch) {
   const nextEmbeds =
     patch.archiveEmbeds !== undefined ? normalizeArchiveEmbeds(patch.archiveEmbeds) : parseArchiveEmbeds(row.archive_embeds);
 
+  const sponsorsJson = JSON.stringify(nextSponsors);
   const { rows: updated } = await pool.query(
-    `UPDATE seasons SET sponsors_config = $2::jsonb, archive_embeds = $3::jsonb, updated_at = NOW() WHERE id = $1 RETURNING *`,
-    [seasonId, JSON.stringify(nextSponsors), JSON.stringify(nextEmbeds)],
+    `UPDATE seasons
+     SET sponsors_config = $2::jsonb,
+         archive_embeds = $3::jsonb,
+         snapshot = CASE
+           WHEN status = 'concluded' AND snapshot IS NOT NULL
+           THEN jsonb_set(COALESCE(snapshot, '{}'::jsonb), '{sponsorsConfig}', $2::jsonb, true)
+           ELSE snapshot
+         END,
+         updated_at = NOW()
+     WHERE id = $1
+     RETURNING *`,
+    [seasonId, sponsorsJson, JSON.stringify(nextEmbeds)],
   );
   return mapSeasonRow(updated[0]);
 }

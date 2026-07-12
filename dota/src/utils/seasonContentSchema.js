@@ -83,10 +83,52 @@ export function normalizeSponsorsConfig(payload) {
   const sponsors = Array.isArray(payload?.sponsors)
     ? payload.sponsors.filter(isValidSponsor).map((sponsor) => ({
         ...sponsor,
+        id: String(sponsor.id).trim(),
+        name: String(sponsor.name).trim(),
+        tagline: sponsor.tagline != null ? String(sponsor.tagline).trim() : "",
+        tier: String(sponsor.tier).trim(),
+        logoUrl: String(sponsor.logoUrl).trim(),
+        order: Number.isFinite(Number(sponsor.order)) ? Number(sponsor.order) : 0,
         tierRank: resolveSponsorTierRank(sponsor),
+        socials: sponsor.socials && typeof sponsor.socials === "object" ? sponsor.socials : {},
       }))
     : [];
   return { section, sponsors };
+}
+
+/** Admin editor — keep incomplete rows visible while drafting. */
+export function normalizeSponsorsConfigDraft(payload) {
+  const section = payload?.section && typeof payload.section === "object" ? payload.section : {};
+  const sponsors = Array.isArray(payload?.sponsors)
+    ? payload.sponsors.map((sponsor, index) => ({
+        id: String(sponsor?.id || `sponsor-${index}`).trim(),
+        name: String(sponsor?.name ?? ""),
+        tagline: String(sponsor?.tagline ?? ""),
+        tier: String(sponsor?.tier || "partner").trim() in SPONSOR_TIERS ? String(sponsor.tier).trim() : "partner",
+        order: Number.isFinite(Number(sponsor?.order)) ? Number(sponsor.order) : 0,
+        logoUrl: String(sponsor?.logoUrl ?? ""),
+        socials: sponsor?.socials && typeof sponsor.socials === "object" ? sponsor.socials : {},
+      }))
+    : [];
+  return { section, sponsors };
+}
+
+export function validateSponsorsConfigForSave(config) {
+  const sponsors = Array.isArray(config?.sponsors) ? config.sponsors : [];
+  const incomplete = sponsors.filter((sponsor) => !isValidSponsor(sponsor));
+  if (!incomplete.length) return null;
+  const labels = incomplete.map((sponsor) => sponsor.name?.trim() || "Unnamed sponsor").join(", ");
+  return `Complete or remove incomplete sponsor(s) before saving: ${labels}. Name and logo URL are required.`;
+}
+
+export function prepareSponsorsConfigForSave(config) {
+  const validationError = validateSponsorsConfigForSave(config);
+  if (validationError) {
+    const err = new Error(validationError);
+    err.name = "SponsorValidationError";
+    throw err;
+  }
+  return normalizeSponsorsConfig(config);
 }
 
 export function normalizeArchiveEmbeds(payload) {
@@ -99,7 +141,7 @@ export function getSponsorsForDisplay(sponsorsConfig) {
   return normalized.sponsors.sort((a, b) => {
     const rankDiff = (b.tierRank ?? 0) - (a.tierRank ?? 0);
     if (rankDiff !== 0) return rankDiff;
-    return (a.order ?? 999) - (b.order ?? 999);
+    return (a.order ?? 0) - (b.order ?? 0);
   });
 }
 

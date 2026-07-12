@@ -10,6 +10,19 @@ export function formatBpcId(n) {
   return `${BPC_PREFIX}-${String(n).padStart(3, "0")}`;
 }
 
+function parsePreferredRoles(value) {
+  if (Array.isArray(value)) return value.map((role) => String(role));
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed.map((role) => String(role));
+    } catch {
+      // ignore
+    }
+  }
+  return [];
+}
+
 export function parseBpcIdNumber(code) {
   const m = String(code || "").trim().toUpperCase().match(BPC_CODE_RE);
   return m ? Number(m[1]) : null;
@@ -63,7 +76,7 @@ export function publicPlayerAccount(row) {
     emailVerified: Boolean(row.email_verified_at),
     emailVerifiedAt: row.email_verified_at,
     phoneNumber: row.phone_number || "",
-    displayName: row.display_name || "",
+    displayName: row.display_name ? String(row.display_name) : "",
     slug: row.slug,
     steamId: row.steam_id || null,
     steamPersona: row.steam_persona || "",
@@ -79,7 +92,7 @@ export function publicPlayerAccount(row) {
         : {},
     bio: row.bio || "",
     mmr: row.mmr ?? null,
-    preferredRoles: Array.isArray(row.preferred_roles) ? row.preferred_roles : [],
+    preferredRoles: parsePreferredRoles(row.preferred_roles),
     location: row.location || "",
     profileCompletedAt: row.profile_completed_at,
     hasPassword: Boolean(row.password_hash),
@@ -336,7 +349,9 @@ export async function updatePlayerAccount(id, patch, db = pool) {
     if (patch[key] !== undefined) {
       fields.push(`${col} = $${i++}`);
       if (col === "preferred_roles") {
-        values.push(JSON.stringify(Array.isArray(patch[key]) ? patch[key] : []));
+        values.push(JSON.stringify(Array.isArray(patch[key]) ? patch[key].map((role) => String(role)) : []));
+      } else if (col === "display_name" || col === "location" || col === "bio" || col === "steam_persona" || col === "discord_username") {
+        values.push(patch[key] == null ? patch[key] : String(patch[key]));
       } else {
         values.push(patch[key]);
       }

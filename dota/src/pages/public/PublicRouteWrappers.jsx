@@ -6,6 +6,7 @@ import { PublicEventGate } from "../../components/public/PublicEventGate.jsx";
 import { usePublicTournament } from "../../context/PublicTournamentContext.jsx";
 import { AnnouncementsPublicPage } from "./AnnouncementsPublicPage.jsx";
 import { CommunityPage } from "./CommunityPage.jsx";
+import { SponsorsPage } from "./SponsorsPage.jsx";
 import { MatchPublicPage } from "./MatchPublicPage.jsx";
 import { PublicPlayerProfilePage } from "./PublicPlayerProfilePage.jsx";
 import { WhatsNewPage } from "./WhatsNewPage.jsx";
@@ -172,6 +173,14 @@ export function PublicCommunityRoute() {
   return (
     <PageContentShell path="/community">
       <CommunityPage />
+    </PageContentShell>
+  );
+}
+
+export function PublicSponsorsRoute() {
+  return (
+    <PageContentShell path="/sponsors">
+      <SponsorsPage />
     </PageContentShell>
   );
 }

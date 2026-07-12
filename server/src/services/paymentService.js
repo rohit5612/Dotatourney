@@ -86,14 +86,71 @@ function assertEligibleForCheckout(account) {
   return eligibility;
 }
 
-function assertProfileReadyForSubstitute(account) {
-  const roles = Array.isArray(account.preferred_roles) ? account.preferred_roles : [];
-  if (roles.length === 0) {
-    const err = new Error("Select at least one preferred role before joining the substitute pool");
+function parsePreferredRoles(value) {
+  if (Array.isArray(value)) return value.map((role) => String(role));
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed.map((role) => String(role));
+    } catch {
+      // ignore
+    }
+  }
+  return [];
+}
+
+function registrationTextFields(account) {
+  const displayName = String(
+    account.display_name || account.steam_persona || account.email?.split("@")[0] || "",
+  ).trim();
+  return {
+    displayName,
+    regLocation: String(account.location || "").trim(),
+    regRoles: parsePreferredRoles(account.preferred_roles),
+    regMmr: account.mmr ?? null,
+    regPhone: String(account.phone_number || "").trim(),
+    steamName: String(account.steam_persona || displayName).trim(),
+    steamProfile: String(account.steam_profile || "").trim(),
+    discordHandle: String(account.discord_username || "").trim(),
+  };
+}
+
+function assertProfileReadyForRegistration(account) {
+  const { displayName, regLocation, regRoles, regMmr, regPhone } = registrationTextFields(account);
+  if (!displayName) {
+    const err = new Error("Display name is required before registering");
     err.status = 403;
     err.code = "PROFILE_INCOMPLETE";
     throw err;
   }
+  if (regMmr == null) {
+    const err = new Error("MMR is required before registering");
+    err.status = 403;
+    err.code = "PROFILE_INCOMPLETE";
+    throw err;
+  }
+  if (!regPhone) {
+    const err = new Error("Phone number is required before registering");
+    err.status = 403;
+    err.code = "PROFILE_INCOMPLETE";
+    throw err;
+  }
+  if (!regLocation) {
+    const err = new Error("Location is required before registering");
+    err.status = 403;
+    err.code = "PROFILE_INCOMPLETE";
+    throw err;
+  }
+  if (regRoles.length === 0) {
+    const err = new Error("Select at least one preferred role before registering");
+    err.status = 403;
+    err.code = "PROFILE_INCOMPLETE";
+    throw err;
+  }
+}
+
+function assertProfileReadyForSubstitute(account) {
+  assertProfileReadyForRegistration(account);
 }
 
 export async function previewCheckout(account, tournamentSlug, body) {
@@ -109,6 +166,7 @@ export async function previewCheckout(account, tournamentSlug, body) {
     throw err;
   }
   assertEligibleForCheckout(account);
+  assertProfileReadyForRegistration(account);
 
   const commerce = await loadCommerceConfig(tournament.id);
   const cardTier = CARD_TIERS.includes(body.cardTier) ? body.cardTier : "default";
@@ -331,9 +389,9 @@ export async function confirmUpgrade(account, tournamentSlug, body) {
         orderId,
         customer: {
           id: account.id,
-          name: account.display_name || account.steam_persona || account.email?.split("@")[0] || "Player",
-          email: account.email,
-          phone: account.phone_number || "9999999999",
+          name: String(account.display_name || account.steam_persona || account.email?.split("@")[0] || "Player"),
+          email: String(account.email || ""),
+          phone: String(account.phone_number || "9999999999"),
         },
         returnUrl: checkoutReturnUrl(orderId),
         note: `upgrade:tournament:${tournament.id}`,
@@ -463,9 +521,9 @@ export async function confirmCheckout(account, tournamentSlug, body) {
         orderId,
         customer: {
           id: account.id,
-          name: account.display_name || account.steam_persona || account.email?.split("@")[0] || "Player",
-          email: account.email,
-          phone: account.phone_number || "9999999999",
+          name: String(account.display_name || account.steam_persona || account.email?.split("@")[0] || "Player"),
+          email: String(account.email || ""),
+          phone: String(account.phone_number || "9999999999"),
         },
         returnUrl: checkoutReturnUrl(orderId),
         note: `tournament:${tournament.id}`,
@@ -649,10 +707,20 @@ export async function fulfillPaidCheckout({
       throw err;
     }
 
+    const {
+      displayName,
+      regLocation: location,
+      regRoles: roles,
+      regMmr: mmr,
+      regPhone: phone,
+      steamName,
+      steamProfile,
+      discordHandle,
+    } = registrationTextFields(account);
+
     if (!existing) {
       registrationId = randomUUID();
       const bpcId = account.bpc_id || (await allocateBpcId(client));
-      const displayName = account.display_name || account.steam_persona || account.email.split("@")[0];
       await client.query(
         `INSERT INTO player_registrations (
           id, tournament_id, player_account_id, email, name, display_name,
@@ -671,16 +739,16 @@ export async function fulfillPaidCheckout({
           registrationId,
           order.tournament_id,
           account.id,
-          account.email,
+          String(account.email || ""),
           displayName,
           displayName,
-          regLocation,
-          JSON.stringify(regRoles),
-          regMmr,
-          account.steam_persona || displayName,
-          account.steam_profile || "",
-          account.discord_username || "",
-          regPhone,
+          location,
+          JSON.stringify(roles),
+          mmr,
+          steamName,
+          steamProfile,
+          discordHandle,
+          phone,
           order.card_tier,
           order.id,
           paymentProvider,
@@ -918,8 +986,42 @@ export async function handleCashfreeWebhook(rawBody, signature, timestamp) {
   );
   const checkoutOrder = rows[0];
   if (!checkoutOrder) {
-    logWarn("payment", "webhook.order_not_found", { providerOrderId, eventType });
-    return { ok: true, ignored: true, reason: "checkout order not found" };
+    const { fulfillPaidSponsorContribution, findSponsorContributionByProviderOrderId } = await import(
+      "./sponsorContributionService.js"
+    );
+    const sponsorRow = await findSponsorContributionByProviderOrderId(providerOrderId);
+    if (!sponsorRow) {
+      logWarn("payment", "webhook.order_not_found", { providerOrderId, eventType });
+      return { ok: true, ignored: true, reason: "checkout order not found" };
+    }
+
+    try {
+      const result = await fulfillPaidSponsorContribution(sponsorRow.id, {
+        paymentId,
+        paymentRef: paymentId,
+      });
+      await pool.query(`UPDATE payment_webhooks SET processed = TRUE WHERE id = $1`, [webhookId]);
+      logAction("payment", "webhook.sponsor_processed", {
+        contributionId: sponsorRow.id,
+        providerOrderId,
+        paymentId,
+        eventType,
+        duplicate: Boolean(result?.duplicate),
+      });
+      return { ok: true, sponsor: true, ...result };
+    } catch (error) {
+      logError("payment", "webhook.sponsor_processing_failed", error, {
+        contributionId: sponsorRow.id,
+        providerOrderId,
+        paymentId,
+        eventType,
+      });
+      await pool.query(`UPDATE payment_webhooks SET error_message = $2 WHERE id = $1`, [
+        webhookId,
+        error.message || "processing failed",
+      ]);
+      throw error;
+    }
   }
 
   try {
@@ -979,23 +1081,74 @@ export async function createSubstituteSignup(account, tournamentSlug, body) {
   assertProfileReadyForSubstitute(freshAccount);
 
   const existing = await pool.query(
-    `SELECT id FROM player_registrations
+    `SELECT id, registration_status, substitute_flag FROM player_registrations
      WHERE tournament_id = $1 AND player_account_id = $2 AND archived_at IS NULL`,
     [tournament.id, account.id],
   );
-  if (existing.rows.length) {
-    const err = new Error("You already have a registration for this tournament");
-    err.status = 409;
-    throw err;
+  const existingReg = existing.rows[0];
+  if (existingReg) {
+    if (existingReg.substitute_flag) {
+      const err = new Error("You already have a registration for this tournament");
+      err.status = 409;
+      throw err;
+    }
+    if (existingReg.registration_status !== "rejected") {
+      const err = new Error("You already have a registration for this tournament");
+      err.status = 409;
+      throw err;
+    }
+  }
+
+  const { displayName, regLocation, regRoles, regMmr, regPhone, steamName, steamProfile, discordHandle } =
+    registrationTextFields(freshAccount);
+  const notes = [
+    String(body.notes || ""),
+    body.availability ? `Availability: ${String(body.availability)}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  if (existingReg) {
+    await pool.query(
+      `UPDATE player_registrations
+       SET substitute_flag = TRUE,
+           registration_status = 'pending',
+           payment_status = 'unpaid',
+           name = $2,
+           display_name = $3,
+           location = $4,
+           roles = $5::jsonb,
+           mmr = $6,
+           steam_name = $7,
+           steam_profile = $8,
+           discord_handle = $9,
+           phone_number = $10,
+           notes = $11,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [
+        existingReg.id,
+        displayName,
+        displayName,
+        regLocation,
+        JSON.stringify(regRoles),
+        regMmr,
+        steamName,
+        steamProfile,
+        discordHandle,
+        regPhone,
+        notes,
+      ],
+    );
+    return {
+      registrationId: existingReg.id,
+      tournament: { id: tournament.id, slug: tournament.slug, name: tournament.name },
+      substitute: true,
+      convertedFromRejected: true,
+    };
   }
 
   const registrationId = randomUUID();
-  const displayName = freshAccount.display_name || freshAccount.steam_persona || freshAccount.email.split("@")[0];
-  const regLocation = freshAccount.location || "";
-  const regRoles = Array.isArray(freshAccount.preferred_roles) ? freshAccount.preferred_roles : [];
-  const regMmr = freshAccount.mmr ?? null;
-  const regPhone = freshAccount.phone_number || "";
-  const notes = [body.notes, body.availability ? `Availability: ${body.availability}` : ""].filter(Boolean).join("\n");
 
   await pool.query(
     `INSERT INTO player_registrations (
@@ -1013,15 +1166,15 @@ export async function createSubstituteSignup(account, tournamentSlug, body) {
       registrationId,
       tournament.id,
       freshAccount.id,
-      freshAccount.email,
+      String(freshAccount.email || ""),
       displayName,
       displayName,
       regLocation,
       JSON.stringify(regRoles),
       regMmr,
-      freshAccount.steam_persona || displayName,
-      freshAccount.steam_profile || "",
-      freshAccount.discord_username || "",
+      steamName,
+      steamProfile,
+      discordHandle,
       regPhone,
       notes,
       freshAccount.bpc_id,

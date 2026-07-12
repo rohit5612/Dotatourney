@@ -106,6 +106,12 @@ export const api = {
     cachedGet("public:tournament", () => request("/public/tournament"), { ttlMs: 20_000, persist: true }),
   getPublicTournamentFresh: () => request("/public/tournament"),
   clearPublicTournamentCache: () => clearCache("public:tournament"),
+  clearPublicContentCaches: (seasonSlug) => {
+    clearCache("public:tournament");
+    const slug = String(seasonSlug || "").trim().toLowerCase();
+    if (slug) clearCache(`public:season:${slug}`);
+    clearCache("public:seasons");
+  },
   getPublicSiteContent: () =>
     cachedGet("public:site-content", () => request("/public/site-content"), { ttlMs: 60_000, persist: true }),
   getPublicSeasons: () =>
@@ -176,6 +182,23 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  requestSponsorOtp: (payload) =>
+    request("/public/sponsors/request-otp", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  verifySponsorOtp: (payload) =>
+    request("/public/sponsors/verify-otp", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  createSponsorCheckout: (payload) =>
+    request("/public/sponsors/create-checkout", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  getSponsorCheckoutStatus: (contributionId) =>
+    request(`/public/sponsors/checkout/${encodeURIComponent(contributionId)}/status`),
   createTournament: (payload) =>
     request("/tournaments", {
       method: "POST",
@@ -394,3 +417,12 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 };
+
+export async function pollSponsorPaid(contributionId, { maxAttempts = 30, intervalMs = 2000 } = {}) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const status = await api.getSponsorCheckoutStatus(contributionId);
+    if (status.status === "paid" || status.flowStage === "paid") return status;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return null;
+}

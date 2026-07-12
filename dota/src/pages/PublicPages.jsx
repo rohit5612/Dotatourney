@@ -184,6 +184,8 @@ const images = {
   seasonsBg: "/images/seasons.jpg",
   /** `/community` — Player directory background */
   communityBg: "/images/community.png",
+  /** `/sponsors` — Sponsors page background */
+  sponsorsBg: "/images/sponsors.png",
   /** Landing page — “Registration to victory” journey cards band */
   journeySectionBg: "/images/cards.jpg",
 };
@@ -318,6 +320,7 @@ export function PageContentShell({ path: _pathProp, children, registerClosedCent
   const isSeasonsPage = path === "/seasons";
   const isCommunityPage = path === "/community";
   const isWhatsNewPage = path === "/whats-new";
+  const isSponsorsPage = path === "/sponsors";
   const isPlayerProfilePage = path === "/player";
   const isFullBleedBg =
     path === "/schedule" ||
@@ -328,6 +331,7 @@ export function PageContentShell({ path: _pathProp, children, registerClosedCent
     isSeasonsPage ||
     isCommunityPage ||
     isWhatsNewPage ||
+    isSponsorsPage ||
     isPlayerProfilePage;
   const isLegalPage =
     path === "/privacy" ||
@@ -345,7 +349,7 @@ export function PageContentShell({ path: _pathProp, children, registerClosedCent
           ? "relative z-10 !space-y-0 !px-0 pb-0 pt-0"
         : isSeasonsPage
           ? "relative z-10 !space-y-0 !px-0 pb-10 pt-0 min-h-[100dvh]"
-          : isCommunityPage || isWhatsNewPage || isPlayerProfilePage
+          : isCommunityPage || isWhatsNewPage || isSponsorsPage || isPlayerProfilePage
             ? "relative z-10 !space-y-0 !px-0 pb-10 pt-0 min-h-[100dvh]"
             : "mx-auto max-w-6xl space-y-6 px-4 pb-10 pt-28";
   const fullBleedImage =
@@ -361,9 +365,11 @@ export function PageContentShell({ path: _pathProp, children, registerClosedCent
               ? images.newsBg
               : path === "/seasons"
                 ? images.seasonsBg
-                : path === "/community" || path === "/whats-new" || path === "/player"
-                  ? images.communityBg
-                  : null;
+                : path === "/sponsors"
+                  ? images.sponsorsBg
+                  : path === "/community" || path === "/whats-new" || path === "/player"
+                    ? images.communityBg
+                    : null;
   const fullBleedGradientClass =
     path === "/schedule"
       ? "bg-gradient-to-b from-background/42 via-background/34 to-background/40"
@@ -377,9 +383,11 @@ export function PageContentShell({ path: _pathProp, children, registerClosedCent
               ? "bg-gradient-to-b from-background/52 via-background/38 to-background/44"
               : path === "/seasons"
                 ? "bg-gradient-to-b from-background/68 via-background/52 to-background/62"
-                : path === "/community" || path === "/whats-new" || path === "/player"
+                : path === "/sponsors"
                   ? "bg-gradient-to-b from-background/32 via-background/18 to-background/24"
-                  : "bg-gradient-to-br from-background/87 via-background/78 to-background/80";
+                  : path === "/community" || path === "/whats-new" || path === "/player"
+                    ? "bg-gradient-to-b from-background/32 via-background/18 to-background/24"
+                    : "bg-gradient-to-br from-background/87 via-background/78 to-background/80";
 
   const sectionClassName = registerClosedCentered
     ? "relative z-10 flex min-h-0 flex-1 flex-col px-4 pt-24 sm:pt-28"
@@ -391,7 +399,7 @@ export function PageContentShell({ path: _pathProp, children, registerClosedCent
 
   return (
     <div
-      className={`relative text-foreground ${isFullBleedBg ? "" : "bg-background"} ${isSeasonsPage || isCommunityPage || isPlayerProfilePage ? "min-h-[100dvh]" : ""} ${registerClosedCentered ? "flex min-h-[60vh] flex-col" : ""}`}
+      className={`relative text-foreground ${isFullBleedBg ? "" : "bg-background"} ${isSeasonsPage || isCommunityPage || isSponsorsPage || isPlayerProfilePage ? "min-h-[100dvh]" : ""} ${registerClosedCentered ? "flex min-h-[60vh] flex-col" : ""}`}
     >
       {isFullBleedBg && fullBleedImage ? (
         <div className="pointer-events-none fixed inset-0 z-0" aria-hidden="true">

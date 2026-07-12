@@ -82,8 +82,59 @@ export function normalizeOrgRoster(payload) {
 }
 
 export function normalizeSponsorsConfig(payload) {
-  const parsed = sponsorsConfigSchema.parse(payload);
-  return { section: parsed.section || {}, sponsors: parsed.sponsors || [] };
+  const parsed = sponsorsConfigSchema.parse(sanitizeSponsorsConfigPayload(payload));
+  return {
+    section: parsed.section || {},
+    sponsors: (parsed.sponsors || []).map((sponsor) => ({
+      ...sponsor,
+      name: String(sponsor.name || "").trim(),
+      tagline: sponsor.tagline != null ? String(sponsor.tagline) : undefined,
+      logoUrl: String(sponsor.logoUrl || "").trim(),
+      tier: String(sponsor.tier || "partner"),
+      order: sponsor.order ?? 0,
+    })),
+  };
+}
+
+function isValidSponsorRow(row) {
+  if (!row || typeof row !== "object") return false;
+  const tier = String(row.tier ?? "").trim();
+  return (
+    String(row.id ?? "").trim().length > 0 &&
+    String(row.name ?? "").trim().length > 0 &&
+    String(row.logoUrl ?? "").trim().length > 0 &&
+    SPONSOR_TIERS.includes(tier)
+  );
+}
+
+/** Drop incomplete sponsor rows before Zod validation. */
+export function sanitizeSponsorsConfigPayload(payload) {
+  const section = payload?.section && typeof payload.section === "object" ? payload.section : {};
+  const sponsors = Array.isArray(payload?.sponsors)
+    ? payload.sponsors
+        .filter(isValidSponsorRow)
+        .map((sponsor) => ({
+          id: String(sponsor.id).trim(),
+          name: String(sponsor.name).trim(),
+          tagline: sponsor.tagline != null ? String(sponsor.tagline).trim() : undefined,
+          tier: String(sponsor.tier).trim(),
+          tierRank: typeof sponsor.tierRank === "number" ? sponsor.tierRank : undefined,
+          order: Number.isFinite(Number(sponsor.order)) ? Number(sponsor.order) : 0,
+          logoUrl: String(sponsor.logoUrl).trim(),
+          socials: sponsor.socials && typeof sponsor.socials === "object" ? sponsor.socials : undefined,
+        }))
+    : [];
+  return { section, sponsors };
+}
+
+/** Lenient read — never drops the whole config when one row is invalid. */
+export function parseSponsorsConfigLenient(raw) {
+  if (!raw || typeof raw !== "object") return { section: {}, sponsors: [] };
+  try {
+    return normalizeSponsorsConfig(raw);
+  } catch {
+    return sanitizeSponsorsConfigPayload(raw);
+  }
 }
 
 export function normalizeArchiveEmbeds(payload) {

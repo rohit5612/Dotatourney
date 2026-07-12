@@ -37,12 +37,16 @@ export const CORE_SETUP_TASK_IDS = ["email", "steam", "discord"];
 export function buildSetupTasks(account, tournaments = [], registrations = []) {
   if (!account) return [];
 
-  const hasRegistration = tournaments.some((t) => {
+  const hasMainRegistration = tournaments.some((t) => {
     const status = (t.registrationStatus || "").toLowerCase();
-    return status === "approved" || status === "pending" || status === "rejected";
+    return status === "approved" || status === "pending";
   });
 
   const substituteAvailable = tournaments.some((t) => canJoinSubstitutePool(t, account));
+  const rejectedSubstituteAvailable = tournaments.some((t) => {
+    const status = (t.registrationStatus || "").toLowerCase();
+    return status === "rejected" && canJoinSubstitutePool(t, account);
+  });
   const hasSubstitute = registrations.some((r) => r.substitute);
 
   const tasks = [
@@ -82,14 +86,14 @@ export function buildSetupTasks(account, tournaments = [], registrations = []) {
     {
       id: "register",
       label: "Register for a tournament",
-      done: hasRegistration,
+      done: hasMainRegistration,
       href: "/dashboard/tournaments",
       tier: "next",
       required: false,
     },
   ];
 
-  if (substituteAvailable && !hasRegistration) {
+  if ((substituteAvailable && !hasSubstitute && !hasMainRegistration) || (rejectedSubstituteAvailable && !hasSubstitute)) {
     tasks.push({
       id: "substitute",
       label: "Join substitute pool",

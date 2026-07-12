@@ -1,11 +1,23 @@
 import nodemailer from "nodemailer";
 import { env } from "../config/env.js";
 import { pool } from "../db/pool.js";
+import { getPublishedTournament } from "./tournamentRepository.js";
 
 const BRAND_SHORT = "BPC League";
 const BRAND_FULL = "Bharat Pro Circuit League";
 const BRAND_LINE = `${BRAND_SHORT} — ${BRAND_FULL}`;
 const DEFAULT_TOURNAMENT_NAME = BRAND_LINE;
+const DEFAULT_DISCORD_INVITE_URL = "https://discord.gg/sV2PhYc6A3";
+
+async function resolvePublicDiscordInviteUrl() {
+  try {
+    const data = await getPublishedTournament();
+    const url = String(data?.tournament?.discord_url || "").trim();
+    return url || DEFAULT_DISCORD_INVITE_URL;
+  } catch {
+    return DEFAULT_DISCORD_INVITE_URL;
+  }
+}
 
 let transporter = null;
 
@@ -536,6 +548,72 @@ function formatInr(amount) {
   return `₹${Number(amount || 0).toLocaleString("en-IN")}`;
 }
 
+function formatPaidAt(iso) {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString("en-IN", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "Asia/Kolkata",
+    });
+  } catch {
+    return String(iso);
+  }
+}
+
+function sponsorReceiptTableHtml({
+  entityType,
+  sponsorName,
+  email,
+  phoneNumber,
+  amountRupees,
+  paymentRef,
+  orderId,
+  provider,
+  paidAt,
+}) {
+  const entityLabel = entityType === "org" ? "Organisation" : "Individual";
+  const nameLabel = entityType === "org" ? "Company" : "Name";
+  const paidRupee = Number(amountRupees || 0).toFixed(2);
+  const paidAtLabel = formatPaidAt(paidAt);
+
+  return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0 0;border-top:1px solid #27272f;padding-top:16px;">
+      <tr>
+        <td style="padding:4px 0;color:#a1a1aa;font-size:13px;">Sponsor type</td>
+        <td style="padding:4px 0;color:#fff;font-size:13px;text-align:right;">${escapeHtml(entityLabel)}</td>
+      </tr>
+      <tr>
+        <td style="padding:4px 0;color:#a1a1aa;font-size:13px;">${escapeHtml(nameLabel)}</td>
+        <td style="padding:4px 0;color:#fff;font-size:13px;text-align:right;">${escapeHtml(sponsorName || "—")}</td>
+      </tr>
+      <tr>
+        <td style="padding:4px 0;color:#a1a1aa;font-size:13px;">Email</td>
+        <td style="padding:4px 0;color:#fff;font-size:13px;text-align:right;">${escapeHtml(email || "—")}</td>
+      </tr>
+      ${
+        phoneNumber
+          ? `<tr>
+        <td style="padding:4px 0;color:#a1a1aa;font-size:13px;">Phone</td>
+        <td style="padding:4px 0;color:#fff;font-size:13px;text-align:right;">${escapeHtml(phoneNumber)}</td>
+      </tr>`
+          : ""
+      }
+      <tr><td colspan="2" style="padding:8px 0;border-top:1px solid #27272f;"></td></tr>
+      <tr>
+        <td style="padding:8px 0;color:#a1a1aa;font-size:14px;">Sponsorship contribution</td>
+        <td style="padding:8px 0;color:#fff;font-size:14px;text-align:right;">${formatInr(amountRupees)}</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 0;color:#fff;font-size:15px;font-weight:600;">Amount paid</td>
+        <td style="padding:8px 0;color:#e9a84a;font-size:15px;font-weight:600;text-align:right;">₹${paidRupee}</td>
+      </tr>
+      <tr><td colspan="2" style="padding:8px 0 0;color:#71717a;font-size:12px;">Transaction ID: ${escapeHtml(paymentRef || "—")}<br />Receipt / Order: ${escapeHtml(orderId || "—")}<br />${provider ? `Gateway: ${escapeHtml(provider)}<br />` : ""}Paid: ${escapeHtml(paidAtLabel)}</td></tr>
+    </table>
+    <p style="margin:12px 0 0;font-size:12px;color:#71717a;">This is a payment receipt, not a tax invoice.</p>
+  `;
+}
+
 function receiptTableHtml({
   lineItems,
   subtotal,
@@ -689,6 +767,105 @@ export async function sendPaidRegistrationEmail({
   const html = baseEmailWrapper({
     title: "Payment received",
     preheader: `Payment received for ${tour}. Pending admin approval.`,
+    innerHtml,
+    audience: "player",
+  });
+  await sendMail({ to, subject, text, html });
+}
+
+export async function sendSponsorOtpEmail({ to, name, otp, expiresMinutes = 15, discordUrl }) {
+  const inviteUrl = (discordUrl || (await resolvePublicDiscordInviteUrl())).trim() || DEFAULT_DISCORD_INVITE_URL;
+  const subject = `Your sponsor verification code — ${BRAND_SHORT}`;
+  const text = [
+    `Hi ${name},`,
+    ``,
+    `Your verification code for sponsoring ${BRAND_LINE} is: ${otp}`,
+    `It expires in about ${expiresMinutes} minutes.`,
+    ``,
+    `Join our Discord community: ${inviteUrl}`,
+    ``,
+    `If you did not start a sponsorship, ignore this email.`,
+  ].join("\n");
+  const innerHtml = `
+    <p style="margin:0;font-size:15px;color:#d4d4d8;">Hi <strong style="color:#fff;">${escapeHtml(name)}</strong>,</p>
+    <p style="margin:16px 0 0;font-size:14px;color:#a1a1aa;">Use this code to verify your email before completing your sponsorship for <strong style="color:#fff;">${escapeHtml(BRAND_LINE)}</strong>:</p>
+    <p style="margin:20px 0;font-size:28px;letter-spacing:0.2em;font-weight:700;color:#e9a84a;text-align:center;">${escapeHtml(otp)}</p>
+    <p style="margin:0;font-size:13px;color:#71717a;">Expires in about ${expiresMinutes} minutes.</p>
+    <p style="margin:20px 0 0;font-size:14px;color:#a1a1aa;">Questions or want to share assets early? Join our Discord server:</p>
+    ${buttonHtml(inviteUrl, "Join BPC League Discord")}
+    <p style="margin:12px 0 0;font-size:12px;color:#71717a;word-break:break-all;"><a href="${escapeHtml(inviteUrl)}" style="color:#5eead4;text-decoration:none;">${escapeHtml(inviteUrl)}</a></p>
+  `;
+  const html = baseEmailWrapper({
+    title: "Verify your sponsorship",
+    preheader: `Your code: ${otp}`,
+    innerHtml,
+    audience: "player",
+  });
+  await sendMail({ to, subject, text, html });
+}
+
+export async function sendSponsorPaymentConfirmedEmail({
+  to,
+  name,
+  amountRupees,
+  discordUrl,
+  entityType = "person",
+  email,
+  phoneNumber,
+  paymentRef,
+  orderId,
+  provider,
+  paidAt,
+}) {
+  const app = env.appUrl.replace(/\/$/, "");
+  const inviteUrl = (discordUrl || (await resolvePublicDiscordInviteUrl())).trim() || DEFAULT_DISCORD_INVITE_URL;
+  const subject = `Sponsorship receipt — ${BRAND_SHORT}`;
+  const amountLabel = `₹${Number(amountRupees).toLocaleString("en-IN")}`;
+  const paidRupee = Number(amountRupees || 0).toFixed(2);
+  const paidAtLabel = formatPaidAt(paidAt);
+  const receiptHtml = sponsorReceiptTableHtml({
+    entityType,
+    sponsorName: name,
+    email: email || to,
+    phoneNumber,
+    amountRupees,
+    paymentRef,
+    orderId,
+    provider,
+    paidAt,
+  });
+  const text = [
+    `Hi ${name},`,
+    ``,
+    `We received your sponsorship of ${amountLabel}. Thank you for supporting ${BRAND_LINE}!`,
+    ``,
+    `Payment receipt`,
+    `Sponsor type: ${entityType === "org" ? "Organisation" : "Individual"}`,
+    `Amount paid: ₹${paidRupee}`,
+    `Transaction ID: ${paymentRef || "—"}`,
+    `Receipt / Order: ${orderId || "—"}`,
+    provider ? `Gateway: ${provider}` : "",
+    `Paid: ${paidAtLabel}`,
+    ``,
+    `Share your logo and social links on Discord: ${inviteUrl}`,
+    ``,
+    app,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const innerHtml = `
+    <p style="margin:0;font-size:15px;color:#d4d4d8;">Hi <strong style="color:#fff;">${escapeHtml(name)}</strong>,</p>
+    <p style="margin:16px 0 0;font-size:14px;color:#a1a1aa;">Your sponsorship payment of <strong style="color:#e9a84a;">${escapeHtml(amountLabel)}</strong> was received. Thank you for supporting the league!</p>
+    <p style="margin:20px 0 0;font-size:13px;letter-spacing:0.12em;text-transform:uppercase;color:#71717a;">Payment receipt</p>
+    ${receiptHtml}
+    <p style="margin:20px 0 0;font-size:14px;color:#a1a1aa;">Next, share your logo, brand colours, and social links with admins on Discord:</p>
+    ${buttonHtml(inviteUrl, "Join BPC League Discord")}
+    <p style="margin:12px 0 0;font-size:12px;color:#71717a;word-break:break-all;"><a href="${escapeHtml(inviteUrl)}" style="color:#5eead4;text-decoration:none;">${escapeHtml(inviteUrl)}</a></p>
+    ${buttonHtml(app, "Visit BPC League")}
+  `;
+  const html = baseEmailWrapper({
+    title: "Sponsorship received",
+    preheader: `Receipt for your ${amountLabel} sponsorship`,
     innerHtml,
     audience: "player",
   });

@@ -10,7 +10,13 @@ import {
 import { SubstitutePoolHero } from "../../components/player/SubstitutePoolFlow.jsx";
 import { roles } from "../../constants/tournament";
 import { playerApi } from "../../lib/playerApi";
-import { isValidPhoneNumber, PHONE_NUMBER_ERROR, sanitizePhoneInput } from "../../lib/phoneNumber";
+import {
+  buildRegistrationProfilePatch,
+  buildSubstituteSignupPayload,
+  registrationProfileFormComplete,
+  validateRegistrationProfile,
+} from "../../lib/registrationProfile";
+import { sanitizePhoneInput } from "../../lib/phoneNumber";
 import { canJoinSubstitutePool } from "./tournamentDisplay.js";
 
 export function PlayerSubstitutePoolPage() {
@@ -19,6 +25,7 @@ export function PlayerSubstitutePoolPage() {
   const navigate = useNavigate();
   const { tournament, loading: tournamentLoading } = useRegistrationTournament(slug);
   const [form, setForm] = useState({
+    displayName: "",
     mmr: "",
     preferredRoles: [],
     location: "",
@@ -34,6 +41,7 @@ export function PlayerSubstitutePoolPage() {
     if (!account) return;
     setForm((current) => ({
       ...current,
+      displayName: account.displayName || account.steamPersona || "",
       mmr: account.mmr ?? "",
       preferredRoles: account.preferredRoles || [],
       location: account.location || "",
@@ -53,30 +61,23 @@ export function PlayerSubstitutePoolPage() {
   if (!account) return null;
 
   const poolOpen = tournament ? canJoinSubstitutePool(tournament, account) : false;
-  const rolesSelected = form.preferredRoles.length > 0;
+  const formComplete = registrationProfileFormComplete(form);
 
   async function onSubmit(e) {
     e.preventDefault();
-    if (!poolOpen || !account.eligibleForRegistration || !rolesSelected) return;
+    if (!poolOpen || !account.eligibleForRegistration || !formComplete) return;
     setBusy(true);
     setError("");
-    if (form.phoneNumber && !isValidPhoneNumber(form.phoneNumber)) {
-      setError(PHONE_NUMBER_ERROR);
+    const validationError = validateRegistrationProfile(form);
+    if (validationError) {
+      setError(validationError);
       setBusy(false);
       return;
     }
     try {
-      await playerApi.patchMe({
-        mmr: form.mmr === "" ? null : Number(form.mmr),
-        preferredRoles: form.preferredRoles,
-        location: form.location,
-        phoneNumber: form.phoneNumber,
-      });
+      await playerApi.patchMe(buildRegistrationProfilePatch(form));
       await refreshMe?.();
-      await playerApi.substituteSignup(slug, {
-        availability: form.availability,
-        notes: form.notes,
-      });
+      await playerApi.substituteSignup(slug, buildSubstituteSignupPayload(form));
       setDone(true);
     } catch (err) {
       setError(err.message);
@@ -168,7 +169,7 @@ export function PlayerSubstitutePoolPage() {
                   </span>
                   <div>
                     <h2 className="player-dash__card-title">Player details</h2>
-                    <p className="player-dash__card-sub">Prefilled from your profile — edit if anything changed</p>
+                    <p className="player-dash__card-sub">Confirm or update your profile before joining the pool</p>
                   </div>
                 </div>
               </header>
@@ -177,11 +178,23 @@ export function PlayerSubstitutePoolPage() {
 
               <form onSubmit={onSubmit} className="player-reg__form">
                 <div className="player-dash__settings-form-grid">
+                  <div className="player-auth__field player-reg__field-span">
+                    <label htmlFor="sub-display-name">Display name</label>
+                    <input
+                      id="sub-display-name"
+                      required
+                      value={form.displayName}
+                      onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
+                      placeholder="How you appear on rosters and cards"
+                      maxLength={80}
+                    />
+                  </div>
                   <div className="player-auth__field">
                     <label htmlFor="sub-mmr">MMR</label>
                     <input
                       id="sub-mmr"
                       type="number"
+                      required
                       min={0}
                       max={20000}
                       value={form.mmr}
@@ -194,6 +207,7 @@ export function PlayerSubstitutePoolPage() {
                     <input
                       id="sub-phone"
                       type="tel"
+                      required
                       inputMode="numeric"
                       autoComplete="tel-national"
                       maxLength={10}
@@ -208,9 +222,11 @@ export function PlayerSubstitutePoolPage() {
                     <label htmlFor="sub-location">Location</label>
                     <input
                       id="sub-location"
+                      required
                       value={form.location}
                       onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
                       placeholder="City, country"
+                      maxLength={120}
                     />
                   </div>
                 </div>
@@ -234,7 +250,7 @@ export function PlayerSubstitutePoolPage() {
 
                 <div className="player-dash__settings-form-grid">
                   <div className="player-auth__field player-reg__field-span">
-                    <label htmlFor="sub-availability">Availability</label>
+                    <label htmlFor="sub-availability">Availability (optional)</label>
                     <input
                       id="sub-availability"
                       value={form.availability}
@@ -243,7 +259,7 @@ export function PlayerSubstitutePoolPage() {
                     />
                   </div>
                   <div className="player-auth__field player-reg__field-span">
-                    <label htmlFor="sub-notes">Notes for admins</label>
+                    <label htmlFor="sub-notes">Notes for admins (optional)</label>
                     <textarea
                       id="sub-notes"
                       rows={3}
@@ -255,7 +271,6 @@ export function PlayerSubstitutePoolPage() {
                 </div>
 
                 <div className="player-dash__readonly-strip">
-                  <span>Display name: {account.displayName || "—"}</span>
                   <span>Email: {account.email}</span>
                 </div>
 
@@ -263,7 +278,7 @@ export function PlayerSubstitutePoolPage() {
                   <button
                     type="submit"
                     className="player-dash__action player-dash__action--tournaments player-dash__action--lead"
-                    disabled={busy || !account.eligibleForRegistration || !rolesSelected}
+                    disabled={busy || !account.eligibleForRegistration || !formComplete}
                   >
                     <DashboardActionIcon name="tournaments" />
                     <span>{busy ? "Submitting…" : "Join substitute pool"}</span>
@@ -273,9 +288,9 @@ export function PlayerSubstitutePoolPage() {
                   </Link>
                 </div>
 
-                {!rolesSelected ? (
+                {!formComplete ? (
                   <p className="player-reg__field-hint player-reg__field-hint--warn">
-                    Pick at least one preferred role to continue.
+                    Complete all required fields — display name, MMR, phone, location, and at least one role.
                   </p>
                 ) : null}
               </form>

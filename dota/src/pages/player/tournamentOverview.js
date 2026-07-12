@@ -21,6 +21,9 @@ export function getTournamentState(tournament, account) {
   if (status === "pending") {
     return { key: "pending", label: "Awaiting approval", tone: "warm" };
   }
+  if (status === "rejected" && substituteAvailable) {
+    return { key: "substitute", label: "Substitute pool open", tone: "secondary" };
+  }
   if (status === "rejected") {
     return { key: "rejected", label: "Not approved", tone: "danger" };
   }

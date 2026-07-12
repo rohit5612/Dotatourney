@@ -19,12 +19,12 @@ import {
   PublicRegisterRedirect,
   PublicRegisterRoute,
   PublicRulesRoute,
+  PublicSponsorsRoute,
   PublicScheduleRoute,
   PublicSeasonsRoute,
   PublicSeasonDetailRoute,
   PublicTermsRoute,
   PublicTeamsRoute,
-  PublicTournamentRoute,
 } from "./pages/public/PublicRouteWrappers.jsx";
 
 const PlayerLoginPage = lazy(() =>
@@ -183,12 +183,13 @@ export default function App() {
 
         <Route element={<PublicLayout />}>
           <Route index element={<PublicLandingRoute />} />
-          <Route path="tournament" element={<PublicTournamentRoute />} />
+          <Route path="tournament" element={<Navigate to="/" replace />} />
           <Route path="schedule" element={<PublicScheduleRoute />} />
           <Route path="teams" element={<PublicTeamsRoute />} />
           <Route path="register" element={<PublicRegisterRedirect />} />
           <Route path="register-legacy" element={<PublicRegisterRoute />} />
           <Route path="rules" element={<PublicRulesRoute />} />
+          <Route path="sponsors" element={<PublicSponsorsRoute />} />
           <Route path="privacy" element={<PublicPrivacyRoute />} />
           <Route path="cookies" element={<PublicCookiesRoute />} />
           <Route path="terms" element={<PublicTermsRoute />} />

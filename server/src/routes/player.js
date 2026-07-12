@@ -225,18 +225,30 @@ router.patch("/me", requirePlayer, async (req, res, next) => {
       displayName: z.string().min(1).max(80).optional(),
       phoneNumber: optionalPhoneNumberSchema,
       bio: z.string().max(500).optional(),
-      mmr: z.number().int().min(0).max(20000).nullable().optional(),
-      preferredRoles: z.array(z.string().min(1)).optional(),
+      mmr: z
+        .union([z.number().int().min(0).max(20000), z.string()])
+        .nullable()
+        .optional()
+        .transform((val) => {
+          if (val == null || val === "") return null;
+          const n = typeof val === "number" ? val : Number(String(val).trim());
+          if (!Number.isFinite(n)) return null;
+          return Math.trunc(n);
+        }),
+      preferredRoles: z.array(z.union([z.string(), z.number()])).optional(),
       location: z.string().max(120).optional(),
     });
     const payload = schema.parse(req.body);
     const patch = {
-      displayName: payload.displayName,
+      displayName: payload.displayName !== undefined ? String(payload.displayName).trim() : undefined,
       phoneNumber: payload.phoneNumber,
-      bio: payload.bio,
+      bio: payload.bio !== undefined ? String(payload.bio) : undefined,
       mmr: payload.mmr,
-      preferredRoles: payload.preferredRoles,
-      location: payload.location,
+      preferredRoles:
+        payload.preferredRoles !== undefined
+          ? payload.preferredRoles.map((role) => String(role).trim()).filter(Boolean)
+          : undefined,
+      location: payload.location !== undefined ? String(payload.location).trim() : undefined,
     };
     if (
       payload.mmr != null ||
@@ -696,11 +708,14 @@ router.post("/tournaments/:slug/substitute", requirePlayer, async (req, res, nex
   try {
     const body = z
       .object({
-        availability: z.string().max(500).optional().default(""),
-        notes: z.string().max(1000).optional().default(""),
+        availability: z.union([z.string(), z.number()]).optional().default(""),
+        notes: z.union([z.string(), z.number()]).optional().default(""),
       })
       .parse(req.body);
-    const result = await createSubstituteSignup(req.playerAccount, req.params.slug, body);
+    const result = await createSubstituteSignup(req.playerAccount, req.params.slug, {
+      availability: String(body.availability ?? "").slice(0, 500),
+      notes: String(body.notes ?? "").slice(0, 1000),
+    });
     res.status(201).json(result);
   } catch (error) {
     next(error);

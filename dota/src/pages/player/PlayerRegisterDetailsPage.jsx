@@ -11,20 +11,32 @@ import {
 } from "../../components/player/RegistrationFlow.jsx";
 import { roles } from "../../constants/tournament";
 import { playerApi } from "../../lib/playerApi";
-import { isValidPhoneNumber, PHONE_NUMBER_ERROR, sanitizePhoneInput } from "../../lib/phoneNumber";
+import {
+  buildRegistrationProfilePatch,
+  registrationProfileFormComplete,
+  validateRegistrationProfile,
+} from "../../lib/registrationProfile";
+import { sanitizePhoneInput } from "../../lib/phoneNumber";
 
 export function PlayerRegisterDetailsPage() {
   const { slug } = useParams();
   const { account, refreshMe } = useOutletContext();
   const navigate = useNavigate();
   const { tournament, loading: tournamentLoading } = useRegistrationTournament(slug);
-  const [form, setForm] = useState({ mmr: "", preferredRoles: [], location: "", phoneNumber: "" });
+  const [form, setForm] = useState({
+    displayName: "",
+    mmr: "",
+    preferredRoles: [],
+    location: "",
+    phoneNumber: "",
+  });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!account) return;
     setForm({
+      displayName: account.displayName || account.steamPersona || "",
       mmr: account.mmr ?? "",
       preferredRoles: account.preferredRoles || [],
       location: account.location || "",
@@ -45,18 +57,14 @@ export function PlayerRegisterDetailsPage() {
     e.preventDefault();
     setBusy(true);
     setError("");
-    if (form.phoneNumber && !isValidPhoneNumber(form.phoneNumber)) {
-      setError(PHONE_NUMBER_ERROR);
+    const validationError = validateRegistrationProfile(form);
+    if (validationError) {
+      setError(validationError);
       setBusy(false);
       return;
     }
     try {
-      await playerApi.patchMe({
-        mmr: form.mmr === "" ? null : Number(form.mmr),
-        preferredRoles: form.preferredRoles,
-        location: form.location,
-        phoneNumber: form.phoneNumber,
-      });
+      await playerApi.patchMe(buildRegistrationProfilePatch(form));
       await refreshMe?.();
       navigate(`/dashboard/checkout/${slug}`);
     } catch (err) {
@@ -68,7 +76,7 @@ export function PlayerRegisterDetailsPage() {
 
   if (!account) return null;
 
-  const rolesSelected = form.preferredRoles.length > 0;
+  const formComplete = registrationProfileFormComplete(form);
 
   return (
     <div className="player-reg">
@@ -107,7 +115,7 @@ export function PlayerRegisterDetailsPage() {
                 </span>
                 <div>
                   <h2 className="player-dash__card-title">Player details</h2>
-                  <p className="player-dash__card-sub">Prefilled from your profile — edit if anything changed</p>
+                  <p className="player-dash__card-sub">Confirm or update your profile before checkout</p>
                 </div>
               </div>
             </header>
@@ -116,11 +124,23 @@ export function PlayerRegisterDetailsPage() {
 
             <form onSubmit={onSubmit} className="player-reg__form">
               <div className="player-dash__settings-form-grid">
+                <div className="player-auth__field player-reg__field-span">
+                  <label htmlFor="reg-display-name">Display name</label>
+                  <input
+                    id="reg-display-name"
+                    required
+                    value={form.displayName}
+                    onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
+                    placeholder="How you appear on rosters and cards"
+                    maxLength={80}
+                  />
+                </div>
                 <div className="player-auth__field">
                   <label htmlFor="reg-mmr">MMR</label>
                   <input
                     id="reg-mmr"
                     type="number"
+                    required
                     min={0}
                     max={20000}
                     value={form.mmr}
@@ -133,6 +153,7 @@ export function PlayerRegisterDetailsPage() {
                   <input
                     id="reg-phone"
                     type="tel"
+                    required
                     inputMode="numeric"
                     autoComplete="tel-national"
                     maxLength={10}
@@ -147,9 +168,11 @@ export function PlayerRegisterDetailsPage() {
                   <label htmlFor="reg-location">Location</label>
                   <input
                     id="reg-location"
+                    required
                     value={form.location}
                     onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
                     placeholder="City, country"
+                    maxLength={120}
                   />
                 </div>
               </div>
@@ -172,7 +195,6 @@ export function PlayerRegisterDetailsPage() {
               </div>
 
               <div className="player-dash__readonly-strip">
-                <span>Display name: {account.displayName || "—"}</span>
                 <span>Email: {account.email}</span>
               </div>
 
@@ -180,7 +202,7 @@ export function PlayerRegisterDetailsPage() {
                 <button
                   type="submit"
                   className="player-dash__action player-dash__action--tournaments player-dash__action--lead"
-                  disabled={busy || !account.eligibleForRegistration || !rolesSelected}
+                  disabled={busy || !account.eligibleForRegistration || !formComplete}
                 >
                   <DashboardActionIcon name="tournaments" />
                   <span>{busy ? "Saving…" : "Continue to checkout"}</span>
@@ -190,9 +212,9 @@ export function PlayerRegisterDetailsPage() {
                 </Link>
               </div>
 
-              {!rolesSelected ? (
+              {!formComplete ? (
                 <p className="player-reg__field-hint player-reg__field-hint--warn">
-                  Pick at least one preferred role to continue.
+                  Complete all required fields — display name, MMR, phone, location, and at least one role.
                 </p>
               ) : null}
             </form>

@@ -4,7 +4,8 @@ import { HiOutlineMegaphone, HiOutlineXMark } from "react-icons/hi2";
 import { formatAnnouncementPostedAt, pickBannerAnnouncement } from "../lib/announcementEntries.js";
 
 export function LandingBannerAnnouncement({ tournament }) {
-  const banner = useMemo(() => pickBannerAnnouncement(tournament?.banner_announcements), [tournament?.banner_announcements]);
+  const bannerSource = tournament?.banner_announcements;
+  const banner = useMemo(() => pickBannerAnnouncement(bannerSource), [JSON.stringify(bannerSource ?? [])]);
   const [dismissed, setDismissed] = useState(false);
   const [mounted, setMounted] = useState(false);
 

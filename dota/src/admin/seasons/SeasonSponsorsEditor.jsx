@@ -5,6 +5,7 @@ import {
   SPONSOR_SOCIAL_FIELDS,
   SPONSOR_TIERS,
   createEmptySponsor,
+  isValidSponsor,
   sponsorTierLabel,
 } from "../../utils/seasonContentSchema.js";
 
@@ -26,18 +27,22 @@ export function SeasonSponsorsEditor({ value, onChange, disabled = false }) {
   const sponsors = Array.isArray(value?.sponsors) ? value.sponsors : [];
   const [editingIndex, setEditingIndex] = useState(null);
   const [draft, setDraft] = useState(null);
-  const [deleteIndex, setDeleteIndex] = useState(null);
+  const [modalError, setModalError] = useState("");
 
   function updateSection(patch) {
     onChange({ ...value, section: { ...section, ...patch } });
   }
 
+  const [deleteIndex, setDeleteIndex] = useState(null);
+
   function openCreate() {
+    setModalError("");
     setDraft(createEmptySponsor());
     setEditingIndex("new");
   }
 
   function openEdit(index) {
+    setModalError("");
     setDraft({
       ...sponsors[index],
       socials: { ...(sponsors[index]?.socials || {}) },
@@ -48,16 +53,35 @@ export function SeasonSponsorsEditor({ value, onChange, disabled = false }) {
   function closeModal() {
     setEditingIndex(null);
     setDraft(null);
+    setModalError("");
   }
 
   function saveModal() {
     if (!draft) return;
+    if (!isValidSponsor(draft)) {
+      setModalError("Name, logo URL, and tier are required before saving a sponsor.");
+      return;
+    }
+    const nextSponsor = {
+      ...draft,
+      id: String(draft.id || createEmptySponsor().id).trim(),
+      name: String(draft.name).trim(),
+      tagline: String(draft.tagline ?? "").trim(),
+      tier: String(draft.tier || "partner").trim(),
+      logoUrl: String(draft.logoUrl).trim(),
+      order: Number.isFinite(Number(draft.order)) ? Number(draft.order) : 0,
+      socials: Object.fromEntries(
+        SPONSOR_SOCIAL_FIELDS.map(({ key }) => [key, String(draft.socials?.[key] ?? "").trim()]).filter(
+          ([, value]) => value.length > 0,
+        ),
+      ),
+    };
     if (editingIndex === "new") {
-      onChange({ ...value, sponsors: [...sponsors, draft] });
+      onChange({ ...value, sponsors: [...sponsors, nextSponsor] });
     } else if (typeof editingIndex === "number") {
       onChange({
         ...value,
-        sponsors: sponsors.map((sponsor, i) => (i === editingIndex ? draft : sponsor)),
+        sponsors: sponsors.map((sponsor, i) => (i === editingIndex ? nextSponsor : sponsor)),
       });
     }
     closeModal();
@@ -138,6 +162,7 @@ export function SeasonSponsorsEditor({ value, onChange, disabled = false }) {
                 const linkCount = SPONSOR_SOCIAL_FIELDS.filter(({ key }) =>
                   String(sponsor.socials?.[key] || "").trim(),
                 ).length;
+                const incomplete = !isValidSponsor(sponsor);
                 return (
                   <tr key={sponsor.id || index} className="border-b border-border/60 last:border-0">
                     <td className="px-3 py-3">
@@ -155,7 +180,9 @@ export function SeasonSponsorsEditor({ value, onChange, disabled = false }) {
                         )}
                         <div>
                           <p className="font-medium">{sponsor.name || "—"}</p>
-                          {sponsor.tagline ? (
+                          {incomplete ? (
+                            <p className="text-xs text-destructive">Incomplete — add name and logo</p>
+                          ) : sponsor.tagline ? (
                             <p className="text-xs text-muted-foreground">{sponsor.tagline}</p>
                           ) : null}
                         </div>
@@ -215,10 +242,16 @@ export function SeasonSponsorsEditor({ value, onChange, disabled = false }) {
       >
         {draft ? (
           <div className="grid gap-3 sm:grid-cols-2">
+            {modalError ? (
+              <p className="sm:col-span-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {modalError}
+              </p>
+            ) : null}
             <Field label="Name">
               <input
                 className={inputClassName()}
                 value={draft.name || ""}
+                required
                 disabled={disabled}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
               />
@@ -258,6 +291,7 @@ export function SeasonSponsorsEditor({ value, onChange, disabled = false }) {
               <input
                 className={`${inputClassName()} sm:col-span-2`}
                 value={draft.logoUrl || ""}
+                required
                 disabled={disabled}
                 onChange={(e) => setDraft({ ...draft, logoUrl: e.target.value })}
                 placeholder="/images/sponsors/logo.png or https://…"
