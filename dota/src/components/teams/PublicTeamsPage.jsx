@@ -44,7 +44,7 @@ export function PublicTeamsPage({ event, message, navigate }) {
 
   const heroSubtitle = squadCountLabel(rawTeams.length || tournament?.team_count);
 
-  if (!tournamentMode || !rawTeams.length) {
+  if (!rawTeams.length) {
     return (
       <div className="teams-page">
         {message ? <p className="teams-page__message">{message}</p> : null}

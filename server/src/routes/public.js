@@ -249,6 +249,8 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
   const publicTeams = data.approvedRoster
     ? buildTeamsWithActivePlayers(data.approvedRoster).map((team) => mapPublicTeam(team))
     : (data.teams || []).map((team) => mapPublicTeam(team));
+  const hasApprovedRoster = Boolean(data.approvedRoster?.teams?.length);
+  const exposeTeamsPublicly = hasApprovedRoster || visibilityMode !== "demo";
   const standingsTeams =
     visibilityMode === "demo"
       ? Array.from({ length: data.tournament.team_count }, (_, index) => ({ name: `Team ${index + 1}` }))
@@ -266,12 +268,11 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
   const honors = buildPublicHonorsPayload(matches, format, data.tournament.tournament_honors);
   return {
     tournament: data.tournament,
-    teams: visibilityMode === "demo" ? [] : publicTeams,
+    teams: exposeTeamsPublicly ? publicTeams : [],
     /** Admin team-setup logos/accent — used to resolve approved-roster teams on the public site. */
     setupTeams:
-      visibilityMode === "demo"
-        ? []
-        : (data.teams || []).map((team) => ({
+      exposeTeamsPublicly
+        ? (data.teams || []).map((team) => ({
             id: team.id,
             name: team.name,
             logoUrl: resolvePublicTeamLogo(team.logoUrl || team.logo_url || ""),

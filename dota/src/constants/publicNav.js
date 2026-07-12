@@ -14,10 +14,8 @@ export const PUBLIC_NAV_LINKS = [
   { href: "/sponsors", label: "Sponsors" },
 ];
 
-/** Show Teams when tournament mode has an approved roster on the public payload. */
+/** Show Teams when the public payload includes roster teams (approved roster or tournament mode). */
 export function isTeamsNavVisible(event) {
-  const tournament = event?.tournament;
-  if (!tournament || tournament.visibility_mode === "demo") return false;
   return (event?.teams || []).length > 0;
 }
 

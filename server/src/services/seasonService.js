@@ -333,6 +333,8 @@ export async function getSeasonBySlug(slug) {
         data.approvedRoster?.teams?.length > 0
           ? buildTeamsWithActivePlayers(data.approvedRoster)
           : data.teams || [];
+      const hasApprovedRoster = Boolean(data.approvedRoster?.teams?.length);
+      const exposeTeamsPublicly = hasApprovedRoster || visibilityMode !== "demo";
       let matches = (data.matches || []).map(hydrateMatchRow);
       if (format === "blast" && visibilityMode !== "demo" && teams.length > 0) {
         matches = applyBlastGroupSeeding(teams, matches).matches;
@@ -357,7 +359,7 @@ export async function getSeasonBySlug(slug) {
 
       tournamentPayload = {
         tournament,
-        teams: visibilityMode === "demo" ? [] : teams,
+        teams: exposeTeamsPublicly ? teams : [],
         matches,
         honors: buildPublicHonorsPayload(matches, format, tournament.tournament_honors),
         standings: buildStandings(standingsTeams, matches, format),
