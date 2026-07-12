@@ -270,14 +270,14 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
     tournament: data.tournament,
     teams: exposeTeamsPublicly ? publicTeams : [],
     /** Admin team-setup logos/accent — used to resolve approved-roster teams on the public site. */
-    setupTeams:
-      exposeTeamsPublicly
-        ? (data.teams || []).map((team) => ({
-            id: team.id,
-            name: team.name,
-            logoUrl: resolvePublicTeamLogo(team.logoUrl || team.logo_url || ""),
-            accentColor: team.accentColor || team.accent_color || "",
-          })),
+    setupTeams: exposeTeamsPublicly
+      ? (data.teams || []).map((team) => ({
+          id: team.id,
+          name: team.name,
+          logoUrl: resolvePublicTeamLogo(team.logoUrl || team.logo_url || ""),
+          accentColor: team.accentColor || team.accent_color || "",
+        }))
+      : [],
     matches,
     honors,
     schedule: data.schedule,
