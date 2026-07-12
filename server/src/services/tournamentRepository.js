@@ -587,13 +587,14 @@ export async function getRosterSnapshot(tournamentId, rosterId) {
     [rosterId],
   );
   const playersResult = await pool.query(
-    `SELECT id, source_player_id AS "sourcePlayerId", registration_id AS "registrationId",
-            player_account_id AS "playerAccountId", name, display_name AS "displayName", role, roles, mmr,
-            steam_name AS "steamName", steam_profile AS "steamProfile", discord_handle AS "discordHandle",
-            location, is_captain AS "isCaptain"
-     FROM roster_snapshot_players
-     WHERE roster_snapshot_id = $1
-     ORDER BY created_at ASC`,
+    `SELECT rsp.id, rsp.source_player_id AS "sourcePlayerId", rsp.registration_id AS "registrationId",
+            rsp.player_account_id AS "playerAccountId", rsp.name, rsp.display_name AS "displayName", rsp.role, rsp.roles, rsp.mmr,
+            rsp.steam_name AS "steamName", rsp.steam_profile AS "steamProfile", rsp.discord_handle AS "discordHandle",
+            rsp.location, rsp.is_captain AS "isCaptain", pa.slug AS "slug"
+     FROM roster_snapshot_players rsp
+     LEFT JOIN player_accounts pa ON pa.id = rsp.player_account_id
+     WHERE rsp.roster_snapshot_id = $1
+     ORDER BY rsp.created_at ASC`,
     [rosterId],
   );
   const baselineTeamPlayersResult = await pool.query(

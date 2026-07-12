@@ -87,6 +87,11 @@ export function playerDisplayName(player) {
   );
 }
 
+export function playerProfileSlug(player) {
+  const slug = String(player?.slug || player?.playerSlug || player?.player_slug || "").trim();
+  return slug || null;
+}
+
 export function registrationDisplayName(registration) {
   return (
     String(registration?.displayName || registration?.display_name || "").trim() ||

@@ -14,13 +14,11 @@ export const PUBLIC_NAV_LINKS = [
   { href: "/sponsors", label: "Sponsors" },
 ];
 
-/** Show Teams when tournament mode has an approved roster on the public payload and a generated bracket. */
+/** Show Teams when tournament mode has an approved roster on the public payload. */
 export function isTeamsNavVisible(event) {
   const tournament = event?.tournament;
   if (!tournament || tournament.visibility_mode === "demo") return false;
-  const hasRosterTeams = (event?.teams || []).length > 0;
-  const hasGeneratedBracket = (event?.matches || []).length > 0;
-  return hasRosterTeams && hasGeneratedBracket;
+  return (event?.teams || []).length > 0;
 }
 
 export function resolvePublicNavLinks(event) {

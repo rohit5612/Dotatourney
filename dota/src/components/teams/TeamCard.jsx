@@ -1,4 +1,5 @@
 import { memo } from "react";
+import { Link } from "react-router-dom";
 import { HiOutlineChartBar, HiOutlineTrophy } from "react-icons/hi2";
 import { TeamLogoImg } from "../TeamLogoImg.jsx";
 import { useInView } from "../../hooks/useInView.js";
@@ -8,6 +9,7 @@ import { PlayerRoleIcons } from "../PlayerRoleIcons.jsx";
 import {
   playerDisplayName,
   playerInitials,
+  playerProfileSlug,
   teamInitials,
 } from "../../utils/teamPage.js";
 import { TeamHonorBadge } from "../honors/TournamentHonorsPanel.jsx";
@@ -96,11 +98,10 @@ export const TeamCard = memo(function TeamCard({ team, index = 0 }) {
           {roster.map((player) => {
             const isCaptain = Boolean(player.isCaptain);
             const name = playerDisplayName(player);
-            return (
-              <li
-                key={player.id || `${name}-${player.role}`}
-                className={`teams-roster-row${isCaptain ? " teams-roster-row--captain" : ""}`}
-              >
+            const slug = playerProfileSlug(player);
+            const rowClassName = `teams-roster-row${isCaptain ? " teams-roster-row--captain" : ""}${slug ? " teams-roster-row--linkable" : ""}`;
+            const rowContent = (
+              <>
                 <span className="teams-roster-row__avatar" aria-hidden>
                   {playerInitials(name)}
                 </span>
@@ -112,6 +113,22 @@ export const TeamCard = memo(function TeamCard({ team, index = 0 }) {
                     <span>Captain</span>
                   </span>
                 ) : null}
+              </>
+            );
+
+            if (slug) {
+              return (
+                <li key={player.id || `${name}-${player.role}`}>
+                  <Link to={`/player/${slug}`} className={rowClassName} aria-label={`${name} player profile`}>
+                    {rowContent}
+                  </Link>
+                </li>
+              );
+            }
+
+            return (
+              <li key={player.id || `${name}-${player.role}`} className={rowClassName}>
+                {rowContent}
               </li>
             );
           })}

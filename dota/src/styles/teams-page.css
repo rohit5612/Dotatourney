@@ -477,6 +477,20 @@
   opacity: 0.88;
 }
 
+a.teams-roster-row {
+  text-decoration: none;
+  color: inherit;
+}
+
+.teams-roster-row--linkable {
+  cursor: pointer;
+}
+
+.teams-roster-row--linkable:focus-visible {
+  outline: 2px solid rgb(var(--teams-accent-rgb) / 0.65);
+  outline-offset: 2px;
+}
+
 .teams-card:hover .teams-roster-row {
   opacity: 1;
 }
