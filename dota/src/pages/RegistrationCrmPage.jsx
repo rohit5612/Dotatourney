@@ -222,7 +222,7 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
               {crmSheetSyncPending ? "Syncing…" : "Sync to Google Sheet"}
             </button>
             <p className="max-w-md text-right text-xs text-muted-foreground">
-              Syncs the filtered rows below to <span className="font-mono text-foreground">C5:K{filtered.length ? 4 + filtered.length : 5}</span>{" "}
+              Syncs the filtered rows below to <span className="font-mono text-foreground">C5:L{filtered.length ? 4 + filtered.length : 5}</span>{" "}
               (row 5 = first player). Uses spreadsheet link + tab from Setup → Admin.
             </p>
           </div>

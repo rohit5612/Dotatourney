@@ -5,7 +5,7 @@ const sheetTabKey = (tournamentId) => `bpcl-google-sheet-tab:${tournamentId}`;
 const legacySheetIdKey = (tournamentId) => `bpcl-google-sheet:${tournamentId}`;
 
 export const CRM_SHEET_COLUMN_HINT =
-  "C name · D Steam name · E MMR · F roles · G Discord · H phone · I Steam profile link · J status · K notes";
+  "C name · D Steam name · E MMR · F roles · G Discord · H phone · I Steam profile link · J status · K notes · L MMR";
 
 /** Extract spreadsheet ID from a raw ID or full Google Sheets URL. */
 export function parseSpreadsheetId(input) {
@@ -47,7 +47,7 @@ export function setGoogleSheetPrefs(tournamentId, { spreadsheetId = "", sheetTab
 export function buildCrmSheetSyncConfirmMessage({ rowCount, sheetTabName }) {
   const tabHint = sheetTabName ? `the “${sheetTabName}” tab` : "the first worksheet tab";
   const endRow = rowCount > 0 ? 4 + rowCount : 5;
-  const rangeHint = rowCount > 0 ? `C5:K${endRow}` : "the existing C5:K… block";
+  const rangeHint = rowCount > 0 ? `C5:L${endRow}` : "the existing C5:L… block";
   return (
     `Sync ${rowCount} registration row(s) to Google Sheets?\n\n` +
     `${tabHint} will be cleared for ${rangeHint}, then filled from row 5:\n` +
