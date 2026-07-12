@@ -451,7 +451,7 @@ export function TournamentDraftModal({
               <div className="setup-draft-callout">
                 <strong>Google Sheets</strong>
                 <p>
-                  CRM sync — writes registration rows to <code>C5:L…</code> on the worksheet tab below. Settings are saved per
+                  CRM sync — writes registration rows to <code>C5:K…</code> on the worksheet tab below. Settings are saved per
                   tournament (spreadsheet link + tab name).
                 </p>
                 <div className="setup-draft-admin-grid">

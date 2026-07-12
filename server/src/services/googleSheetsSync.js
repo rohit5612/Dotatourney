@@ -9,7 +9,7 @@ const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 
 const CELL_MAX = 49000;
 
-/** First data row for CRM layout (1-based). Columns C–L only. */
+/** First data row for CRM layout (1-based). Columns C–K only. */
 const CRM_SHEET_START_ROW = 5;
 
 function assertGoogleSheetsConfigured() {
@@ -160,13 +160,13 @@ function escapeSheetTitleForRange(title) {
 }
 
 /**
- * Last CRM data row (any of C–L) from startRow downward.
+ * Last CRM data row (any of C–K) from startRow downward.
  * @returns {number} 1-based row index, or startRow - 1 when the block is empty
  */
 async function findLastPopulatedCrmRow(sheetsApi, spreadsheetId, safeTitle, startRow) {
   const { data } = await sheetsApi.spreadsheets.values.get({
     spreadsheetId,
-    range: `'${safeTitle}'!C${startRow}:L`,
+    range: `'${safeTitle}'!C${startRow}:K`,
   });
   const rows = data.values || [];
   for (let i = rows.length - 1; i >= 0; i--) {
@@ -179,7 +179,7 @@ async function findLastPopulatedCrmRow(sheetsApi, spreadsheetId, safeTitle, star
 }
 
 /**
- * Writes CRM registration rows only: C{start}:L{start+n-1} on one worksheet tab.
+ * Writes CRM registration rows only: C{start}:K{start+n-1} on one worksheet tab.
  * No other tabs, columns, or tournament data are written.
  *
  * @param {string} tournamentId
@@ -240,7 +240,6 @@ export async function syncCrmRegistrationsToGoogleSheet(tournamentId, spreadshee
     cellValue(r.steamProfile),
     cellValue(r.registrationStatus),
     cellValue(r.notes),
-    cellValue(r.mmr),
   ]);
 
   const rowCount = values.length;
@@ -252,13 +251,13 @@ export async function syncCrmRegistrationsToGoogleSheet(tournamentId, spreadshee
 
     await sheetsApi.spreadsheets.values.clear({
       spreadsheetId,
-      range: `'${safeTitle}'!C${start}:L${clearEndRow}`,
+      range: `'${safeTitle}'!C${start}:K${clearEndRow}`,
     });
 
     if (rowCount > 0) {
       await sheetsApi.spreadsheets.values.update({
         spreadsheetId,
-        range: `'${safeTitle}'!C${start}:L${writeEndRow}`,
+        range: `'${safeTitle}'!C${start}:K${writeEndRow}`,
         valueInputOption: "RAW",
         resource: { values },
       });
@@ -268,7 +267,7 @@ export async function syncCrmRegistrationsToGoogleSheet(tournamentId, spreadshee
       ok: true,
       spreadsheetId,
       sheetTitle,
-      range: rowCount ? `C${start}:L${writeEndRow}` : `C${start}:L${clearEndRow} (cleared)`,
+      range: rowCount ? `C${start}:K${writeEndRow}` : `C${start}:K${clearEndRow} (cleared)`,
       rowsWritten: rowCount,
       syncedAt: new Date().toISOString(),
     };
