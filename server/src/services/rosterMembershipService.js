@@ -1,5 +1,34 @@
 import { pool } from "../db/pool.js";
 
+function normalizeRolesArray(roles, role) {
+  if (Array.isArray(roles) && roles.length) return roles;
+  if (typeof roles === "string") {
+    try {
+      const parsed = JSON.parse(roles);
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+    } catch {
+      // ignore invalid JSON
+    }
+  }
+  const single = String(role || "").trim();
+  return single ? [single] : [];
+}
+
+function mapRosterPlayerRow(row) {
+  const name = row.display_name || row.name;
+  return {
+    id: row.id,
+    name,
+    displayName: name,
+    role: row.role,
+    roles: normalizeRolesArray(row.roles, row.role),
+    mmr: row.mmr,
+    isCaptain: Boolean(row.is_captain),
+    playerAccountId: row.player_account_id || null,
+    slug: row.player_slug || null,
+  };
+}
+
 /** Whether this roster snapshot uses membership rows (post-migration). */
 export async function rosterHasMemberships(rosterId, client = pool) {
   const { rows } = await client.query(
@@ -22,7 +51,6 @@ export async function loadActiveTeamPlayers(rosterId, teamId, client = pool) {
        WHERE rstm.roster_snapshot_id = $1
          AND rstm.snapshot_team_id = $2
          AND rstm.status = 'active'
-         AND rsp.player_account_id IS NOT NULL
        ORDER BY rsp.is_captain DESC, rsp.display_name ASC NULLS LAST, rsp.name ASC`,
       [rosterId, teamId],
     );
@@ -36,7 +64,6 @@ export async function loadActiveTeamPlayers(rosterId, teamId, client = pool) {
      JOIN roster_snapshot_players rsp ON rsp.id = rstp.player_id
      LEFT JOIN player_accounts pa ON pa.id = rsp.player_account_id
      WHERE rstp.roster_snapshot_id = $1 AND rstp.team_id = $2
-       AND rsp.player_account_id IS NOT NULL
      ORDER BY rsp.is_captain DESC, rsp.display_name ASC NULLS LAST, rsp.name ASC`,
     [rosterId, teamId],
   );
@@ -230,22 +257,14 @@ export async function findActivePlayerTeamOnTournament(playerAccountId, tourname
       player: {
         id: row.player_id,
         name: row.display_name || row.name,
+        displayName: row.display_name || row.name,
         role: row.role,
+        roles: normalizeRolesArray(row.roles, row.role),
         mmr: row.mmr,
       },
-      teammates: teammates.map((p) => ({
-        id: p.id,
-        name: p.display_name || p.name,
-        role: p.role,
-        playerAccountId: p.player_account_id,
-        slug: p.player_slug || null,
-      })),
+      teammates: teammates.map(mapRosterPlayerRow),
       formerTeammates: (await loadFormerTeamPlayers(rosterId, row.team_id)).map((p) => ({
-        id: p.id,
-        name: p.display_name || p.name,
-        role: p.role,
-        playerAccountId: p.player_account_id,
-        slug: p.player_slug || null,
+        ...mapRosterPlayerRow(p),
         startedAt: p.started_at,
         endedAt: p.ended_at,
       })),
@@ -279,16 +298,12 @@ export async function findActivePlayerTeamOnTournament(playerAccountId, tourname
     player: {
       id: row.player_id,
       name: row.display_name || row.name,
+      displayName: row.display_name || row.name,
       role: row.role,
+      roles: normalizeRolesArray(row.roles, row.role),
       mmr: row.mmr,
     },
-    teammates: teammates.map((p) => ({
-      id: p.id,
-      name: p.display_name || p.name,
-      role: p.role,
-      playerAccountId: p.player_account_id,
-      slug: p.player_slug || null,
-    })),
+    teammates: teammates.map(mapRosterPlayerRow),
     formerTeammates: [],
   };
 }

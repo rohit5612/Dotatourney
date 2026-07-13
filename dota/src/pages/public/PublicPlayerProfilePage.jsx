@@ -1,9 +1,10 @@
 import { useMemo } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { HiOutlineArrowLeft, HiOutlineStar, HiOutlineTrophy } from "react-icons/hi2";
 import { CardTierBadge } from "../../components/cards/CardTierBadge.jsx";
 import { PlayerProfileCard } from "../../components/cards/PlayerProfileCard.jsx";
 import { HoloProfileViewportFx } from "../../components/player/HoloProfileViewportFx.jsx";
+import { PlayerRoleIcons } from "../../components/PlayerRoleIcons.jsx";
 import { PageLoadingSpinner } from "../../components/PageLoadingSpinner.jsx";
 import { TeamLogoImg } from "../../components/TeamLogoImg.jsx";
 import { SITE_BRAND_SHORT } from "../../constants/siteMeta.js";
@@ -21,6 +22,7 @@ import {
   premiumTierPanelClass,
 } from "../../utils/cardTierEffects.js";
 import { resolveAccountAvatarUrl } from "../../utils/resolvePlayerAvatar.js";
+import { resolveProfileBack } from "../../utils/profileBackNav.js";
 import "../../components/cards/CardTierStyles.css";
 import "../../styles/card-tier-effects.css";
 import "../../styles/card-tier-effects-holo.css";
@@ -179,7 +181,7 @@ function groupStintsBySeason(teamHistory) {
   return [...groups.values()].sort((a, b) => (b.seasonNumber ?? 0) - (a.seasonNumber ?? 0));
 }
 
-function TeammateChip({ mate, isSelf }) {
+function TeammateChip({ mate, isSelf, linkState }) {
   const content = (
     <>
       <span className="player-profile__teammate-chip-avatar" aria-hidden="true">
@@ -187,14 +189,14 @@ function TeammateChip({ mate, isSelf }) {
       </span>
       <span className="player-profile__teammate-chip-copy">
         <span className="player-profile__teammate-chip-name">{mate.name}</span>
-        {mate.role ? <span className="player-profile__teammate-chip-role">{mate.role}</span> : null}
+        <PlayerRoleIcons player={mate} className="player-profile__teammate-chip-roles" size="sm" />
       </span>
     </>
   );
 
   if (mate.slug && !isSelf) {
     return (
-      <Link to={`/player/${mate.slug}`} className="player-profile__teammate-chip">
+      <Link to={`/player/${mate.slug}`} state={linkState} className="player-profile__teammate-chip">
         {content}
       </Link>
     );
@@ -238,6 +240,8 @@ function MatchHistoryRow({ row }) {
 
 export function PublicPlayerProfilePage() {
   const { slug } = useParams();
+  const location = useLocation();
+  const profileBack = resolveProfileBack(location.state);
   const cacheKey = `public:player:${String(slug || "").trim().toLowerCase()}`;
   const fetchProfile = useMemo(() => () => api.getPublicPlayer(slug), [slug]);
   const { data: profile, loading, error } = usePublicCachedQuery(cacheKey, fetchProfile);
@@ -286,8 +290,11 @@ export function PublicPlayerProfilePage() {
       list.unshift({
         id: currentTeam.player.id,
         name: currentTeam.player.name,
+        displayName: currentTeam.player.displayName || currentTeam.player.name,
         role: currentTeam.player.role,
+        roles: currentTeam.player.roles,
         slug: account?.slug,
+        isCaptain: currentTeam.player.isCaptain,
       });
     }
     return list;
@@ -302,9 +309,9 @@ export function PublicPlayerProfilePage() {
       >
         <div className="community-page__hero-overlay" aria-hidden="true" />
         <div className="community-page__hero-inner player-profile__hero-inner">
-          <Link to="/community" className="player-profile__back">
+          <Link to={profileBack.to} className="player-profile__back">
             <HiOutlineArrowLeft aria-hidden="true" />
-            Community
+            {profileBack.label}
           </Link>
           {loading ? (
             <PageLoadingSpinner label="Loading player profile…" compact />
@@ -459,6 +466,7 @@ export function PublicPlayerProfilePage() {
                               key={mate.id || mate.name}
                               mate={mate}
                               isSelf={mate.id === currentTeam.player?.id}
+                              linkState={location.state}
                             />
                           ))}
                         </div>
@@ -469,15 +477,17 @@ export function PublicPlayerProfilePage() {
                         <p className="player-profile__subsection-label">Former members</p>
                         <ul className="player-profile__teammates player-profile__teammates--former">
                           {currentTeam.formerTeammates.map((mate) => (
-                            <li key={`former-${mate.id}`}>
+                            <li key={`former-${mate.id}`} className="player-profile__teammate-former">
                               {mate.slug ? (
-                                <Link to={`/player/${mate.slug}`} className="player-profile__teammate-link">
+                                <Link to={`/player/${mate.slug}`} state={location.state} className="player-profile__teammate-link">
                                   {mate.name}
                                 </Link>
                               ) : (
-                                mate.name
+                                <span className="player-profile__teammate-link player-profile__teammate-link--static">
+                                  {mate.name}
+                                </span>
                               )}
-                              {mate.role ? <span className="player-profile__teammate-role"> · {mate.role}</span> : null}
+                              <PlayerRoleIcons player={mate} className="player-profile__teammate-former-roles" size="sm" />
                             </li>
                           ))}
                         </ul>

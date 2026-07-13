@@ -695,6 +695,41 @@ export function AdminConsole() {
     }
   }
 
+  async function refreshTeamDisplayNames() {
+    if (!tournamentId) {
+      setMessage("Create tournament first.");
+      return;
+    }
+    if (!getAuthToken()) {
+      setMessage("Admin session expired. Please log in again.");
+      return;
+    }
+    const confirmed = window.confirm(
+      "Refresh all team player names from Registration CRM? Approved roster status is kept — no re-approval, bracket, or schedule regeneration.",
+    );
+    if (!confirmed) return;
+    try {
+      const result = await api.refreshTeamDisplayNames(tournamentId);
+      if (result.approvedRoster) {
+        setApprovedRoster(result.approvedRoster);
+      }
+      await refreshTournament(tournamentId, { keepTeamPane: true });
+      await refreshRosters();
+      const parts = [];
+      if (result.workingPlayersUpdated) parts.push(`${result.workingPlayersUpdated} team player(s)`);
+      if (result.snapshotPlayersUpdated) parts.push(`${result.snapshotPlayersUpdated} roster snapshot player(s)`);
+      if (result.captainsUpdated) parts.push(`${result.captainsUpdated} captain label(s)`);
+      if (result.lineupsUpdated) parts.push(`${result.lineupsUpdated} lineup name(s)`);
+      setMessage(
+        parts.length
+          ? `Display names refreshed (${parts.join(", ")}).`
+          : "All display names already match Registration CRM.",
+      );
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
   async function saveRosterSnapshot(name) {
     if (!tournamentId) {
       setMessage("Create tournament first.");
@@ -1121,6 +1156,7 @@ export function AdminConsole() {
             assignPlayer={assignPlayer}
             autoAssign={autoAssign}
             saveTeams={saveTeams}
+            refreshTeamDisplayNames={refreshTeamDisplayNames}
             registrations={registrations}
             addRegistrationPlayer={addRegistrationPlayer}
             markCaptain={markCaptain}

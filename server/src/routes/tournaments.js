@@ -43,6 +43,7 @@ import {
   replaceMatches,
   replaceSchedule,
   replaceTeamsAndPlayers,
+  refreshTeamDisplayNamesFromRegistrations,
   syncApprovedRosterFromTeamSave,
   unpublishTournament,
   updateMatch,
@@ -505,6 +506,18 @@ router.post("/:id/teams", async (req, res, next) => {
     res.json({ teams, players, approvedRoster });
   } catch (error) {
     next(error);
+  }
+});
+
+router.post("/:id/teams/refresh-display-names", async (req, res, next) => {
+  try {
+    const data = await getTournament(req.params.id);
+    if (!data) return res.status(404).json({ message: "Tournament not found" });
+
+    const result = await refreshTeamDisplayNamesFromRegistrations(req.params.id);
+    return res.json(result);
+  } catch (error) {
+    return next(error);
   }
 });
 

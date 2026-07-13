@@ -9,6 +9,7 @@ import {
   orderTeamsForTeamsPage,
   squadCountLabel,
 } from "../../utils/teamPage.js";
+import { PROFILE_BACK_TEAMS } from "../../utils/profileBackNav.js";
 
 export function PublicTeamsPage({ event, message, navigate }) {
   const tournament = event?.tournament;
@@ -80,7 +81,7 @@ export function PublicTeamsPage({ event, message, navigate }) {
 
       <div className="teams-grid">
         {enrichedTeams.map((team, index) => (
-          <TeamCard key={team.id || team.name} team={team} index={index} />
+          <TeamCard key={team.id || team.name} team={team} index={index} profileBack={PROFILE_BACK_TEAMS} />
         ))}
       </div>
     </div>

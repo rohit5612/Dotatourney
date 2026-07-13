@@ -237,6 +237,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  refreshTeamDisplayNames: (id) =>
+    request(`/tournaments/${id}/teams/refresh-display-names`, {
+      method: "POST",
+    }),
   getRosters: (id) => request(`/tournaments/${id}/rosters`),
   getRoster: (id, rosterId) => request(`/tournaments/${id}/rosters/${rosterId}`),
   createRoster: (id, payload) =>

@@ -18,6 +18,7 @@ export function TeamsPage({
   assignPlayer,
   autoAssign,
   saveTeams,
+  refreshTeamDisplayNames,
   registrations = [],
   addRegistrationPlayer,
   markCaptain,
@@ -179,24 +180,34 @@ export function TeamsPage({
                 : "Select a saved roster below or start a new roster to show teams here."}
             </p>
           </div>
-          {isTeamPaneActive ? (
-            <div className="flex flex-wrap gap-2">
-              <input placeholder="Team name" className="rounded-md border border-input bg-background p-2" value={newCaptain.team} onChange={(event) => setNewCaptain((prev) => ({ ...prev, team: event.target.value }))} />
-              <button type="button" className="btn btn-primary" onClick={addCaptain}>
-                Add team
-              </button>
-              <button type="button" className="btn btn-outline" onClick={autoAssign}>
-                Auto assign
-              </button>
-              <button type="button" className="btn btn-primary" onClick={saveTeams}>
-                {editingApprovedRoster ? "Save teams & update roster" : "Save teams"}
-              </button>
-            </div>
-          ) : (
-            <button type="button" className="btn btn-primary" onClick={createNewRosterDraft}>
-              Create new roster
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={refreshTeamDisplayNames}
+              title="Pull latest display names from Registration CRM into team rosters and the approved snapshot"
+            >
+              Refresh names
             </button>
-          )}
+            {isTeamPaneActive ? (
+              <>
+                <input placeholder="Team name" className="rounded-md border border-input bg-background p-2" value={newCaptain.team} onChange={(event) => setNewCaptain((prev) => ({ ...prev, team: event.target.value }))} />
+                <button type="button" className="btn btn-primary" onClick={addCaptain}>
+                  Add team
+                </button>
+                <button type="button" className="btn btn-outline" onClick={autoAssign}>
+                  Auto assign
+                </button>
+                <button type="button" className="btn btn-primary" onClick={saveTeams}>
+                  {editingApprovedRoster ? "Save teams & update roster" : "Save teams"}
+                </button>
+              </>
+            ) : (
+              <button type="button" className="btn btn-primary" onClick={createNewRosterDraft}>
+                Create new roster
+              </button>
+            )}
+          </div>
         </div>
 
         {isTeamPaneActive ? (

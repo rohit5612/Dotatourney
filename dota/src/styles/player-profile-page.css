@@ -748,7 +748,12 @@ a.player-profile__teammate-chip:hover {
 .player-profile__teammate-chip-copy {
   display: flex;
   flex-direction: column;
+  gap: 0.2rem;
   min-width: 0;
+}
+
+.player-profile__teammate-chip-roles {
+  justify-content: flex-start;
 }
 
 .player-profile__teammate-chip-name {
@@ -1185,6 +1190,22 @@ a.player-profile__stint-season-title:hover {
 
 .player-profile__teammate-link:hover {
   color: var(--primary);
+}
+
+.player-profile__teammate-link--static {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.player-profile__teammate-former {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.5rem;
+}
+
+.player-profile__teammate-former-roles {
+  flex-shrink: 0;
 }
 
 .player-profile__teammate-role {

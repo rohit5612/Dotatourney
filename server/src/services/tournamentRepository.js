@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { pool } from "../db/pool.js";
 import { recordTeamProfileChange } from "./teamHistoryService.js";
 import { defaultGroupKeysForTeams } from "./groupAssignment.js";
-import { getPlayerRegistrationById } from "./registrationRepository.js";
+import { getPlayerRegistrationById, resolveRegistrationDisplayName } from "./registrationRepository.js";
 import { resolveEngineConfigForApproval } from "./tournamentEngineService.js";
 import { upsertSeasonForTournament } from "./seasonUpsert.js";
 import { buildPublicHonorsPayload } from "./bracketHonorsEngine.js";
@@ -1114,6 +1114,149 @@ export async function syncApprovedRosterFromTeamSave(tournamentId, rosterId, adm
     await client.query("COMMIT");
     await reseedFutureMatchLineups(tournamentId);
     return { approvedRoster: await getRosterSnapshot(tournamentId, rosterId) };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/** Sync working players + roster snapshots from Registration CRM display names (keeps approved status). */
+export async function refreshTeamDisplayNamesFromRegistrations(tournamentId) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const { rows: registrations } = await client.query(
+      `SELECT id, display_name, steam_name, name, player_account_id
+       FROM player_registrations
+       WHERE tournament_id = $1 AND archived_at IS NULL`,
+      [tournamentId],
+    );
+
+    let workingPlayersUpdated = 0;
+    let snapshotPlayersUpdated = 0;
+    let captainsUpdated = 0;
+    let lineupsUpdated = 0;
+    let touchedApprovedRosterId = null;
+
+    for (const registration of registrations) {
+      const nextName = resolveRegistrationDisplayName(registration);
+      if (!nextName) continue;
+
+      const { rows: workingPlayers } = await client.query(
+        `SELECT id, display_name, name FROM players WHERE tournament_id = $1 AND registration_id = $2`,
+        [tournamentId, registration.id],
+      );
+      const { rows: snapshotPlayers } = await client.query(
+        `SELECT rsp.id, rsp.display_name, rsp.name, rsp.roster_snapshot_id, rs.status
+         FROM roster_snapshot_players rsp
+         JOIN roster_snapshots rs ON rs.id = rsp.roster_snapshot_id
+         WHERE rs.tournament_id = $1 AND rsp.registration_id = $2`,
+        [tournamentId, registration.id],
+      );
+
+      const prevNames = new Set();
+      for (const player of [...workingPlayers, ...snapshotPlayers]) {
+        const prevName = String(player.display_name || player.name || "").trim();
+        if (prevName && prevName !== nextName) prevNames.add(prevName);
+      }
+      const needsWorkingUpdate = workingPlayers.some(
+        (player) => String(player.display_name || player.name || "").trim() !== nextName,
+      );
+      const needsSnapshotUpdate = snapshotPlayers.some(
+        (player) => String(player.display_name || player.name || "").trim() !== nextName,
+      );
+      if (!needsWorkingUpdate && !needsSnapshotUpdate && !prevNames.size) continue;
+
+      if (needsWorkingUpdate) {
+        const workingResult = await client.query(
+          `UPDATE players
+           SET display_name = $3, name = $3
+           WHERE tournament_id = $1
+             AND registration_id = $2
+             AND COALESCE(NULLIF(TRIM(display_name), ''), name) IS DISTINCT FROM $3`,
+          [tournamentId, registration.id, nextName],
+        );
+        workingPlayersUpdated += workingResult.rowCount;
+      }
+
+      if (needsSnapshotUpdate) {
+        const snapshotResult = await client.query(
+          `UPDATE roster_snapshot_players rsp
+           SET display_name = $3, name = $3
+           FROM roster_snapshots rs
+           WHERE rs.tournament_id = $1
+             AND rs.id = rsp.roster_snapshot_id
+             AND rsp.registration_id = $2
+             AND COALESCE(NULLIF(TRIM(rsp.display_name), ''), rsp.name) IS DISTINCT FROM $3
+           RETURNING rsp.roster_snapshot_id, rs.status`,
+          [tournamentId, registration.id, nextName],
+        );
+        snapshotPlayersUpdated += snapshotResult.rowCount;
+        for (const row of snapshotResult.rows) {
+          if (row.status === "approved") {
+            touchedApprovedRosterId = row.roster_snapshot_id;
+          }
+        }
+      }
+
+      for (const prevName of prevNames) {
+        const captainResult = await client.query(
+          `UPDATE teams SET captain = $3 WHERE tournament_id = $1 AND captain = $2`,
+          [tournamentId, prevName, nextName],
+        );
+        captainsUpdated += captainResult.rowCount;
+
+        const captainSnapshotResult = await client.query(
+          `UPDATE roster_snapshot_teams rst
+           SET captain = $3
+           FROM roster_snapshots rs
+           WHERE rs.tournament_id = $1
+             AND rs.id = rst.roster_snapshot_id
+             AND rst.captain = $2`,
+          [tournamentId, prevName, nextName],
+        );
+        captainsUpdated += captainSnapshotResult.rowCount;
+      }
+
+      if (registration.player_account_id) {
+        const lineupResult = await client.query(
+          `UPDATE match_lineup_players
+           SET display_name = $3, updated_at = NOW()
+           WHERE tournament_id = $1
+             AND player_account_id = $2
+             AND display_name IS DISTINCT FROM $3`,
+          [tournamentId, registration.player_account_id, nextName],
+        );
+        lineupsUpdated += lineupResult.rowCount;
+      }
+    }
+
+    if (touchedApprovedRosterId) {
+      await client.query(`UPDATE roster_snapshots SET updated_at = NOW() WHERE id = $1`, [touchedApprovedRosterId]);
+    }
+
+    await client.query("COMMIT");
+
+    const lineupReseed =
+      touchedApprovedRosterId && (snapshotPlayersUpdated > 0 || workingPlayersUpdated > 0)
+        ? await reseedFutureMatchLineups(tournamentId)
+        : { seeded: 0 };
+
+    const approvedRoster = touchedApprovedRosterId
+      ? await getRosterSnapshot(tournamentId, touchedApprovedRosterId)
+      : null;
+
+    return {
+      workingPlayersUpdated,
+      snapshotPlayersUpdated,
+      captainsUpdated,
+      lineupsUpdated,
+      lineupsReseeded: lineupReseed.seeded || 0,
+      approvedRoster,
+    };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

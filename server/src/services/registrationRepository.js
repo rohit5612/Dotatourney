@@ -48,6 +48,15 @@ function defaultDisplayName({ steamName, name }) {
   return String(name || "").trim();
 }
 
+export function resolveRegistrationDisplayName(registration) {
+  const display = String(registration?.display_name ?? registration?.displayName ?? "").trim();
+  if (display) return display;
+  return defaultDisplayName({
+    steamName: registration?.steam_name ?? registration?.steamName,
+    name: registration?.name,
+  });
+}
+
 export function mapRegistrationRow(row, { includeAdminFields = true } = {}) {
   if (!row) return null;
   const base = {

@@ -12,6 +12,7 @@ import {
   playerProfileSlug,
   teamInitials,
 } from "../../utils/teamPage.js";
+import { profileNavState } from "../../utils/profileBackNav.js";
 import { TeamHonorBadge } from "../honors/TournamentHonorsPanel.jsx";
 
 function CrownIcon() {
@@ -22,7 +23,7 @@ function CrownIcon() {
   );
 }
 
-export const TeamCard = memo(function TeamCard({ team, index = 0 }) {
+export const TeamCard = memo(function TeamCard({ team, index = 0, profileBack = null }) {
   const { ref, inView } = useInView({ rootMargin: "280px 0px", threshold: 0.04 });
   const logo = team.logoUrl || team.logo_url || "";
   const logoUrl = normalizeTeamLogoUrl(logo);
@@ -119,7 +120,12 @@ export const TeamCard = memo(function TeamCard({ team, index = 0 }) {
             if (slug) {
               return (
                 <li key={player.id || `${name}-${player.role}`}>
-                  <Link to={`/player/${slug}`} className={rowClassName} aria-label={`${name} player profile`}>
+                  <Link
+                    to={`/player/${slug}`}
+                    state={profileBack ? profileNavState(profileBack) : undefined}
+                    className={rowClassName}
+                    aria-label={`${name} player profile`}
+                  >
                     {rowContent}
                   </Link>
                 </li>
