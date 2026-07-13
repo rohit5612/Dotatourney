@@ -51,6 +51,9 @@ const PlayerResetPasswordPage = lazy(() =>
 const PlayerSetPasswordPage = lazy(() =>
   import("./pages/PlayerAuthPages.jsx").then((m) => ({ default: m.PlayerSetPasswordPage })),
 );
+const OverlayCardPage = lazy(() =>
+  import("./pages/overlay/OverlayCardPage.jsx").then((m) => ({ default: m.OverlayCardPage })),
+);
 
 const PlayerDashboardLayout = lazy(() =>
   import("./pages/player/PlayerDashboardLayout.jsx").then((m) => ({ default: m.PlayerDashboardLayout })),
@@ -180,6 +183,15 @@ export default function App() {
           <Route path="checkout/return" element={<PlayerCheckoutReturnPage />} />
           <Route path="checkout/:slug" element={<PlayerCheckoutPage />} />
         </Route>
+
+        <Route
+          path="/overlay/card/:bpcId"
+          element={
+            <Suspense fallback={<PageLoadingSpinner label="Loading card…" />}>
+              <OverlayCardPage />
+            </Suspense>
+          }
+        />
 
         <Route element={<PublicLayout />}>
           <Route index element={<PublicLandingRoute />} />

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   formatBpcId,
+  normalizeBpcIdParam,
   parseBpcIdNumber,
   publicSteamOnlyProfile,
 } from "./playerAccountRepository.js";
@@ -11,6 +12,15 @@ test("formatBpcId and parseBpcIdNumber round-trip", () => {
   assert.equal(formatBpcId(73), "BPC-073");
   assert.equal(parseBpcIdNumber("bpc-073"), 73);
   assert.equal(parseBpcIdNumber("BPC-ABC"), null);
+});
+
+test("normalizeBpcIdParam accepts canonical and shorthand forms", () => {
+  assert.equal(normalizeBpcIdParam("BPC-042"), "BPC-042");
+  assert.equal(normalizeBpcIdParam("bpc-042"), "BPC-042");
+  assert.equal(normalizeBpcIdParam("042"), "BPC-042");
+  assert.equal(normalizeBpcIdParam("42"), "BPC-042");
+  assert.equal(normalizeBpcIdParam(""), null);
+  assert.equal(normalizeBpcIdParam("invalid"), null);
 });
 
 test("publicSteamOnlyProfile omits email and discord", () => {

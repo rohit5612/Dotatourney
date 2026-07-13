@@ -157,6 +157,14 @@ export const api = {
       persist: true,
     });
   },
+  getPublicCardByBpcId: (bpcId) => {
+    const normalized = String(bpcId || "").trim();
+    const key = `public:card:bpc:${normalized.toUpperCase()}`;
+    return cachedGet(key, () => request(`/public/cards/${encodeURIComponent(normalized)}`), {
+      ttlMs: 60_000,
+      persist: false,
+    });
+  },
   getRegistrationSession: (identifier, email, publicCode) => {
     const q = new URLSearchParams({ email: String(email || "").trim() });
     if (publicCode) q.set("code", String(publicCode).trim());

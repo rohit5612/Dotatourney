@@ -49,10 +49,12 @@ import {
 } from "../services/seasonService.js";
 import { getPublicSiteContent } from "../services/siteContentService.js";
 import {
+  buildCardManifestByBpcId,
   buildCardManifestBySlug,
   buildMatchRosterCards,
   CARD_PNG_STUB,
 } from "../services/cardManifestService.js";
+import { normalizeBpcIdParam } from "../services/playerAccountRepository.js";
 import { isValidPhoneNumber, PHONE_NUMBER_ERROR, phoneNumberSchema } from "../utils/phoneNumber.js";
 
 const router = express.Router();
@@ -548,6 +550,39 @@ router.get("/players/:slug", async (req, res, next) => {
         throw err;
       }
       return payload;
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/cards/:bpcId.png", async (req, res, next) => {
+  try {
+    const bpcId = normalizeBpcIdParam(req.params.bpcId);
+    if (!bpcId) return res.status(400).json({ message: "Invalid BPC ID" });
+    const manifest = await buildCardManifestByBpcId(bpcId);
+    if (!manifest) return res.status(404).json({ message: "Player not found" });
+    res.set("Content-Type", "image/png");
+    res.set("Cache-Control", "public, max-age=60");
+    res.set("X-Card-Tier", manifest.tier);
+    return res.send(CARD_PNG_STUB);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/cards/:bpcId", async (req, res, next) => {
+  try {
+    const bpcId = normalizeBpcIdParam(req.params.bpcId);
+    if (!bpcId) return res.status(400).json({ message: "Invalid BPC ID" });
+    return await cachedPublicJson(res, `card:bpc:${bpcId}`, async () => {
+      const manifest = await buildCardManifestByBpcId(bpcId);
+      if (!manifest) {
+        const err = new Error("Player not found");
+        err.status = 404;
+        throw err;
+      }
+      return { card: manifest };
     });
   } catch (error) {
     return next(error);

@@ -1,5 +1,5 @@
 import { pool } from "../db/pool.js";
-import { findAccountBySlug } from "./playerAccountRepository.js";
+import { findAccountByBpcId, findAccountBySlug } from "./playerAccountRepository.js";
 import { demoAccessCardTier, isDemoAccessAccount } from "../utils/demoAccessAccount.js";
 
 const PREMIUM_TIERS = new Set(["player", "gold", "holo"]);
@@ -276,6 +276,12 @@ export async function buildCardManifest(accountRow, options = {}) {
 
 export async function buildCardManifestBySlug(slug, options = {}) {
   const account = await findAccountBySlug(slug);
+  if (!account) return null;
+  return buildCardManifest(account, options);
+}
+
+export async function buildCardManifestByBpcId(bpcId, options = {}) {
+  const account = await findAccountByBpcId(bpcId);
   if (!account) return null;
   return buildCardManifest(account, options);
 }

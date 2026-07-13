@@ -28,6 +28,15 @@ export function parseBpcIdNumber(code) {
   return m ? Number(m[1]) : null;
 }
 
+/** Normalize overlay/API path segments to canonical BPC-### form. */
+export function normalizeBpcIdParam(raw) {
+  const input = String(raw || "").trim();
+  if (!input) return null;
+  if (/^\d+$/.test(input)) return formatBpcId(Number(input));
+  const n = parseBpcIdNumber(input);
+  return n != null ? formatBpcId(n) : null;
+}
+
 /**
  * Highest numeric BPC-### in use across player accounts and legacy registrations.
  * @param {import('pg').Pool | import('pg').PoolClient} db
