@@ -1158,17 +1158,34 @@
 .schedule-page__standings-block {
   display: flex;
   flex-direction: column;
-  gap: 1.15rem;
+  gap: 1.35rem;
+  margin-bottom: 0.25rem;
 }
 
 .schedule-page__standings-head {
-  padding-bottom: 0.15rem;
-  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--schedule-glass-border-soft);
+}
+
+.schedule-page__standings-head .schedule-page__eyebrow {
+  margin-bottom: 0.35rem;
+}
+
+.schedule-page__standings-head .schedule-page__block-title {
+  font-size: clamp(1.25rem, 2.8vw, 1.5rem);
+}
+
+.schedule-page__standings-head .schedule-page__block-copy {
+  max-width: 36rem;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--schedule-text-muted);
 }
 
 .schedule-page__standings-grid {
   display: grid;
-  gap: 1rem;
+  gap: 1.1rem;
+  grid-template-columns: 1fr;
 }
 
 @media (min-width: 640px) {
@@ -1176,5 +1193,133 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1.15rem;
   }
+}
+
+/* Standings cards — stronger contrast on schedule page */
+.schedule-page__standings-grid .standings-table--public {
+  position: relative;
+  border-color: var(--schedule-glass-border);
+  background: var(--schedule-glass-bg-strong);
+  backdrop-filter: var(--schedule-glass-blur);
+  -webkit-backdrop-filter: var(--schedule-glass-blur);
+  box-shadow:
+    var(--schedule-glass-shadow),
+    0 0 0 1px color-mix(in srgb, var(--standings-accent, var(--schedule-accent-cyan)) 18%, transparent) inset;
+}
+
+.schedule-page__standings-grid .standings-table--public::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  z-index: 2;
+  width: 100%;
+  height: 3px;
+  border-radius: 1rem 1rem 0 0;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--standings-accent, var(--schedule-accent-cyan)) 88%, white) 0%,
+    color-mix(in srgb, var(--standings-accent, var(--schedule-accent-cyan)) 42%, transparent) 100%
+  );
+  pointer-events: none;
+}
+
+.schedule-page__standings-grid .standings-table__head {
+  padding: 1.05rem 1.1rem 0.9rem;
+  border-bottom-color: var(--schedule-glass-border-soft);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--standings-accent, var(--schedule-accent-cyan)) 10%, transparent) 0%,
+    transparent 100%
+  );
+}
+
+.schedule-page__standings-grid .standings-table__eyebrow {
+  color: color-mix(in srgb, var(--standings-accent, var(--schedule-accent-cyan)) 72%, var(--muted-foreground));
+}
+
+.schedule-page__standings-grid .standings-table__title {
+  font-size: clamp(1.1rem, 2.5vw, 1.28rem);
+  color: color-mix(in srgb, var(--standings-accent, var(--foreground)) 28%, var(--foreground));
+}
+
+.schedule-page__standings-grid .standings-table__rows {
+  gap: 0.55rem;
+  padding: 0.75rem;
+}
+
+.schedule-page__standings-grid .standings-table__row {
+  background: color-mix(in srgb, var(--card) 48%, rgb(0 0 0 / 0.35));
+  border-color: var(--schedule-glass-border-soft);
+}
+
+.schedule-page__standings-grid .standings-table__row--leader {
+  border-color: color-mix(in srgb, var(--leader-accent, var(--standings-accent, var(--secondary))) 55%, rgb(255 255 255 / 0.14));
+  background: linear-gradient(
+    95deg,
+    color-mix(in srgb, var(--leader-accent, var(--standings-accent, var(--secondary))) 20%, rgb(0 0 0 / 0.28)) 0%,
+    color-mix(in srgb, var(--card) 42%, rgb(0 0 0 / 0.2)) 58%
+  );
+  box-shadow:
+    0 0 28px color-mix(in srgb, var(--leader-accent, var(--standings-accent, var(--secondary))) 18%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--leader-accent, var(--standings-accent, var(--secondary))) 22%, transparent);
+}
+
+.schedule-page__standings-grid .standings-table__rank {
+  width: 2.15rem;
+  height: 2.15rem;
+  font-size: 0.82rem;
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+}
+
+.schedule-page__standings-grid .standings-table__row--leader .standings-table__rank {
+  background: color-mix(in srgb, var(--leader-accent, var(--standings-accent, var(--secondary))) 28%, var(--card));
+}
+
+.schedule-page__standings-grid .standings-table__logo {
+  width: 2.55rem;
+  height: 2.55rem;
+  border-color: var(--schedule-glass-border-soft);
+  background: color-mix(in srgb, var(--card) 58%, transparent);
+}
+
+.schedule-page__standings-grid .standings-table__name {
+  font-size: 1rem;
+}
+
+.schedule-page__standings-grid .standings-table__played {
+  font-size: 0.7rem;
+  color: var(--schedule-text-muted);
+}
+
+.schedule-page__standings-grid .standings-table__stats {
+  grid-template-columns: 2.5rem 2.5rem 3rem;
+  gap: 0.4rem;
+}
+
+.schedule-page__standings-grid .standings-table__stat {
+  min-height: 2.5rem;
+  border-color: var(--schedule-glass-border-soft);
+  background: color-mix(in srgb, var(--card) 40%, transparent);
+  font-size: 0.88rem;
+}
+
+.schedule-page__standings-grid .standings-table__stat-label {
+  font-size: 0.56rem;
+}
+
+.schedule-page__standings-grid .standings-table__stat--w {
+  color: color-mix(in srgb, var(--accent) 92%, white);
+  border-color: color-mix(in srgb, var(--accent) 32%, rgb(255 255 255 / 0.1));
+  background: color-mix(in srgb, var(--accent) 10%, rgb(0 0 0 / 0.2));
+}
+
+.schedule-page__standings-grid .standings-table__stat--l {
+  color: color-mix(in srgb, var(--destructive) 92%, white);
+  border-color: color-mix(in srgb, var(--destructive) 32%, rgb(255 255 255 / 0.1));
+  background: color-mix(in srgb, var(--destructive) 8%, rgb(0 0 0 / 0.2));
+}
+
+.schedule-page__standings-grid .standings-table__stat--pct .standings-table__stat-value {
+  color: var(--schedule-accent-gold);
 }
 

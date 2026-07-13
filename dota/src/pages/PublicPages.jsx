@@ -1557,10 +1557,13 @@ export function PublicSchedule({ event, message }) {
       {viewMode === "bracket" ? (
         <>
           {(event?.groupedStandings || []).length ? (
-            <section className="schedule-page__block schedule-page__standings-block">
+            <section className="schedule-page__block schedule-page__standings-block schedule-glass">
               <div className="schedule-page__standings-head">
+                <p className="schedule-page__eyebrow">Group stage</p>
                 <h3 className="schedule-page__block-title">Group standings</h3>
-                <p className="schedule-page__block-copy">Live group-stage records.</p>
+                <p className="schedule-page__block-copy">
+                  Live records for every group — leaders advance to the next stage.
+                </p>
               </div>
               <div className="schedule-page__standings-grid">
                 {event.groupedStandings.map((group) => (
