@@ -26,6 +26,7 @@ function mapRosterPlayerRow(row) {
     isCaptain: Boolean(row.is_captain),
     playerAccountId: row.player_account_id || null,
     slug: row.player_slug || null,
+    bpcId: row.bpc_id || null,
   };
 }
 
@@ -44,7 +45,7 @@ export async function loadActiveTeamPlayers(rosterId, teamId, client = pool) {
   if (hasMemberships) {
     const { rows } = await client.query(
       `SELECT rsp.id, rsp.player_account_id, rsp.display_name, rsp.name, rsp.role, rsp.roles, rsp.mmr,
-              rsp.is_captain, pa.slug AS player_slug
+              rsp.is_captain, pa.slug AS player_slug, pa.bpc_id
        FROM roster_snapshot_team_memberships rstm
        JOIN roster_snapshot_players rsp ON rsp.id = rstm.snapshot_player_id
        LEFT JOIN player_accounts pa ON pa.id = rsp.player_account_id
@@ -59,7 +60,7 @@ export async function loadActiveTeamPlayers(rosterId, teamId, client = pool) {
 
   const { rows } = await client.query(
     `SELECT rsp.id, rsp.player_account_id, rsp.display_name, rsp.name, rsp.role, rsp.roles, rsp.mmr,
-            rsp.is_captain, pa.slug AS player_slug
+            rsp.is_captain, pa.slug AS player_slug, pa.bpc_id
      FROM roster_snapshot_team_players rstp
      JOIN roster_snapshot_players rsp ON rsp.id = rstp.player_id
      LEFT JOIN player_accounts pa ON pa.id = rsp.player_account_id
@@ -90,7 +91,7 @@ export async function loadFormerTeamPlayers(rosterId, teamId, client = pool) {
 
   const { rows } = await client.query(
     `SELECT rsp.id, rsp.player_account_id, rsp.display_name, rsp.name, rsp.role, rsp.roles, rsp.mmr,
-            rsp.is_captain, pa.slug AS player_slug,
+            rsp.is_captain, pa.slug AS player_slug, pa.bpc_id,
             rstm.started_at, rstm.ended_at
      FROM roster_snapshot_team_memberships rstm
      JOIN roster_snapshot_players rsp ON rsp.id = rstm.snapshot_player_id
