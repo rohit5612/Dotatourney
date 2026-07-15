@@ -1,4 +1,5 @@
 import { pool } from "../db/pool.js";
+import { steam64ToSteam32 } from "../utils/steamId.js";
 import { syncRegistrationCapState } from "./registrationRepository.js";
 import {
   findAccountBySlug,
@@ -226,6 +227,7 @@ export async function getCommunityDirectory({ search = "", tier = "", limit = 48
       slug: account.slug,
       bpcId: account.bpc_id,
       displayName: account.display_name || account.slug,
+      steam32Id: steam64ToSteam32(account.steam_id),
       avatarUrl: account.avatar_url || account.steam_avatar_url || "",
       cardTier: card?.tier || registrationTier,
       card,
