@@ -255,6 +255,19 @@ Ship these with the frontend build:
 | `cards/previews/default.png`, `player.png`, `gold.png`, `holo.png` | Checkout + What's New screenshot previews |
 | `cards/overlay/{steam32}.png` / `{steam32}.webm`, `cards/overlay/index.json` | Pre-rendered player cards for GSI overlay (generated via `npm run export-overlay-cards` in `server/`) |
 
+**Generate overlay cards (VPS or local machine):**
+
+```bash
+cd server
+npm ci
+npx playwright install chromium
+# On Ubuntu/Debian VPS — required once; fixes missing libatk / shared-library errors:
+sudo npx playwright install-deps chromium
+npm run export-overlay-cards
+```
+
+Output: `dota/public/cards/overlay/`. Commit and push so Netlify serves them at `https://bpcleague.in/cards/overlay/`.
+
 ### Cashfree (server `.env`)
 
 | Variable | Notes |
