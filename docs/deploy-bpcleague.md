@@ -253,6 +253,7 @@ Ship these with the frontend build:
 | `cards/gifs/` | Holo portrait GIFs |
 | `cards/defaultlogo.png` | Default card logo |
 | `cards/previews/default.png`, `player.png`, `gold.png`, `holo.png` | Checkout + What's New screenshot previews |
+| `cards/overlay/{steam32}.png` / `{steam32}.webm`, `cards/overlay/index.json` | Pre-rendered player cards for GSI overlay (generated via `npm run export-overlay-cards` in `server/`) |
 
 ### Cashfree (server `.env`)
 

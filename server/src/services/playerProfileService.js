@@ -237,6 +237,61 @@ export async function getCommunityDirectory({ search = "", tier = "", limit = 48
   return { players, total, limit: safeLimit, offset: safeOffset };
 }
 
+const STEAM_ID64_BASE = 76561197960265728n;
+
+/** All community-directory players for overlay asset export (no pagination). */
+export async function listCommunityPlayersForExport({ steam32Id = null } = {}) {
+  const params = [];
+  const lateralJoin = `LEFT JOIN LATERAL (
+       SELECT pr.card_tier
+       FROM player_registrations pr
+       WHERE pr.player_account_id = pa.id AND pr.archived_at IS NULL
+       ORDER BY ${cardTierRankSql("pr.card_tier")}, pr.created_at DESC
+       LIMIT 1
+     ) best_card ON TRUE`;
+  const effectiveTierExpr = `COALESCE(NULLIF(TRIM(pa.card_tier_override), ''), best_card.card_tier, 'default')`;
+
+  let where = `WHERE pa.email_verified_at IS NOT NULL
+    AND pa.steam_id IS NOT NULL
+    AND TRIM(pa.steam_id) <> ''`;
+
+  if (steam32Id != null) {
+    const steam64 = String(BigInt(steam32Id) + STEAM_ID64_BASE);
+    params.push(steam64);
+    where += ` AND pa.steam_id = $${params.length}`;
+  }
+
+  const tierRank = cardTierRankSql(effectiveTierExpr);
+  const { rows } = await pool.query(
+    `SELECT pa.*, best_card.card_tier AS directory_card_tier
+     FROM player_accounts pa
+     ${lateralJoin}
+     ${where}
+     ORDER BY ${tierRank}, pa.display_name ASC NULLS LAST, pa.created_at ASC`,
+    params,
+  );
+
+  const players = [];
+  for (const account of rows) {
+    const registrationTier = account.directory_card_tier || "default";
+    const card = await buildCardManifest(account, {
+      registration: { card_tier: registrationTier },
+    });
+    const steam32 = steam64ToSteam32(account.steam_id);
+    if (steam32 == null) continue;
+
+    players.push({
+      slug: account.slug,
+      bpcId: account.bpc_id,
+      displayName: account.display_name || account.slug,
+      steam32Id: steam32,
+      tier: card?.renderTier || card?.tier || registrationTier,
+      card,
+    });
+  }
+  return players;
+}
+
 export async function getPlayerDashboardHistory(playerAccountId) {
   const account = await pool.query(`SELECT id FROM player_accounts WHERE id = $1`, [playerAccountId]);
   if (!account.rows[0]) return null;

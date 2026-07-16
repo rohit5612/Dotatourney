@@ -1,0 +1,31 @@
+{
+  "generatedAt": "2026-07-16T18:30:35.929Z",
+  "baseUrl": "/cards/overlay/",
+  "players": {
+    "214306802": {
+      "bpcId": "BPC-008",
+      "tier": "gold",
+      "file": "214306802.png"
+    },
+    "1029734274": {
+      "bpcId": "BPC-1001",
+      "tier": "player",
+      "file": "1029734274.png"
+    },
+    "1029734275": {
+      "bpcId": "BPC-1002",
+      "tier": "player",
+      "file": "1029734275.png"
+    },
+    "1029734276": {
+      "bpcId": "BPC-1003",
+      "tier": "holo",
+      "file": "1029734276.webm"
+    },
+    "1029734277": {
+      "bpcId": "BPC-1004",
+      "tier": "holo",
+      "file": "1029734277.webm"
+    }
+  }
+}
