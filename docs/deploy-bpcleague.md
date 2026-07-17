@@ -160,11 +160,11 @@ Optional email (OTP / invites): SPF, DKIM, DMARC for `bpcleague.in` — see `ser
 7. Add DNS records Netlify shows for apex + www
 8. Enable HTTPS (automatic)
 
-After deploy, verify the proxy:
+After deploy, verify the proxy (health is at VPS root `/health`, not under `/api`):
 
 ```bash
-curl -s https://bpcleague.in/api/health
-# → {"ok":true}
+curl -s -o /dev/null -w "%{http_code}\n" https://bpcleague.in/api/public/tournament
+# → 200
 ```
 
 ---
@@ -228,7 +228,7 @@ Keep localhost URLs for dev (`http://localhost:3000/api/player/auth/*/callback`)
 ## Step 10 — Go-live checklist
 
 - [ ] `curl https://api.bpcleague.in/health` returns `{"ok":true}`
-- [ ] `curl https://bpcleague.in/api/health` returns `{"ok":true}` (Netlify proxy)
+- [ ] `curl -s -o /dev/null -w "%{http_code}" https://bpcleague.in/api/public/tournament` returns `200` (Netlify proxy)
 - [ ] `https://bpcleague.in` loads the site
 - [ ] `https://www.bpcleague.in` redirects to apex
 - [ ] Browser DevTools: API calls go to `bpcleague.in/api/...` (not `api.bpcleague.in`)

@@ -789,6 +789,8 @@ export async function fulfillPaidCheckout({
              roles = CASE WHEN $7::jsonb <> '[]'::jsonb THEN $7::jsonb ELSE roles END,
              mmr = COALESCE($8, mmr),
              phone_number = COALESCE(NULLIF($9, ''), phone_number),
+             steam_name = COALESCE(NULLIF($10, ''), steam_name),
+             steam_profile = COALESCE(NULLIF($11, ''), steam_profile),
              auto_approved_at = NULL,
              updated_at = NOW()
          WHERE id = $1`,
@@ -802,6 +804,8 @@ export async function fulfillPaidCheckout({
           JSON.stringify(regRoles),
           regMmr,
           regPhone,
+          steamName,
+          steamProfile,
         ],
       );
     }

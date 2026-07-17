@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { pool } from "../db/pool.js";
 import { slugifyPlayer } from "../utils/playerSlug.js";
 import { demoAccessDisplayOverrides, isDemoAccessAccount } from "../utils/demoAccessAccount.js";
+import { invalidatePublicCache } from "./publicCache.js";
 
 const BPC_PREFIX = "BPC";
 const BPC_CODE_RE = /^BPC-(\d+)$/i;
@@ -322,6 +323,38 @@ export async function createPlayerAccount(
   return rows[0];
 }
 
+/** Keep denormalized roster/registration copies aligned with linked player_accounts Steam fields. */
+export async function propagateSteamFieldsFromAccount(
+  playerAccountId,
+  { steamPersona = "", steamProfile = "" },
+  db = pool,
+) {
+  const q = db.query.bind(db);
+  const persona = String(steamPersona || "");
+  const profile = String(steamProfile || "");
+
+  await q(
+    `UPDATE player_registrations
+     SET steam_name = $2, steam_profile = $3, updated_at = NOW()
+     WHERE player_account_id = $1 AND archived_at IS NULL`,
+    [playerAccountId, persona, profile],
+  );
+
+  await q(
+    `UPDATE roster_snapshot_players
+     SET steam_name = $2, steam_profile = $3
+     WHERE player_account_id = $1`,
+    [playerAccountId, persona, profile],
+  );
+
+  await q(
+    `UPDATE players
+     SET steam_name = $2, steam_profile = $3
+     WHERE player_account_id = $1`,
+    [playerAccountId, persona, profile],
+  );
+}
+
 export async function updatePlayerAccount(id, patch, db = pool) {
   const fields = [];
   const values = [];
@@ -372,11 +405,28 @@ export async function updatePlayerAccount(id, patch, db = pool) {
   fields.push(`updated_at = NOW()`);
   values.push(id);
   const query = db.query ? db.query.bind(db) : pool.query.bind(pool);
+  const steamFieldsChanged =
+    patch.steamProfile !== undefined || patch.steamPersona !== undefined || patch.steamId !== undefined;
+
   const { rows } = await query(
     `UPDATE player_accounts SET ${fields.join(", ")} WHERE id = $${i} RETURNING *`,
     values,
   );
-  return rows[0] || null;
+  const account = rows[0] || null;
+
+  if (account && steamFieldsChanged) {
+    await propagateSteamFieldsFromAccount(
+      account.id,
+      {
+        steamPersona: account.steam_persona,
+        steamProfile: account.steam_profile,
+      },
+      db,
+    );
+    invalidatePublicCache();
+  }
+
+  return account;
 }
 
 export async function recordAccountLink(playerAccountId, provider, externalId, client = pool) {

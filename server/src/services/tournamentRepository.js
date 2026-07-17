@@ -320,7 +320,9 @@ export async function getTournament(tournamentId) {
   );
   const playersResult = await pool.query(
     `SELECT p.id, p.registration_id AS "registrationId", p.name, p.display_name AS "displayName", p.role, p.roles, p.mmr,
-            p.steam_name AS "steamName", p.steam_profile AS "steamProfile", p.discord_handle AS "discordHandle",
+            COALESCE(NULLIF(pa.steam_persona, ''), NULLIF(p.steam_name, '')) AS "steamName",
+            COALESCE(NULLIF(pa.steam_profile, ''), NULLIF(p.steam_profile, '')) AS "steamProfile",
+            p.discord_handle AS "discordHandle",
             p.location, p.is_captain AS "isCaptain", p.player_account_id AS "playerAccountId",
             pa.slug AS "slug", pa.bpc_id AS "bpcId"
      FROM players p
@@ -592,7 +594,9 @@ export async function getRosterSnapshot(tournamentId, rosterId) {
   const playersResult = await pool.query(
     `SELECT rsp.id, rsp.source_player_id AS "sourcePlayerId", rsp.registration_id AS "registrationId",
             rsp.player_account_id AS "playerAccountId", rsp.name, rsp.display_name AS "displayName", rsp.role, rsp.roles, rsp.mmr,
-            rsp.steam_name AS "steamName", rsp.steam_profile AS "steamProfile", rsp.discord_handle AS "discordHandle",
+            COALESCE(NULLIF(pa.steam_persona, ''), NULLIF(rsp.steam_name, '')) AS "steamName",
+            COALESCE(NULLIF(pa.steam_profile, ''), NULLIF(rsp.steam_profile, '')) AS "steamProfile",
+            rsp.discord_handle AS "discordHandle",
             rsp.location, rsp.is_captain AS "isCaptain", pa.slug AS "slug", pa.bpc_id AS "bpcId"
      FROM roster_snapshot_players rsp
      LEFT JOIN player_accounts pa ON pa.id = rsp.player_account_id
