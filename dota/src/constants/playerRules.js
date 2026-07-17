@@ -24,7 +24,7 @@ export const PLAYER_RULES_SECTIONS = [
   ],
   [
     "Substitution Rule",
-    "All registered players must be available for their scheduled matches. Each player is allowed to skip only 1 map during the tournament. If a player skips more than 1 map, they may be disqualified from the event. If a substitute is required, the admins will assign a replacement player from the same tier as the player who is unavailable. The final decision on substitutions will be made by the admins.",
+    "All registered players must be available for their scheduled matches. Each player is allowed to skip only 2 maps during the tournament. If a player skips more than 2 maps, they may be disqualified from the event. If a substitute is required, the admins will assign a replacement player from the same tier as the player who is unavailable. The final decision on substitutions will be made by the admins.",
   ],
   [
     "Gameplay Integrity",

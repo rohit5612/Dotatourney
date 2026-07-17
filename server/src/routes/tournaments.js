@@ -24,7 +24,10 @@ import {
   updateSubstitutePoolRegistration,
   updateSubstitutionRequest,
   assignSubstitutionRequest,
+  cancelSubstitutionRequestByAdmin,
   listEligibleSubstitutes,
+  listSubstitutionTargets,
+  manualAssignSubstitute,
 } from "../services/substituteAdminService.js";
 import {
   approveRosterSnapshot,
@@ -317,6 +320,42 @@ router.get("/:id/substitutes", async (req, res, next) => {
   }
 });
 
+router.get("/:id/substitution-targets", async (req, res, next) => {
+  try {
+    const result = await listSubstitutionTargets(req.params.id);
+    return res.json(result);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post("/:id/manual-substitution", requirePermission("playerCrm.substitutes.update"), async (req, res, next) => {
+  try {
+    const body = z
+      .object({
+        matchId: z.string().uuid(),
+        replacedPlayerAccountId: z.string().uuid(),
+        substituteRegistrationId: z.string().uuid(),
+        adminNotes: z.string().optional(),
+      })
+      .parse(req.body);
+    const result = await manualAssignSubstitute(req.params.id, {
+      ...body,
+      adminUserId: req.adminUser.id,
+    });
+    await writeAuditLog({
+      adminUserId: req.adminUser.id,
+      action: "substitution.manual_assign",
+      entityType: "substitution_request",
+      entityId: result.request?.id || "",
+      payload: body,
+    });
+    return res.json(result);
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.patch("/:id/substitution-requests/:requestId/assign", requirePermission("playerCrm.substitutes.update"), async (req, res, next) => {
   try {
     const body = z
@@ -349,6 +388,20 @@ router.patch("/:id/substitution-requests/:requestId/assign", requirePermission("
 router.patch("/:id/substitution-requests/:requestId", requirePermission("playerCrm.substitutes.update"), async (req, res, next) => {
   try {
     const body = z.object({ status: z.enum(["approved", "rejected", "cancelled"]).optional(), adminNotes: z.string().optional() }).parse(req.body);
+    if (body.status === "cancelled") {
+      const result = await cancelSubstitutionRequestByAdmin(req.params.id, req.params.requestId, {
+        adminNotes: body.adminNotes,
+        adminUserId: req.adminUser.id,
+      });
+      await writeAuditLog({
+        adminUserId: req.adminUser.id,
+        action: "substitution.cancel",
+        entityType: "substitution_request",
+        entityId: req.params.requestId,
+        payload: body,
+      });
+      return res.json(result);
+    }
     const row = await updateSubstitutionRequest(req.params.id, req.params.requestId, body);
     if (!row) return res.status(404).json({ message: "Request not found" });
     return res.json({ request: row });

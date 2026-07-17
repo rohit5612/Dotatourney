@@ -135,14 +135,31 @@ export async function notifySubstitutionOpponentLineupChange({
   });
 }
 
-export async function notifySubstitutionCancelled({ match, requesterName, recipientAccountIds, substitutionRequestId }) {
-  const title = "Substitution request cancelled";
-  const body = `${requesterName} cancelled their substitute request for ${match.team1} vs ${match.team2}.`;
+export async function notifySubstitutionCancelled({
+  match,
+  requesterName,
+  substituteName,
+  recipientAccountIds,
+  substitutionRequestId,
+  wasApproved = false,
+  cancelledByAdmin = false,
+}) {
+  const title = wasApproved ? "Substitution cancelled" : "Substitution request cancelled";
+  let body;
+  if (wasApproved && substituteName) {
+    body = cancelledByAdmin
+      ? `An admin cancelled the substitution for ${match.team1} vs ${match.team2}. ${requesterName} is back on the lineup instead of ${substituteName}.`
+      : `The substitution for ${match.team1} vs ${match.team2} was cancelled. ${requesterName} is back on the lineup instead of ${substituteName}.`;
+  } else if (cancelledByAdmin) {
+    body = `An admin cancelled the substitute request from ${requesterName} for ${match.team1} vs ${match.team2}.`;
+  } else {
+    body = `${requesterName} cancelled their substitute request for ${match.team1} vs ${match.team2}.`;
+  }
   return createNotificationsForAccounts(recipientAccountIds, {
     type: "substitution_cancelled",
     title,
     body,
-    payload: { matchId: match.id, substitutionRequestId },
+    payload: { matchId: match.id, substitutionRequestId, wasApproved },
   });
 }
 

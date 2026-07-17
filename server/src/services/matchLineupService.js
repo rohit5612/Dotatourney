@@ -88,7 +88,7 @@ export async function seedMatchLineupsForScheduledMatches(tournamentId, schedule
 
 export async function getMatchLineupRows(matchId) {
   const { rows } = await pool.query(
-    `SELECT mlp.*, pa.steam_avatar_url,
+    `SELECT mlp.*, pa.steam_avatar_url, pa.bpc_id,
             repl.display_name AS replaces_display_name
      FROM match_lineup_players mlp
      LEFT JOIN player_accounts pa ON pa.id = mlp.player_account_id
@@ -132,6 +132,84 @@ export function groupLineupsByTeam(lineupRows, team1, team2) {
     });
   }
   return result;
+}
+
+export async function revertSubstituteFromLineup(client, {
+  matchId,
+  tournamentId,
+  teamName,
+  replacedPlayerAccountId,
+  substitutionRequestId,
+}) {
+  await client.query(
+    `DELETE FROM match_lineup_players
+     WHERE match_id = $1
+       AND (
+         substitution_request_id = $2
+         OR (
+           is_substitute = TRUE
+           AND lower(team_name) = lower($3)
+           AND replaces_player_account_id = $4
+         )
+       )`,
+    [matchId, substitutionRequestId, teamName, replacedPlayerAccountId],
+  );
+
+  const { rows: playerData } = await client.query(
+    `SELECT pr.display_name, pr.name, pr.roles, pr.mmr
+     FROM player_registrations pr
+     WHERE pr.player_account_id = $1 AND pr.tournament_id = $2 AND pr.archived_at IS NULL
+     ORDER BY pr.substitute_flag ASC, pr.created_at DESC
+     LIMIT 1`,
+    [replacedPlayerAccountId, tournamentId],
+  );
+  const { rows: accountRows } = await client.query(
+    `SELECT display_name FROM player_accounts WHERE id = $1`,
+    [replacedPlayerAccountId],
+  );
+  const displayName =
+    playerData[0]?.display_name || playerData[0]?.name || accountRows[0]?.display_name || "Player";
+  const roles = playerData[0]?.roles || [];
+  const mmr = playerData[0]?.mmr ?? null;
+
+  const { rows: existing } = await client.query(
+    `SELECT id FROM match_lineup_players
+     WHERE match_id = $1 AND lower(team_name) = lower($2) AND player_account_id = $3`,
+    [matchId, teamName, replacedPlayerAccountId],
+  );
+  if (existing[0]) return;
+
+  const { rows: maxSlot } = await client.query(
+    `SELECT COALESCE(MAX(slot_index), -1) + 1 AS next_slot
+     FROM match_lineup_players WHERE match_id = $1 AND lower(team_name) = lower($2)`,
+    [matchId, teamName],
+  );
+
+  await client.query(
+    `INSERT INTO match_lineup_players (
+      id, match_id, tournament_id, team_name, player_account_id, display_name, roles, mmr,
+      is_substitute, replaces_player_account_id, substitution_request_id, slot_index
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, FALSE, NULL, NULL, $9)
+    ON CONFLICT (match_id, team_name, player_account_id) DO UPDATE SET
+      display_name = EXCLUDED.display_name,
+      roles = EXCLUDED.roles,
+      mmr = EXCLUDED.mmr,
+      is_substitute = FALSE,
+      replaces_player_account_id = NULL,
+      substitution_request_id = NULL,
+      updated_at = NOW()`,
+    [
+      randomUUID(),
+      matchId,
+      tournamentId,
+      teamName,
+      replacedPlayerAccountId,
+      displayName,
+      JSON.stringify(Array.isArray(roles) ? roles : roles || []),
+      mmr,
+      maxSlot[0]?.next_slot ?? 0,
+    ],
+  );
 }
 
 export async function applySubstituteToLineup(client, {

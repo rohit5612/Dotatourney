@@ -169,12 +169,316 @@ function SubstituteDetailModal({
   );
 }
 
+function formatTargetMatchLabel(match, teamName = "") {
+  const parts = [];
+  if (match.stageKey) parts.push(match.stageKey);
+  if (match.roundIndex != null) parts.push(`R${Number(match.roundIndex) + 1}`);
+  if (match.matchIndex != null) parts.push(`M${Number(match.matchIndex) + 1}`);
+  const stage = parts.join(" · ");
+  const opponent =
+    teamName && match.team1?.toLowerCase() === teamName.toLowerCase()
+      ? match.team2
+      : teamName && match.team2?.toLowerCase() === teamName.toLowerCase()
+        ? match.team1
+        : null;
+  const teams =
+    opponent && teamName
+      ? `vs ${opponent}`
+      : match.team1 && match.team2
+        ? `${match.team1} vs ${match.team2}`
+        : "";
+  const time = match.startAt ? new Date(match.startAt).toLocaleString() : "";
+  return [stage, teams, time].filter(Boolean).join(" — ");
+}
+
+function collectTeamNames(matches) {
+  const names = new Set();
+  for (const match of matches || []) {
+    if (match.team1?.trim()) names.add(match.team1.trim());
+    if (match.team2?.trim()) names.add(match.team2.trim());
+  }
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+
+function matchIncludesTeam(match, teamName) {
+  const normalized = teamName.toLowerCase();
+  return match.team1?.toLowerCase() === normalized || match.team2?.toLowerCase() === normalized;
+}
+
+function getLineupForTeam(match, teamName) {
+  if (!match || !teamName) return [];
+  if (match.team1?.toLowerCase() === teamName.toLowerCase()) return match.lineups?.team1 || [];
+  if (match.team2?.toLowerCase() === teamName.toLowerCase()) return match.lineups?.team2 || [];
+  return [];
+}
+
+function playerMatchesSearch(player, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const haystack = [player.displayName, player.bpcId].filter(Boolean).join(" ").toLowerCase();
+  return haystack.includes(q);
+}
+
+function ManualAssignSubModal({
+  open,
+  tournamentId,
+  eligible,
+  canWrite,
+  onClose,
+  onDone,
+  setMessage,
+}) {
+  const [targets, setTargets] = useState([]);
+  const [loadingTargets, setLoadingTargets] = useState(false);
+  const [selectedTeamName, setSelectedTeamName] = useState("");
+  const [matchId, setMatchId] = useState("");
+  const [replacedPlayerAccountId, setReplacedPlayerAccountId] = useState("");
+  const [substituteRegistrationId, setSubstituteRegistrationId] = useState("");
+  const [adminNotes, setAdminNotes] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [matchSearch, setMatchSearch] = useState("");
+  const [playerSearch, setPlayerSearch] = useState("");
+
+  useEffect(() => {
+    if (!open || !tournamentId) return;
+    setLoadingTargets(true);
+    api
+      .getSubstitutionTargets(tournamentId)
+      .then((data) => setTargets(data.matches || []))
+      .catch((error) => setMessage?.(error.message))
+      .finally(() => setLoadingTargets(false));
+  }, [open, tournamentId, setMessage]);
+
+  useEffect(() => {
+    if (!open) {
+      setSelectedTeamName("");
+      setMatchId("");
+      setReplacedPlayerAccountId("");
+      setSubstituteRegistrationId("");
+      setAdminNotes("");
+      setMatchSearch("");
+      setPlayerSearch("");
+    }
+  }, [open]);
+
+  const teamOptions = collectTeamNames(targets);
+  const selectedMatch = (targets || []).find((match) => match.id === matchId) || null;
+  const teamMatches = (targets || []).filter((match) => matchIncludesTeam(match, selectedTeamName));
+  const filteredMatches = teamMatches.filter((match) => {
+    const q = matchSearch.trim().toLowerCase();
+    if (!q) return true;
+    return formatTargetMatchLabel(match, selectedTeamName).toLowerCase().includes(q);
+  });
+  const lineupPlayers = getLineupForTeam(selectedMatch, selectedTeamName);
+  const replaceablePlayers = lineupPlayers
+    .filter((player) => !player.isSubstitute)
+    .filter((player) => playerMatchesSearch(player, playerSearch));
+  const selectedSubstitute =
+    (eligible || []).find((player) => player.registrationId === substituteRegistrationId) || null;
+
+  const canAssign =
+    canWrite && selectedTeamName && matchId && replacedPlayerAccountId && substituteRegistrationId && !busy;
+
+  async function assign() {
+    if (!canAssign) return;
+    setBusy(true);
+    setMessage?.("");
+    try {
+      await api.manualAssignSubstitute(tournamentId, {
+        matchId,
+        replacedPlayerAccountId,
+        substituteRegistrationId,
+        adminNotes: adminNotes.trim() || undefined,
+      });
+      setMessage?.("Substitute assigned.");
+      onClose();
+      await onDone();
+    } catch (error) {
+      setMessage?.(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="manual-assign-sub-title"
+    >
+      <button type="button" className="absolute inset-0 cursor-default" aria-label="Close dialog" onClick={onClose} />
+      <div className="player-crm__modal relative z-10 flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border border-border bg-card shadow-2xl sm:rounded-2xl">
+        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-border/60 px-4 py-4 sm:px-5">
+          <div className="min-w-0">
+            <h3 id="manual-assign-sub-title" className="font-serif text-xl">
+              Manual substitute assignment
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Assign a sub without a player request — for Discord or other off-platform requests.
+            </p>
+          </div>
+          <button type="button" className="btn btn-outline btn-sm shrink-0" onClick={onClose}>
+            Close
+          </button>
+        </header>
+
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
+          <label className="block text-sm">
+            <span className="player-crm__field-label">Team</span>
+            <select
+              className="mt-1 w-full rounded-md border border-input bg-background p-2 text-sm"
+              value={selectedTeamName}
+              disabled={loadingTargets || !canWrite}
+              onChange={(event) => {
+                setSelectedTeamName(event.target.value);
+                setMatchId("");
+                setReplacedPlayerAccountId("");
+                setMatchSearch("");
+                setPlayerSearch("");
+              }}
+            >
+              <option value="">{loadingTargets ? "Loading teams…" : "Select team"}</option>
+              {teamOptions.map((teamName) => (
+                <option key={teamName} value={teamName}>
+                  {teamName}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {selectedTeamName ? (
+            <label className="block text-sm">
+              <span className="player-crm__field-label">Match</span>
+              <input
+                className="mt-1 w-full rounded-md border border-input bg-background p-2 text-sm"
+                placeholder="Search matches…"
+                value={matchSearch}
+                onChange={(event) => setMatchSearch(event.target.value)}
+              />
+              <select
+                className="mt-2 w-full rounded-md border border-input bg-background p-2 text-sm"
+                value={matchId}
+                disabled={!canWrite}
+                onChange={(event) => {
+                  setMatchId(event.target.value);
+                  setReplacedPlayerAccountId("");
+                  setPlayerSearch("");
+                }}
+              >
+                <option value="">
+                  {teamMatches.length ? "Select a match" : "No upcoming matches for this team"}
+                </option>
+                {filteredMatches.map((match) => (
+                  <option key={match.id} value={match.id}>
+                    {formatTargetMatchLabel(match, selectedTeamName)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
+          {selectedMatch ? (
+            <label className="block text-sm">
+              <span className="player-crm__field-label">Player to replace</span>
+              <input
+                className="mt-1 w-full rounded-md border border-input bg-background p-2 text-sm"
+                placeholder="Search by name or BPC ID…"
+                value={playerSearch}
+                disabled={!canWrite}
+                onChange={(event) => setPlayerSearch(event.target.value)}
+              />
+              <select
+                className="mt-2 w-full rounded-md border border-input bg-background p-2 text-sm"
+                value={replacedPlayerAccountId}
+                disabled={!canWrite}
+                onChange={(event) => setReplacedPlayerAccountId(event.target.value)}
+              >
+                <option value="">Select player</option>
+                {replaceablePlayers.map((player) => (
+                  <option key={player.playerAccountId} value={player.playerAccountId}>
+                    {[player.displayName, player.bpcId].filter(Boolean).join(" · ")}
+                  </option>
+                ))}
+              </select>
+              {!lineupPlayers.filter((player) => !player.isSubstitute).length ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  No rostered players available to replace on this team.
+                </p>
+              ) : replaceablePlayers.length === 0 ? (
+                <p className="mt-1 text-xs text-muted-foreground">No players match your search.</p>
+              ) : null}
+            </label>
+          ) : null}
+
+          <div className="block text-sm">
+            <span className="player-crm__field-label">Substitute</span>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                disabled={!canWrite}
+                onClick={() => setPickerOpen(true)}
+              >
+                {selectedSubstitute ? "Change selection" : "Select player…"}
+              </button>
+              {selectedSubstitute ? (
+                <span className="text-sm text-foreground">
+                  {selectedSubstitute.displayName}
+                  {selectedSubstitute.mmr != null ? ` · ${selectedSubstitute.mmr} MMR` : ""}
+                </span>
+              ) : null}
+            </div>
+          </div>
+
+          <AssignSubstitutePickerModal
+            open={pickerOpen}
+            eligible={eligible}
+            selectedId={substituteRegistrationId}
+            onSelect={setSubstituteRegistrationId}
+            onClose={() => setPickerOpen(false)}
+          />
+
+          <label className="block text-sm">
+            <span className="player-crm__field-label">Admin notes</span>
+            <textarea
+              className="mt-1 min-h-20 w-full rounded-md border border-input bg-background p-3 text-sm"
+              value={adminNotes}
+              disabled={!canWrite}
+              placeholder="Optional — e.g. Discord request context"
+              onChange={(event) => setAdminNotes(event.target.value)}
+            />
+          </label>
+        </div>
+
+        <footer className="flex shrink-0 justify-end gap-2 border-t border-border/60 px-4 py-4 sm:px-5">
+          <button type="button" className="btn btn-outline btn-sm" onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+          <button type="button" className="btn btn-primary btn-sm" onClick={assign} disabled={!canAssign}>
+            {busy ? "Assigning…" : "Assign substitute"}
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
 function AssignSubstitutePickerModal({ open, eligible, selectedId, onSelect, onClose }) {
   const [tab, setTab] = useState("active");
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    if (!open) setSearch("");
+  }, [open]);
 
   const activePlayers = (eligible || []).filter((player) => !player.substituteFlag);
   const substitutePool = (eligible || []).filter((player) => player.substituteFlag);
-  const list = tab === "active" ? activePlayers : substitutePool;
+  const baseList = tab === "active" ? activePlayers : substitutePool;
+  const list = baseList.filter((player) => playerMatchesSearch(player, search));
 
   if (!open) return null;
 
@@ -213,6 +517,15 @@ function AssignSubstitutePickerModal({ open, eligible, selectedId, onSelect, onC
           </button>
         </div>
 
+        <div className="border-b border-border/60 px-4 py-2">
+          <input
+            className="w-full rounded-md border border-input bg-background p-2 text-sm"
+            placeholder="Search by name or BPC ID…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </div>
+
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
           {list.length ? (
             <ul className="space-y-2">
@@ -240,12 +553,42 @@ function AssignSubstitutePickerModal({ open, eligible, selectedId, onSelect, onC
             </ul>
           ) : (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              {tab === "active" ? "No active roster players available." : "No substitute pool players available."}
+              {search.trim()
+                ? "No players match your search."
+                : tab === "active"
+                  ? "No active roster players available."
+                  : "No substitute pool players available."}
             </p>
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+function formatPlayerLabel(name, bpcId) {
+  const parts = [name, bpcId].filter(Boolean);
+  return parts.join(" · ") || "Player";
+}
+
+function SubstitutionPlayersLine({ request }) {
+  const outLabel = formatPlayerLabel(request.requester_name, request.requester_bpc_id);
+  const inLabel = request.substitute_name
+    ? formatPlayerLabel(request.substitute_name, request.substitute_bpc_id)
+    : null;
+
+  return (
+    <p className="text-sm mt-1">
+      <span className="text-muted-foreground">Out:</span> {outLabel}
+      {inLabel ? (
+        <>
+          {" "}
+          <span className="text-muted-foreground">→ In:</span> {inLabel}
+        </>
+      ) : request.status === "pending" ? (
+        <span className="text-muted-foreground"> (awaiting substitute)</span>
+      ) : null}
+    </p>
   );
 }
 
@@ -291,6 +634,25 @@ function RequestRow({ request, eligible, tournamentId, canWrite, onDone, setMess
     }
   }
 
+  async function cancel() {
+    if (!window.confirm("Cancel this substitution? Lineups and notifications will be updated.")) return;
+    setBusy(true);
+    try {
+      await api.patchSubstitutionRequest(tournamentId, request.id, {
+        status: "cancelled",
+        adminNotes: adminNotes.trim() || undefined,
+      });
+      setMessage?.("Substitution cancelled.");
+      await onDone();
+    } catch (e) {
+      setMessage?.(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const canCancel = canWrite && (request.status === "pending" || request.status === "approved");
+
   return (
     <div className="player-crm__request-card space-y-2">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -300,6 +662,7 @@ function RequestRow({ request, eligible, tournamentId, canWrite, onDone, setMess
             {request.team_name ? ` · ${request.team_name}` : ""}
           </p>
           <p className="text-xs text-muted-foreground">{formatMatchLabel(request)}</p>
+          <SubstitutionPlayersLine request={request} />
           {request.reason ? <p className="text-sm mt-1">Reason: {request.reason}</p> : null}
           {request.preferred_substitute_name ? (
             <p className="text-xs text-muted-foreground mt-1">
@@ -349,6 +712,26 @@ function RequestRow({ request, eligible, tournamentId, canWrite, onDone, setMess
             <button type="button" className="btn btn-secondary btn-sm" onClick={reject} disabled={busy}>
               Reject
             </button>
+            <button type="button" className="btn btn-outline btn-sm" onClick={cancel} disabled={busy}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : canCancel ? (
+        <div className="space-y-2 pt-1">
+          <label className="block text-xs text-muted-foreground">
+            Admin notes
+            <input
+              className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
+              value={adminNotes}
+              onChange={(e) => setAdminNotes(e.target.value)}
+              placeholder="Optional notes"
+            />
+          </label>
+          <div className="player-crm__inline-actions">
+            <button type="button" className="btn btn-secondary btn-sm" onClick={cancel} disabled={busy}>
+              Cancel substitution
+            </button>
           </div>
         </div>
       ) : request.admin_notes ? (
@@ -374,6 +757,7 @@ export function SubstituteCrmPage({ tournamentId, setMessage, canWrite = true })
   const [registrationStatus, setRegistrationStatus] = useState("pending");
   const [adminNotes, setAdminNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [manualAssignOpen, setManualAssignOpen] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -463,10 +847,19 @@ export function SubstituteCrmPage({ tournamentId, setMessage, canWrite = true })
   return (
     <div className="admin-page-stack player-crm">
       <AdminGlassPanel>
-        <h2 className="admin-section-title">Substitution requests</h2>
-        <p className="mb-3 text-sm text-muted-foreground">
-          Match-day requests from rostered players — assign from the approved substitute pool below.
-        </p>
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="admin-section-title">Substitution requests</h2>
+            <p className="text-sm text-muted-foreground">
+              Match-day requests from rostered players — or use manual assign for Discord requests.
+            </p>
+          </div>
+          {canWrite ? (
+            <button type="button" className="btn btn-primary btn-sm shrink-0" onClick={() => setManualAssignOpen(true)}>
+              Manual assign
+            </button>
+          ) : null}
+        </div>
         <div className="player-crm__request-panel">
           {(requests || []).map((request) => (
             <RequestRow
@@ -623,6 +1016,16 @@ export function SubstituteCrmPage({ tournamentId, setMessage, canWrite = true })
           saving={saving}
         />
       ) : null}
+
+      <ManualAssignSubModal
+        open={manualAssignOpen}
+        tournamentId={tournamentId}
+        eligible={eligible}
+        canWrite={canWrite}
+        onClose={() => setManualAssignOpen(false)}
+        onDone={() => loadPool(currentPage)}
+        setMessage={setMessage}
+      />
     </div>
   );
 }

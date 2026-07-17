@@ -12,6 +12,7 @@
     "export-overlay-cards": "node scripts/export-overlay-player-cards.mjs"
   },
   "dependencies": {
+    "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",

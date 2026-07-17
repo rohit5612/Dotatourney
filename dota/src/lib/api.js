@@ -394,6 +394,12 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
+  getSubstitutionTargets: (tournamentId) => request(`/tournaments/${tournamentId}/substitution-targets`),
+  manualAssignSubstitute: (tournamentId, payload) =>
+    request(`/tournaments/${tournamentId}/manual-substitution`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   getTeamHistory: (tournamentId, teamId) => request(`/tournaments/${tournamentId}/teams/${teamId}/history`),
   updateAdminPermissions: (userId, permissions) =>
     request(`/admin/users/${userId}/permissions`, {

@@ -4,7 +4,13 @@ import {
   mapRegistrationRow,
   updatePlayerRegistration,
 } from "./registrationRepository.js";
-import { assignSubstitutionRequest, listEligibleSubstitutes } from "./matchSubstitutionService.js";
+import {
+  assignSubstitutionRequest,
+  cancelSubstitutionRequestByAdmin,
+  listEligibleSubstitutes,
+  listSubstitutionTargets,
+  manualAssignSubstitute,
+} from "./matchSubstitutionService.js";
 
 const substituteListSelect = `SELECT r.id, r.tournament_id, r.email, r.name, r.display_name, r.location, r.roles, r.mmr,
       r.steam_name, r.steam_profile, r.discord_handle, r.phone_number, r.payment_screenshot, r.notes,
@@ -97,12 +103,15 @@ export async function listSubstitutionRequests(tournamentId, { status } = {}) {
   let sql = `SELECT sr.*,
                     pa.display_name AS requester_name,
                     pa.bpc_id AS requester_bpc_id,
+                    sub_pa.display_name AS substitute_name,
+                    sub_pa.bpc_id AS substitute_bpc_id,
                     m.team1, m.team2, m.stage_key, m.round_index, m.match_index,
                     ss.start_at AS match_start_at,
                     rst.name AS team_name,
                     COALESCE(pref_pr.display_name, pref_pr.name) AS preferred_substitute_name
              FROM substitution_requests sr
              LEFT JOIN player_accounts pa ON pa.id = sr.requesting_player_account_id
+             LEFT JOIN player_accounts sub_pa ON sub_pa.id = sr.assigned_player_account_id
              LEFT JOIN matches m ON m.id = sr.match_id
              LEFT JOIN schedule_slots ss ON ss.match_id = m.id
              LEFT JOIN roster_snapshot_teams rst ON rst.id = sr.snapshot_team_id
@@ -118,6 +127,9 @@ export async function listSubstitutionRequests(tournamentId, { status } = {}) {
 }
 
 export async function updateSubstitutionRequest(tournamentId, requestId, { status, adminNotes }) {
+  if (status === "cancelled") {
+    return cancelSubstitutionRequestByAdmin(tournamentId, requestId, { adminNotes });
+  }
   const { rows } = await pool.query(
     `UPDATE substitution_requests
      SET status = COALESCE($3, status), admin_notes = COALESCE($4, admin_notes), updated_at = NOW()
@@ -128,4 +140,10 @@ export async function updateSubstitutionRequest(tournamentId, requestId, { statu
   return rows[0] || null;
 }
 
-export { assignSubstitutionRequest, listEligibleSubstitutes };
+export {
+  assignSubstitutionRequest,
+  cancelSubstitutionRequestByAdmin,
+  listEligibleSubstitutes,
+  listSubstitutionTargets,
+  manualAssignSubstitute,
+};

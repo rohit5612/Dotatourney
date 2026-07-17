@@ -135,10 +135,17 @@ function MatchCard({ match, onRefresh, showResult = false }) {
             Playing as substitute{myTeamName ? ` for ${myTeamName}` : ""}
           </span>
         ) : null}
-        {req ? (
+        {match.wasReplacedBySub ? (
+          <span className="player-dash__tourney-badge player-dash__tourney-badge--warm">
+            Subbed out
+            {req?.substituteName ? ` — ${req.substituteName} playing` : ""}
+          </span>
+        ) : null}
+        {req && !match.wasReplacedBySub ? (
           <div className="player-match-card__request">
             <span className={`player-dash__tourney-badge player-dash__tourney-badge--${req.status === "approved" ? "success" : "warm"}`}>
               Sub request: {req.status}
+              {req.status === "approved" && req.substituteName ? ` — ${req.substituteName} in` : ""}
             </span>
             {req.status === "pending" ? (
               <button

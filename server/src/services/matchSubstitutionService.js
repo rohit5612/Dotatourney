@@ -6,6 +6,7 @@ import {
   getLineupPlayerAccountIdsForMatchTeam,
   getMatchLineupRows,
   groupLineupsByTeam,
+  revertSubstituteFromLineup,
   seedMatchLineupsForTournament,
 } from "./matchLineupService.js";
 import {
@@ -99,10 +100,12 @@ async function ensureLineupsSeeded(tournamentId, matchId) {
 
 async function getPlayerSubstitutionRequest(matchId, playerAccountId) {
   const { rows } = await pool.query(
-    `SELECT * FROM substitution_requests
-     WHERE match_id = $1 AND requesting_player_account_id = $2
-       AND status IN ('pending', 'approved')
-     ORDER BY created_at DESC
+    `SELECT sr.*, sub_pa.display_name AS substitute_name
+     FROM substitution_requests sr
+     LEFT JOIN player_accounts sub_pa ON sub_pa.id = sr.assigned_player_account_id
+     WHERE sr.match_id = $1 AND sr.requesting_player_account_id = $2
+       AND sr.status IN ('pending', 'approved')
+     ORDER BY sr.created_at DESC
      LIMIT 1`,
     [matchId, playerAccountId],
   );
@@ -117,6 +120,7 @@ function mapSubstitutionRequest(row, startAt) {
     status: row.status,
     reason: row.reason || "",
     preferredSubstituteRegistrationId: row.preferred_substitute_registration_id || null,
+    substituteName: row.substitute_name || null,
     canCancel: row.status === "pending" && canCancelRequest(startAt),
     cancelDeadline: deadline?.toISOString() || null,
     createdAt: row.created_at,
@@ -217,6 +221,9 @@ async function buildMatchPayload(matchRow, playerAccountId, teamName, { isSubsti
   const subRequest = await getPlayerSubstitutionRequest(matchRow.id, playerAccountId);
   const completed = isMatchCompleted(matchRow.status) || matchRow.schedule_status === "finished";
   const isFuture = startAt ? new Date(startAt).getTime() > Date.now() : !completed;
+  const wasReplacedBySub = Boolean(
+    subRequest?.status === "approved" && !onLineup && !isSubstitute,
+  );
 
   return {
     id: matchRow.id,
@@ -248,6 +255,7 @@ async function buildMatchPayload(matchRow, playerAccountId, teamName, { isSubsti
     notes: matchRow.schedule_notes,
     lineups,
     playingAsSubstitute: isSubstitute,
+    wasReplacedBySub,
     substitutionRequest: mapSubstitutionRequest(subRequest, startAt),
     canRequestSubstitution:
       onLineup && !isSubstitute && isFuture && !completed && !subRequest && Boolean(startAt),
@@ -420,6 +428,419 @@ export async function cancelSubstitutionRequest(playerAccountId, matchId) {
   return { request: updated[0] };
 }
 
+export async function cancelSubstitutionRequestByAdmin(
+  tournamentId,
+  requestId,
+  { adminNotes, adminUserId } = {},
+) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const { rows: reqRows } = await client.query(
+      `SELECT sr.*, m.team1, m.team2, m.status AS match_status,
+              ss.start_at, ss.status AS schedule_status,
+              pa.display_name AS requester_name,
+              sub_pa.display_name AS substitute_name
+       FROM substitution_requests sr
+       JOIN matches m ON m.id = sr.match_id
+       LEFT JOIN schedule_slots ss ON ss.match_id = m.id
+       LEFT JOIN player_accounts pa ON pa.id = sr.requesting_player_account_id
+       LEFT JOIN player_accounts sub_pa ON sub_pa.id = sr.assigned_player_account_id
+       WHERE sr.id = $1 AND sr.tournament_id = $2
+       FOR UPDATE OF sr`,
+      [requestId, tournamentId],
+    );
+    const request = reqRows[0];
+    if (!request) throw httpError("Request not found", 404);
+    if (request.status === "cancelled") throw httpError("Request is already cancelled.");
+    if (request.status === "rejected") throw httpError("Rejected requests cannot be cancelled.");
+
+    if (isMatchCompleted(request.match_status) || request.schedule_status === "finished") {
+      throw httpError("Cannot cancel substitutions for a completed match.");
+    }
+
+    const wasApproved = request.status === "approved";
+    let teamName = null;
+
+    if (wasApproved) {
+      const { rows: teamRows } = await client.query(
+        `SELECT rst.name FROM roster_snapshot_teams rst WHERE rst.id = $1`,
+        [request.snapshot_team_id],
+      );
+      teamName = teamRows[0]?.name;
+      if (!teamName) {
+        const teamInfo = await findPlayerTeamOnTournament(
+          request.requesting_player_account_id,
+          tournamentId,
+        );
+        teamName = teamInfo?.team?.name;
+      }
+      if (!teamName) throw httpError("Could not resolve team for this request.");
+
+      await revertSubstituteFromLineup(client, {
+        matchId: request.match_id,
+        tournamentId,
+        teamName,
+        replacedPlayerAccountId: request.requesting_player_account_id,
+        substitutionRequestId: requestId,
+      });
+    }
+
+    const { rows: updated } = await client.query(
+      `UPDATE substitution_requests
+       SET status = 'cancelled',
+           cancelled_at = NOW(),
+           admin_notes = COALESCE($3, admin_notes),
+           updated_at = NOW()
+       WHERE id = $1 AND tournament_id = $2
+       RETURNING *`,
+      [requestId, tournamentId, adminNotes ?? null],
+    );
+
+    await client.query("COMMIT");
+
+    const match = {
+      id: request.match_id,
+      team1: request.team1,
+      team2: request.team2,
+    };
+    const requesterName = request.requester_name || "A player";
+    const substituteName = request.substitute_name || null;
+
+    if (wasApproved && teamName) {
+      const requestingTeamIds = await getLineupPlayerAccountIdsForMatchTeam(request.match_id, teamName);
+      const opponentTeamName = getOpponentTeamName(match, teamName);
+      const opponentTeamIds = opponentTeamName
+        ? await getLineupPlayerAccountIdsForMatchTeam(request.match_id, opponentTeamName)
+        : [];
+      const recipientIds = [
+        ...new Set([
+          ...requestingTeamIds,
+          request.requesting_player_account_id,
+          request.assigned_player_account_id,
+          ...opponentTeamIds,
+        ].filter(Boolean)),
+      ];
+      await notifySubstitutionCancelled({
+        match,
+        requesterName,
+        substituteName,
+        recipientAccountIds: recipientIds,
+        substitutionRequestId: requestId,
+        wasApproved: true,
+        cancelledByAdmin: true,
+      });
+    } else {
+      const teamInfo = await findPlayerTeamOnTournament(
+        request.requesting_player_account_id,
+        tournamentId,
+      );
+      const pendingTeamName = teamInfo?.team?.name;
+      const recipientIds = pendingTeamName
+        ? await getLineupPlayerAccountIdsForMatchTeam(request.match_id, pendingTeamName)
+        : [];
+      await notifySubstitutionCancelled({
+        match,
+        requesterName,
+        recipientAccountIds: recipientIds,
+        substitutionRequestId: requestId,
+        cancelledByAdmin: true,
+      });
+    }
+
+    return { request: updated[0], adminUserId };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+function mapLineupPlayerForAdmin(row) {
+  return {
+    playerAccountId: row.player_account_id,
+    displayName: row.display_name,
+    bpcId: row.bpc_id || null,
+    isSubstitute: row.is_substitute === true,
+    replacesDisplayName: row.replaces_display_name || null,
+  };
+}
+
+function mapLineupSide(lineupRows, teamName) {
+  return lineupRows
+    .filter((row) => row.team_name?.toLowerCase() === teamName?.toLowerCase())
+    .map(mapLineupPlayerForAdmin);
+}
+
+async function getPlayerPendingSubstitutionRequest(matchId, playerAccountId) {
+  const { rows } = await pool.query(
+    `SELECT * FROM substitution_requests
+     WHERE match_id = $1 AND requesting_player_account_id = $2 AND status = 'pending'
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [matchId, playerAccountId],
+  );
+  return rows[0] || null;
+}
+
+async function resolveSubstituteRegistration(client, tournamentId, { substituteRegistrationId, substitutePlayerAccountId }) {
+  let registrationId = substituteRegistrationId || null;
+  let assigneeAccountId = substitutePlayerAccountId || null;
+
+  if (registrationId) {
+    const { rows: regRows } = await client.query(
+      `SELECT * FROM player_registrations
+       WHERE id = $1 AND tournament_id = $2 AND registration_status = 'approved' AND archived_at IS NULL`,
+      [registrationId, tournamentId],
+    );
+    const reg = regRows[0];
+    if (!reg) throw httpError("Substitute registration not found or not approved.");
+    assigneeAccountId = reg.player_account_id;
+    return { registrationId, assigneeAccountId, reg };
+  }
+
+  if (assigneeAccountId) {
+    const { rows: regRows } = await client.query(
+      `SELECT * FROM player_registrations
+       WHERE player_account_id = $1 AND tournament_id = $2 AND registration_status = 'approved' AND archived_at IS NULL
+       LIMIT 1`,
+      [assigneeAccountId, tournamentId],
+    );
+    const reg = regRows[0];
+    if (!reg) throw httpError("Substitute registration not found or not approved.");
+    return { registrationId: reg.id, assigneeAccountId, reg };
+  }
+
+  throw httpError("Select a substitute from the pool.");
+}
+
+async function sendSubstitutionAssignedNotifications({
+  matchId,
+  team1,
+  team2,
+  teamName,
+  requesterName,
+  substituteName,
+  requesterAccountId,
+  assigneeAccountId,
+  substitutionRequestId,
+}) {
+  const match = { id: matchId, team1, team2 };
+  const requestingTeamIds = await getLineupPlayerAccountIdsForMatchTeam(matchId, teamName);
+  const opponentTeamName = getOpponentTeamName(match, teamName);
+  const opponentTeamIds = opponentTeamName
+    ? await getLineupPlayerAccountIdsForMatchTeam(matchId, opponentTeamName)
+    : [];
+
+  await notifySubstitutionAssigned({
+    match,
+    teamName,
+    requesterName,
+    substituteName,
+    recipientAccountIds: [
+      ...new Set([...requestingTeamIds, requesterAccountId, assigneeAccountId]),
+    ],
+    substitutionRequestId,
+  });
+
+  if (opponentTeamIds.length) {
+    await notifySubstitutionOpponentLineupChange({
+      match,
+      teamName,
+      requesterName,
+      substituteName,
+      recipientAccountIds: opponentTeamIds,
+      substitutionRequestId,
+    });
+  }
+}
+
+export async function listSubstitutionTargets(tournamentId) {
+  const { rows: matchRows } = await pool.query(
+    `SELECT m.id, m.team1, m.team2, m.stage_key, m.round_index, m.match_index, m.status,
+            ss.start_at, ss.status AS schedule_status
+     FROM matches m
+     JOIN schedule_slots ss ON ss.match_id = m.id
+     WHERE m.tournament_id = $1
+       AND ss.start_at IS NOT NULL
+     ORDER BY ss.start_at ASC, m.round_index ASC, m.match_index ASC`,
+    [tournamentId],
+  );
+
+  const matches = [];
+  for (const row of matchRows) {
+    if (isMatchCompleted(row.status) || row.schedule_status === "finished") continue;
+
+    await ensureLineupsSeeded(tournamentId, row.id);
+    const lineupRows = await getMatchLineupRows(row.id);
+
+    matches.push({
+      id: row.id,
+      team1: row.team1,
+      team2: row.team2,
+      stageKey: row.stage_key,
+      roundIndex: row.round_index,
+      matchIndex: row.match_index,
+      startAt: row.start_at,
+      status: row.status,
+      lineups: {
+        team1: mapLineupSide(lineupRows, row.team1),
+        team2: mapLineupSide(lineupRows, row.team2),
+      },
+    });
+  }
+
+  return { matches };
+}
+
+export async function manualAssignSubstitute(
+  tournamentId,
+  { matchId, replacedPlayerAccountId, substituteRegistrationId, adminNotes, adminUserId },
+) {
+  const match = await loadMatchContext(matchId);
+  if (!match) throw httpError("Match not found", 404);
+  if (match.tournament_id !== tournamentId) throw httpError("Match not found", 404);
+  if (isMatchCompleted(match.status) || match.schedule_status === "finished") {
+    throw httpError("This match is already completed.");
+  }
+  if (!match.start_at) throw httpError("Match must be scheduled before assigning a substitute.");
+
+  const teamInfo = await findPlayerTeamOnTournament(replacedPlayerAccountId, tournamentId);
+  if (!teamInfo?.team?.name) {
+    throw httpError("Selected player is not on an approved roster for this tournament.");
+  }
+
+  await ensureLineupsSeeded(tournamentId, matchId);
+
+  const { rows: lineupCheck } = await pool.query(
+    `SELECT team_name FROM match_lineup_players
+     WHERE match_id = $1 AND player_account_id = $2 AND is_substitute = FALSE`,
+    [matchId, replacedPlayerAccountId],
+  );
+  if (!lineupCheck[0]) {
+    throw httpError("Selected player is not on the match lineup or has already been replaced.");
+  }
+  const teamName = lineupCheck[0].team_name;
+
+  const isOnMatch =
+    teamName.toLowerCase() === match.team1?.toLowerCase() ||
+    teamName.toLowerCase() === match.team2?.toLowerCase();
+  if (!isOnMatch) throw httpError("Selected player's team is not playing in this match.");
+
+  const pendingRequest = await getPlayerPendingSubstitutionRequest(matchId, replacedPlayerAccountId);
+  if (pendingRequest) {
+    return assignSubstitutionRequest(tournamentId, pendingRequest.id, {
+      substituteRegistrationId,
+      adminNotes,
+      adminUserId,
+    });
+  }
+
+  const existingApproved = await getPlayerSubstitutionRequest(matchId, replacedPlayerAccountId);
+  if (existingApproved?.status === "approved") {
+    throw httpError("This player already has an approved substitution for this match.");
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const { registrationId, assigneeAccountId, reg: assigneeReg } = await resolveSubstituteRegistration(
+      client,
+      tournamentId,
+      { substituteRegistrationId },
+    );
+
+    if (assigneeAccountId === replacedPlayerAccountId) {
+      throw httpError("Substitute cannot be the same player being replaced.");
+    }
+
+    const { rows: subOnLineup } = await client.query(
+      `SELECT id FROM match_lineup_players WHERE match_id = $1 AND player_account_id = $2 LIMIT 1`,
+      [matchId, assigneeAccountId],
+    );
+    if (subOnLineup[0]) {
+      throw httpError("Selected substitute is already on the lineup for this match.");
+    }
+
+    const { rows: teamRows } = await client.query(
+      `SELECT rst.id FROM roster_snapshot_teams rst
+       JOIN roster_snapshots rs ON rs.id = rst.roster_snapshot_id AND rs.status = 'approved'
+       WHERE rs.tournament_id = $1 AND lower(rst.name) = lower($2)
+       ORDER BY rs.approved_at DESC LIMIT 1`,
+      [tournamentId, teamName],
+    );
+
+    const { rows: requesterAccount } = await client.query(
+      `SELECT display_name FROM player_accounts WHERE id = $1`,
+      [replacedPlayerAccountId],
+    );
+    const requesterName = requesterAccount[0]?.display_name || teamInfo.player?.name || "A player";
+    const substituteName = assigneeReg.display_name || assigneeReg.name || "Substitute";
+
+    const trimmedNotes = String(adminNotes || "").trim();
+    const reason = trimmedNotes ? `Manual: ${trimmedNotes}` : "Manual: Admin assignment";
+    const requestId = randomUUID();
+    const windowExpires = cancelDeadline(match.start_at);
+
+    const { rows: created } = await client.query(
+      `INSERT INTO substitution_requests (
+        id, tournament_id, snapshot_team_id, requesting_player_account_id, replaced_player_account_id,
+        match_id, status, reason, window_expires_at, substitute_registration_id, assigned_player_account_id,
+        admin_notes
+      ) VALUES ($1, $2, $3, $4, $4, $5, 'approved', $6, $7, $8, $9, $10)
+      RETURNING *`,
+      [
+        requestId,
+        tournamentId,
+        teamRows[0]?.id || null,
+        replacedPlayerAccountId,
+        matchId,
+        reason,
+        windowExpires,
+        registrationId,
+        assigneeAccountId,
+        trimmedNotes,
+      ],
+    );
+
+    await applySubstituteToLineup(client, {
+      matchId,
+      tournamentId,
+      teamName,
+      replacedPlayerAccountId,
+      substitutePlayerAccountId: assigneeAccountId,
+      substituteDisplayName: substituteName,
+      substituteRoles: assigneeReg.roles || [],
+      substituteMmr: assigneeReg.mmr ?? null,
+      substitutionRequestId: requestId,
+    });
+
+    await client.query("COMMIT");
+
+    await sendSubstitutionAssignedNotifications({
+      matchId,
+      team1: match.team1,
+      team2: match.team2,
+      teamName,
+      requesterName,
+      substituteName,
+      requesterAccountId: replacedPlayerAccountId,
+      assigneeAccountId,
+      substitutionRequestId: requestId,
+    });
+
+    return { request: created[0], adminUserId };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function listEligibleSubstitutes(tournamentId) {
   const { rows } = await pool.query(
     `SELECT pr.id AS registration_id, pr.player_account_id, pr.display_name, pr.name, pr.mmr, pr.roles,
@@ -554,42 +975,17 @@ export async function assignSubstitutionRequest(
 
     await client.query("COMMIT");
 
-    const match = {
-      id: request.match_id,
+    await sendSubstitutionAssignedNotifications({
+      matchId: request.match_id,
       team1: request.team1,
       team2: request.team2,
-    };
-    const requestingTeamIds = await getLineupPlayerAccountIdsForMatchTeam(request.match_id, teamName);
-    const opponentTeamName = getOpponentTeamName(match, teamName);
-    const opponentTeamIds = opponentTeamName
-      ? await getLineupPlayerAccountIdsForMatchTeam(request.match_id, opponentTeamName)
-      : [];
-
-    await notifySubstitutionAssigned({
-      match,
       teamName,
       requesterName: request.requester_name || "A player",
       substituteName,
-      recipientAccountIds: [
-        ...new Set([
-          ...requestingTeamIds,
-          request.requesting_player_account_id,
-          assigneeAccountId,
-        ]),
-      ],
+      requesterAccountId: request.requesting_player_account_id,
+      assigneeAccountId,
       substitutionRequestId: requestId,
     });
-
-    if (opponentTeamIds.length) {
-      await notifySubstitutionOpponentLineupChange({
-        match,
-        teamName,
-        requesterName: request.requester_name || "A player",
-        substituteName,
-        recipientAccountIds: opponentTeamIds,
-        substitutionRequestId: requestId,
-      });
-    }
 
     return { request: updated[0], adminUserId };
   } catch (error) {
