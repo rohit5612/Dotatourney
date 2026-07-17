@@ -7,8 +7,9 @@ Manual hosting guide for **Netlify (frontend)** + **Hostinger VPS (API + Postgre
 | URL | Host | Role |
 |-----|------|------|
 | `https://bpcleague.in` | Netlify | React SPA (`dota/dist`) |
+| `https://bpcleague.in/api/*` | Netlify → VPS proxy | Browser API calls (same-origin) |
 | `https://www.bpcleague.in` | Netlify | 301 → apex |
-| `https://api.bpcleague.in` | Hostinger VPS | Express API, OAuth callbacks, Cashfree webhook |
+| `https://api.bpcleague.in` | Hostinger VPS | OAuth callbacks, webhooks, direct API access |
 
 ---
 
@@ -121,13 +122,17 @@ Test: `curl https://api.bpcleague.in/health`
 
 ---
 
-## Step 6 — GoDaddy DNS
+## Step 6 — DNS (Netlify)
+
+Manage DNS in **Netlify → Domains → bpcleague.in → DNS** (or your registrar if nameservers point to Netlify).
 
 | Type | Name | Value |
 |------|------|-------|
 | A | `api` | `<VPS_PUBLIC_IP>` |
 | — | `@` | Netlify apex (see Step 7) |
 | CNAME | `www` | `<your-site>.netlify.app` |
+
+Do **not** add an `AAAA` record for `api` unless IPv6 is fully configured on the VPS.
 
 Optional email (OTP / invites): SPF, DKIM, DMARC for `bpcleague.in` — see `server/docs/email.md`.
 
@@ -136,23 +141,31 @@ Optional email (OTP / invites): SPF, DKIM, DMARC for `bpcleague.in` — see `ser
 ## Step 7 — Netlify frontend
 
 1. Connect repo in Netlify.
-2. Build settings (or use repo `dota/netlify.toml`):
+2. Build settings (repo root `netlify.toml`):
    - Base directory: `dota`
    - Build: `npm ci && npm run build`
    - Publish: `dist`
-3. **Environment variables** (Site settings → Environment):
+3. **API proxy** — `netlify.toml` rewrites `/api/*` → `https://api.bpcleague.in/api/*` so browsers use same-origin requests (helps users on VPNs / Cloudflare WARP). OAuth still uses `api.bpcleague.in` directly.
+4. **Environment variables** (Site settings → Environment):
 
    ```env
-   VITE_API_BASE_URL=https://api.bpcleague.in/api
+   VITE_API_BASE_URL=/api
    VITE_API_PUBLIC_URL=https://api.bpcleague.in
    VITE_SITE_URL=https://bpcleague.in
    VITE_EMERALD_THEME=true
    ```
 
-4. Add custom domains: `bpcleague.in` + `www.bpcleague.in`
-5. Set primary domain to `bpcleague.in`
-6. Add GoDaddy DNS records Netlify shows for apex + www
-7. Enable HTTPS (automatic)
+5. Add custom domains: `bpcleague.in` + `www.bpcleague.in`
+6. Set primary domain to `bpcleague.in`
+7. Add DNS records Netlify shows for apex + www
+8. Enable HTTPS (automatic)
+
+After deploy, verify the proxy:
+
+```bash
+curl -s https://bpcleague.in/api/health
+# → {"ok":true}
+```
 
 ---
 
@@ -215,9 +228,10 @@ Keep localhost URLs for dev (`http://localhost:3000/api/player/auth/*/callback`)
 ## Step 10 — Go-live checklist
 
 - [ ] `curl https://api.bpcleague.in/health` returns `{"ok":true}`
+- [ ] `curl https://bpcleague.in/api/health` returns `{"ok":true}` (Netlify proxy)
 - [ ] `https://bpcleague.in` loads the site
 - [ ] `https://www.bpcleague.in` redirects to apex
-- [ ] Browser DevTools: API calls to `api.bpcleague.in` succeed (no CORS errors)
+- [ ] Browser DevTools: API calls go to `bpcleague.in/api/...` (not `api.bpcleague.in`)
 - [ ] Google login on `/login` → lands on `/dashboard`
 - [ ] Discord link from profile/settings works
 - [ ] Steam link from profile/settings works

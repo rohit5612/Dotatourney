@@ -5,11 +5,12 @@
   command = "npm ci && npm run build"
   publish = "dist"
 
-# SPA fallback for React Router
+# API proxy — same-origin /api/* → Hostinger VPS (must be before SPA catch-all)
 [[redirects]]
-  from = "/*"
-  to = "/index.html"
+  from = "/api/*"
+  to = "https://api.bpcleague.in/api/:splat"
   status = 200
+  force = true
 
 # Canonical apex domain
 [[redirects]]
@@ -17,3 +18,9 @@
   to = "https://bpcleague.in/:splat"
   status = 301
   force = true
+
+# SPA fallback for React Router — must be last
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
