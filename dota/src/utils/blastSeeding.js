@@ -97,17 +97,21 @@ export function computeBlastPlaceholderMap(groupedStandings, format, overrides =
     .filter((group) => parseGroupLetterFromLabel(group.label))
     .sort((a, b) => groupLabelSortRank(a.label) - groupLabelSortRank(b.label));
   if (!groups.length) return null;
-  if (!groups.every((group) => isGroupTableComplete(group.rows))) return null;
+
+  const completedGroups = groups.filter((group) => isGroupTableComplete(group.rows));
+  if (!completedGroups.length && (!overrides || !Object.keys(overrides).length)) return null;
 
   /** @type {Record<string, string>} */
   const map = {};
-  for (const group of groups) {
+  for (const group of completedGroups) {
     const letter = parseGroupLetterFromLabel(group.label);
     group.rows.forEach((row, index) => {
       map[`Group ${letter} #${index + 1}`] = row.team;
     });
   }
-  if (!overrides || !Object.keys(overrides).length) return map;
+  if (!overrides || !Object.keys(overrides).length) {
+    return Object.keys(map).length ? map : null;
+  }
   return { ...map, ...overrides };
 }
 

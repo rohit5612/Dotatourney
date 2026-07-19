@@ -839,6 +839,8 @@ export function AdminConsole() {
       api.clearPublicTournamentCache();
       setQualifierSeeding({
         groupsComplete: result.groupsComplete,
+        anyGroupsComplete: result.anyGroupsComplete,
+        completedGroups: result.completedGroups,
         teamCount: result.teamCount,
         overrides: result.overrides,
         autoMap: result.autoMap,

@@ -14,6 +14,30 @@ export function getQualifierSeedingOverrides(engineConfig) {
   return out;
 }
 
+/** @param {string} slotKey */
+export function parseBlastGroupSlotLetter(slotKey) {
+  const match = String(slotKey || "").match(/^Group ([A-H]) #\d+$/i);
+  return match ? match[1].toUpperCase() : null;
+}
+
+/** @param {string} slotKey */
+export function isGlobalBlastQualifierSlot(slotKey) {
+  return /^(BLR[1-4]|MID\d+|BLC\d+)$/i.test(String(slotKey || "").trim());
+}
+
+/**
+ * @param {number} teamCount
+ * @param {string[]} completedGroupLetters
+ * @param {boolean} allGroupsComplete
+ */
+export function listEditableQualifierSlotKeys(teamCount, completedGroupLetters, allGroupsComplete) {
+  return listBlastQualifierSlotKeys(teamCount).filter((key) => {
+    const letter = parseBlastGroupSlotLetter(key);
+    if (letter) return completedGroupLetters.includes(letter);
+    return allGroupsComplete;
+  });
+}
+
 /** @param {number} teamCount */
 export function listBlastQualifierSlotKeys(teamCount) {
   const sizes = getBlastPhaseSizes(teamCount);
@@ -44,9 +68,12 @@ export function listBlastQualifierSlotKeys(teamCount) {
  * @param {Record<string, string>} overrides
  */
 export function mergeQualifierSeedingOverrides(baseMap, overrides) {
-  if (!baseMap) return null;
-  if (!overrides || !Object.keys(overrides).length) return baseMap;
-  return { ...baseMap, ...overrides };
+  const base = baseMap || {};
+  if (!overrides || !Object.keys(overrides).length) {
+    return Object.keys(base).length ? base : null;
+  }
+  const merged = { ...base, ...overrides };
+  return Object.keys(merged).length ? merged : null;
 }
 
 /**
@@ -54,12 +81,17 @@ export function mergeQualifierSeedingOverrides(baseMap, overrides) {
  * @param {{ name: string }[]} teams
  * @param {string[]} slotKeys
  */
-export function validateQualifierSeedingOverrides(overrides, teams, slotKeys) {
+export function validateQualifierSeedingOverrides(overrides, teams, slotKeys, editableSlotKeys = null) {
   const teamNames = new Set((teams || []).map((team) => String(team.name || "").trim()).filter(Boolean));
+  const allowedKeys = editableSlotKeys || slotKeys;
   const usedTeams = new Set();
   const errors = [];
 
   for (const [slot, team] of Object.entries(overrides || {})) {
+    if (!allowedKeys.includes(slot)) {
+      errors.push(`Slot ${slot} is not editable yet`);
+      continue;
+    }
     if (!slotKeys.includes(slot)) {
       errors.push(`Unknown slot: ${slot}`);
       continue;

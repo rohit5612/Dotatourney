@@ -5,10 +5,13 @@ import {
   persistBlastGroupSeedingIfReady,
   computeBlastPlaceholderToTeamMap,
   blastGroupStageFinished,
+  blastAnyGroupStageFinished,
+  blastCompletedGroupLetters,
 } from "../services/blastSeeding.js";
 import {
   getQualifierSeedingOverrides,
   listBlastQualifierSlotKeys,
+  listEditableQualifierSlotKeys,
   normalizeQualifierSeedingOverrides,
   saveQualifierSeedingOverrides,
   validateQualifierSeedingOverrides,
@@ -823,13 +826,18 @@ function buildQualifierSeedingPayload(snapshot) {
   const teams = snapshot.approvedRoster?.teams || snapshot.teams || [];
   const teamCount = teams.length || snapshot.tournament.team_count || 0;
   const overrides = getQualifierSeedingOverrides(snapshot.tournament.engine_config);
+  const completedGroups = blastCompletedGroupLetters(snapshot.matches || []);
   const groupsComplete = blastGroupStageFinished(snapshot.matches || []);
-  const autoMap = groupsComplete ? computeBlastPlaceholderToTeamMap(teams, snapshot.matches, null) : null;
+  const anyGroupsComplete = blastAnyGroupStageFinished(snapshot.matches || []);
+  const autoMap = anyGroupsComplete ? computeBlastPlaceholderToTeamMap(teams, snapshot.matches, null) : null;
   const slotKeys = listBlastQualifierSlotKeys(teamCount);
-  const effectiveMap = autoMap ? { ...autoMap, ...overrides } : null;
+  const editableKeys = listEditableQualifierSlotKeys(teamCount, completedGroups, groupsComplete);
+  const effectiveMap = autoMap ? { ...autoMap, ...overrides } : Object.keys(overrides).length ? { ...overrides } : null;
 
   return {
     groupsComplete,
+    anyGroupsComplete,
+    completedGroups,
     teamCount,
     overrides,
     autoMap,
@@ -839,6 +847,7 @@ function buildQualifierSeedingPayload(snapshot) {
       autoTeam: autoMap?.[key] || "",
       team: effectiveMap?.[key] || autoMap?.[key] || "",
       isOverridden: Boolean(overrides[key]),
+      editable: editableKeys.includes(key),
     })),
   };
 }
@@ -866,8 +875,8 @@ router.put("/:id/qualifier-seeding", async (req, res, next) => {
     if (!snapshot.matches?.length) {
       return res.status(400).json({ message: "Generate a bracket before setting qualifier seeding" });
     }
-    if (!blastGroupStageFinished(snapshot.matches)) {
-      return res.status(400).json({ message: "Finish all group stage matches before manual qualifier ordering" });
+    if (!blastAnyGroupStageFinished(snapshot.matches)) {
+      return res.status(400).json({ message: "Finish at least one group before manual qualifier ordering" });
     }
 
     const payload = z
@@ -879,16 +888,32 @@ router.put("/:id/qualifier-seeding", async (req, res, next) => {
 
     const teams = snapshot.approvedRoster?.teams || snapshot.teams || [];
     const teamCount = teams.length || snapshot.tournament.team_count || 0;
+    const completedGroups = blastCompletedGroupLetters(snapshot.matches || []);
+    const groupsComplete = blastGroupStageFinished(snapshot.matches || []);
     const slotKeys = listBlastQualifierSlotKeys(teamCount);
-    const autoMap = computeBlastPlaceholderToTeamMap(teams, snapshot.matches, null);
+    const editableKeys = listEditableQualifierSlotKeys(teamCount, completedGroups, groupsComplete);
+    const autoMap = computeBlastPlaceholderToTeamMap(teams, snapshot.matches, null) || {};
+    const existingOverrides = getQualifierSeedingOverrides(snapshot.tournament.engine_config);
 
-    let nextOverrides = {};
+    let nextOverrides = { ...existingOverrides };
     if (payload.reset) {
-      nextOverrides = {};
+      for (const key of editableKeys) delete nextOverrides[key];
     } else {
       const draft = payload.assignments || {};
-      nextOverrides = normalizeQualifierSeedingOverrides(autoMap, draft);
-      const validationMessage = validateQualifierSeedingOverrides(nextOverrides, teams, slotKeys);
+      for (const key of editableKeys) {
+        const normalized = normalizeQualifierSeedingOverrides(autoMap, { [key]: draft[key] ?? "" });
+        if (normalized[key]) nextOverrides[key] = normalized[key];
+        else delete nextOverrides[key];
+      }
+      const activeOverrides = Object.fromEntries(
+        editableKeys.filter((key) => nextOverrides[key]).map((key) => [key, nextOverrides[key]]),
+      );
+      const validationMessage = validateQualifierSeedingOverrides(
+        activeOverrides,
+        teams,
+        slotKeys,
+        editableKeys,
+      );
       if (validationMessage) {
         return res.status(400).json({ message: validationMessage });
       }

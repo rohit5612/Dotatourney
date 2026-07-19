@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { blastGroupStageFinished, buildQualifierAssignmentPayload } from "../utils/qualifierSeeding.js";
+import {
+  blastAnyGroupStageFinished,
+  blastCompletedGroupLetters,
+  blastGroupStageFinished,
+  buildQualifierAssignmentPayload,
+} from "../utils/qualifierSeeding.js";
 
 function buildDraftFromSlots(slots) {
   /** @type {Record<string, string>} */
@@ -8,6 +13,11 @@ function buildDraftFromSlots(slots) {
     draft[slot.key] = slot.team || slot.autoTeam || "";
   }
   return draft;
+}
+
+function groupLabelFromSlotKey(slotKey) {
+  const match = String(slotKey || "").match(/^Group ([A-H]) #/i);
+  return match ? `Group ${match[1].toUpperCase()}` : null;
 }
 
 export function QualifierSeedingPanel({
@@ -19,9 +29,20 @@ export function QualifierSeedingPanel({
   onRefresh,
   disabled,
 }) {
-  const groupsComplete = useMemo(() => blastGroupStageFinished(matches), [matches]);
+  const completedGroups = useMemo(
+    () => qualifierSeeding?.completedGroups || blastCompletedGroupLetters(matches),
+    [qualifierSeeding?.completedGroups, matches],
+  );
+  const groupsComplete = useMemo(
+    () => qualifierSeeding?.groupsComplete ?? blastGroupStageFinished(matches),
+    [qualifierSeeding?.groupsComplete, matches],
+  );
+  const anyGroupsComplete = useMemo(
+    () => qualifierSeeding?.anyGroupsComplete ?? blastAnyGroupStageFinished(matches),
+    [qualifierSeeding?.anyGroupsComplete, matches],
+  );
   const slots = qualifierSeeding?.slots || [];
-  const savedSignature = slots.map((slot) => `${slot.key}:${slot.team}:${slot.isOverridden}`).join("|");
+  const savedSignature = slots.map((slot) => `${slot.key}:${slot.team}:${slot.isOverridden}:${slot.editable}`).join("|");
   const [draft, setDraft] = useState(() => buildDraftFromSlots(slots));
   const [isSaving, setIsSaving] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -45,11 +66,12 @@ export function QualifierSeedingPanel({
     setDirty(false);
   }, [savedSignature]);
 
-  if (format !== "blast" || !groupsComplete || !slots.length) {
+  if (format !== "blast" || !anyGroupsComplete || !slots.length) {
     return null;
   }
 
-  const overrideCount = slots.filter((slot) => {
+  const editableSlots = slots.filter((slot) => slot.editable !== false);
+  const overrideCount = editableSlots.filter((slot) => {
     const value = draft[slot.key] || "";
     return value && value !== (slot.autoTeam || "");
   }).length;
@@ -60,8 +82,8 @@ export function QualifierSeedingPanel({
   }
 
   function resetDraftToAuto() {
-    const next = {};
-    for (const slot of slots) {
+    const next = { ...draft };
+    for (const slot of editableSlots) {
       next[slot.key] = slot.autoTeam || "";
     }
     setDraft(next);
@@ -81,7 +103,11 @@ export function QualifierSeedingPanel({
 
   async function handleResetSaved() {
     if (!onSave) return;
-    const ok = window.confirm("Reset all qualifier slots to automatic group standings?");
+    const ok = window.confirm(
+      groupsComplete
+        ? "Reset all qualifier slots to automatic group standings?"
+        : "Reset saved overrides for completed groups?",
+    );
     if (!ok) return;
     setIsSaving(true);
     try {
@@ -102,10 +128,13 @@ export function QualifierSeedingPanel({
     }
   }
 
+  const pendingGroups = ["A", "B", "C", "D", "E", "F", "G", "H"].filter(
+    (letter) => slots.some((slot) => groupLabelFromSlotKey(slot.key) === `Group ${letter}`) && !completedGroups.includes(letter),
+  );
   const summary =
     overrideCount > 0
-      ? `${overrideCount} manual override${overrideCount === 1 ? "" : "s"} · Last chance / Play-In / playoff slots`
-      : "Automatic standings · adjust ranks before qualifier matches start";
+      ? `${overrideCount} manual override${overrideCount === 1 ? "" : "s"} · ${completedGroups.map((g) => `Group ${g}`).join(", ")} ready`
+      : `${completedGroups.map((g) => `Group ${g}`).join(", ")} ready · adjust ranks as groups finish`;
 
   return (
     <section className={`group-assignment-panel ${expanded ? "" : "group-assignment-panel--collapsed"}`}>
@@ -128,13 +157,18 @@ export function QualifierSeedingPanel({
           >
             {isRefreshing ? "Refreshing…" : "Reload"}
           </button>
-          <button type="button" className="btn btn-outline btn-sm" disabled={disabled} onClick={resetDraftToAuto}>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            disabled={disabled || !editableSlots.length}
+            onClick={resetDraftToAuto}
+          >
             Use standings
           </button>
           <button
             type="button"
             className="btn btn-outline btn-sm"
-            disabled={disabled || isSaving}
+            disabled={disabled || isSaving || !editableSlots.length}
             onClick={() => void handleResetSaved()}
           >
             Clear saved overrides
@@ -142,7 +176,7 @@ export function QualifierSeedingPanel({
           <button
             type="button"
             className="btn btn-primary btn-sm"
-            disabled={disabled || isSaving || !dirty}
+            disabled={disabled || isSaving || !dirty || !editableSlots.length}
             onClick={() => void handleSave()}
           >
             {isSaving ? "Saving…" : "Save qualifier order"}
@@ -153,22 +187,26 @@ export function QualifierSeedingPanel({
       {expanded ? (
         <>
           <p className="group-assignment-copy">
-            Group stage is complete. Reorder which team occupies each rank slot before Last chance, Play-In, and playoff
-            matches begin. Finished qualifier matches are not changed.
+            {groupsComplete
+              ? "All groups are complete. Reorder rank slots before Last chance, Play-In, and playoff matches begin."
+              : `Finished groups can be set now${pendingGroups.length ? ` (${pendingGroups.map((g) => `Group ${g}`).join(", ")} still playing)` : ""}. Global merged slots unlock once every group is done.`}
+            {" "}Finished qualifier matches are not changed.
           </p>
           <div className="group-assignment-grid">
             {slots.map((slot) => {
               const isOverride = draft[slot.key] && draft[slot.key] !== (slot.autoTeam || "");
+              const isEditable = slot.editable !== false;
               return (
-                <label key={slot.key} className="group-assignment-slot">
+                <label key={slot.key} className={`group-assignment-slot ${isEditable ? "" : "is-locked"}`}>
                   <span className="group-assignment-item-label">
                     {slot.key}
                     {isOverride ? <span className="group-assignment-badge">Manual</span> : null}
+                    {!isEditable ? <span className="group-assignment-badge is-muted">Locked</span> : null}
                   </span>
                   <select
                     className="group-assignment-select"
                     value={draft[slot.key] || ""}
-                    disabled={disabled}
+                    disabled={disabled || !isEditable}
                     onChange={(event) => updateSlot(slot.key, event.target.value)}
                   >
                     <option value="">—</option>
@@ -181,6 +219,8 @@ export function QualifierSeedingPanel({
                   </select>
                   {slot.autoTeam && draft[slot.key] !== slot.autoTeam ? (
                     <span className="group-assignment-hint">Standings: {slot.autoTeam}</span>
+                  ) : !isEditable ? (
+                    <span className="group-assignment-hint">Unlocks when this group finishes</span>
                   ) : null}
                 </label>
               );

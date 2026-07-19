@@ -186,6 +186,15 @@
   text-transform: uppercase;
 }
 
+.group-assignment-badge.is-muted {
+  background: color-mix(in srgb, var(--muted-foreground) 14%, transparent);
+  color: var(--muted-foreground);
+}
+
+.group-assignment-slot.is-locked {
+  opacity: 0.72;
+}
+
 .group-assignment-select {
   width: 100%;
   border: 1px solid var(--border);

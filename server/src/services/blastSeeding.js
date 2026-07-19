@@ -16,6 +16,29 @@ export function blastGroupStageKeys(matches) {
   return [...keys];
 }
 
+export function blastGroupLetterFromStageKey(stageKey) {
+  const match = String(stageKey || "").match(/^blast-group-([a-h])$/i);
+  return match ? match[1].toUpperCase() : null;
+}
+
+export function blastCompletedGroupLetters(matches) {
+  /** @type {string[]} */
+  const letters = [];
+  for (const stageKey of blastGroupStageKeys(matches)) {
+    const letter = blastGroupLetterFromStageKey(stageKey);
+    if (!letter) continue;
+    const groupMatches = (matches || []).filter((m) => m.stageKey === stageKey);
+    if (groupMatches.length > 0 && groupMatches.every((m) => m.winner)) {
+      letters.push(letter);
+    }
+  }
+  return letters.sort();
+}
+
+export function blastAnyGroupStageFinished(matches) {
+  return blastCompletedGroupLetters(matches).length > 0;
+}
+
 export function blastGroupStageFinished(matches) {
   const stageKeys = blastGroupStageKeys(matches);
   if (!stageKeys.length) return false;
@@ -26,7 +49,7 @@ export function blastGroupStageFinished(matches) {
 }
 
 /**
- * Builds placeholder → team name map when both BLAST groups are fully decided.
+ * Builds placeholder → team name map when one or more BLAST groups are fully decided.
  *
  * - **n=10**: Group A/B standings fill `Group A #n` / `Group B #n` only.
  * - **n=12**: Same group labels for all six ranks; no separate BLR/MID/BLC keys.
@@ -39,16 +62,17 @@ export function blastGroupStageFinished(matches) {
  * @returns {Record<string, string> | null}
  */
 export function computeBlastPlaceholderToTeamMap(teams, matches, overrides = null) {
-  if (!blastGroupStageFinished(matches)) return null;
+  const completedGroups = blastCompletedGroupLetters(matches);
+  const allGroupsComplete = blastGroupStageFinished(matches);
+  if (!completedGroups.length && (!overrides || !Object.keys(overrides).length)) return null;
 
   const grouped = buildGroupedStandings(teams, matches, "blast");
-  if (!grouped.length) return null;
+  if (!grouped.length && (!overrides || !Object.keys(overrides).length)) return null;
 
   const gA = grouped.find((g) => g.label === "Group A");
   const gB = grouped.find((g) => g.label === "Group B");
   const n = grouped.reduce((sum, group) => sum + (group.rows?.length || 0), 0);
   const sizes = getBlastPhaseSizes(n);
-  if (!sizes) return null;
 
   /** @type {Record<string, string>} */
   const map = {};
@@ -56,12 +80,15 @@ export function computeBlastPlaceholderToTeamMap(teams, matches, overrides = nul
     const labelMatch = group.label.match(/^Group ([A-H])$/);
     if (!labelMatch) continue;
     const key = labelMatch[1];
+    if (!completedGroups.includes(key)) continue;
     for (let i = 0; i < group.rows.length; i += 1) {
       map[`Group ${key} #${i + 1}`] = group.rows[i].team;
     }
   }
 
-  if (!gA || !gB) return mergeQualifierSeedingOverrides(map, overrides);
+  if (!allGroupsComplete || !sizes || !gA || !gB) {
+    return mergeQualifierSeedingOverrides(map, overrides);
+  }
 
   const winnerA = gA.rows[0]?.team;
   const winnerB = gB.rows[0]?.team;
