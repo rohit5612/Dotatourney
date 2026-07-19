@@ -62,9 +62,28 @@ function blastGroupSlotsForMatch(match, teamCount) {
 }
 
 function resolveBlastGroupTeam(current, slotKey, placeholderMap) {
-  if (slotKey && placeholderMap[slotKey]) return placeholderMap[slotKey];
+  if (slotKey) {
+    if (placeholderMap[slotKey]) return placeholderMap[slotKey];
+    return slotKey;
+  }
   if (current in placeholderMap) return placeholderMap[current];
   return current;
+}
+
+function parseGroupSlotLetter(slotKey) {
+  const match = String(slotKey || "").match(/^Group ([A-H]) #\d+$/i);
+  return match ? match[1].toUpperCase() : null;
+}
+
+function filterOverridesForCompletedGroups(overrides, completedLetters) {
+  if (!overrides || !Object.keys(overrides).length) return {};
+  /** @type {Record<string, string>} */
+  const filtered = {};
+  for (const [key, value] of Object.entries(overrides)) {
+    const letter = parseGroupSlotLetter(key);
+    if (letter && completedLetters.includes(letter)) filtered[key] = value;
+  }
+  return filtered;
 }
 
 function findBlastGroup(groupedStandings, which) {
@@ -99,7 +118,11 @@ export function computeBlastPlaceholderMap(groupedStandings, format, overrides =
   if (!groups.length) return null;
 
   const completedGroups = groups.filter((group) => isGroupTableComplete(group.rows));
-  if (!completedGroups.length && (!overrides || !Object.keys(overrides).length)) return null;
+  const completedLetters = completedGroups
+    .map((group) => parseGroupLetterFromLabel(group.label))
+    .filter(Boolean);
+  const filteredOverrides = filterOverridesForCompletedGroups(overrides, completedLetters);
+  if (!completedGroups.length && !Object.keys(filteredOverrides).length) return null;
 
   /** @type {Record<string, string>} */
   const map = {};
@@ -109,10 +132,10 @@ export function computeBlastPlaceholderMap(groupedStandings, format, overrides =
       map[`Group ${letter} #${index + 1}`] = row.team;
     });
   }
-  if (!overrides || !Object.keys(overrides).length) {
+  if (!Object.keys(filteredOverrides).length) {
     return Object.keys(map).length ? map : null;
   }
-  return { ...map, ...overrides };
+  return { ...map, ...filteredOverrides };
 }
 
 export function applyBlastPlaceholderMap(matches, placeholderMap, groupedStandings) {
@@ -159,11 +182,17 @@ export function resolveBlastBracketMatches(matches, groupedStandings, format, ov
               .filter(([, value]) => value),
           )
         : {};
+  const completedLetters = (groupedStandings || [])
+    .filter((group) => isGroupTableComplete(group.rows))
+    .map((group) => parseGroupLetterFromLabel(group.label))
+    .filter(Boolean);
   const baseMap = computeBlastPlaceholderMap(groupedStandings, format, null) || {};
-  const mergedOverrides =
+  const mergedOverrides = filterOverridesForCompletedGroups(
     overrides && typeof overrides === "object"
       ? Object.fromEntries(Object.entries(overrides).map(([key, value]) => [key, String(value || "").trim()]).filter(([, value]) => value))
-      : {};
+      : {},
+    completedLetters,
+  );
   const map =
     Object.keys(baseMap).length || Object.keys(mergedOverrides).length
       ? { ...baseMap, ...mergedOverrides }

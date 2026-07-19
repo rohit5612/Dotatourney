@@ -76,6 +76,46 @@ describe("BLAST n=12 qualifier & semifinal seeding paths", () => {
     );
   });
 
+  it("seeds only finished-group slots when one group completes (Group A only)", () => {
+    const groupAOrder = ["T1", "T2", "T3", "T4", "T5", "T6"];
+    const teams = teamList(12);
+    const raw = generateMatches(
+      "blast",
+      teams.map((t) => t.name),
+      {},
+    );
+    const partial = raw.map((m) => {
+      if (m.stageKey !== "blast-group-a") return m;
+      const i1 = groupAOrder.indexOf(m.team1);
+      const i2 = groupAOrder.indexOf(m.team2);
+      if (i1 === -1 || i2 === -1) return m;
+      return { ...m, winner: i1 < i2 ? m.team1 : m.team2, status: "finished" };
+    });
+
+    const map = computeBlastPlaceholderToTeamMap(teams, partial, null);
+    assert.equal(map?.["Group A #5"], "T5");
+    assert.equal(map?.["Group B #6"], undefined);
+
+    const { matches: seeded } = applyBlastGroupSeeding(teams, partial);
+    assert.deepEqual(round0Pairings(seeded, "blast-lastchance"), [
+      ["T5", "Group B #6"],
+      ["T6", "Group B #5"],
+    ]);
+    assert.deepEqual(round0Pairings(seeded, "blast-playin", "blast-mp-semifinal"), [
+      ["T3", "Group B #4"],
+      ["Group B #3", "T4"],
+    ]);
+
+    const cross = seeded.filter((m) => m.meta?.seriesRuleKey === "blast-playin-cross");
+    assert.equal(cross[0].team1, "T2");
+    assert.equal(cross[1].team1, "Group B #2");
+    assert.ok(cross.every((m) => String(m.team2).startsWith("LCR")));
+
+    const sf = seeded.filter((m) => m.stageKey === "blast-playoffs" && m.roundIndex === 1);
+    assert.equal(sf[0].team1, "T1");
+    assert.equal(sf[1].team1, "Group B #1");
+  });
+
   it("seeds all qualifier and semifinal slots from group standings (no bracket regen)", () => {
     const groupAOrder = [
       "Arrise Corp",

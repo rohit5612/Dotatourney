@@ -100,6 +100,29 @@ test("computeBlastPlaceholderToTeamMap works when only Group A is finished", () 
   assert.equal(map?.["Group B #1"], undefined);
 });
 
+test("computeBlastPlaceholderToTeamMap ignores overrides for unfinished groups", () => {
+  const teams = Array.from({ length: 12 }, (_, i) => ({ name: `T${i + 1}` }));
+  const orderA = ["T1", "T2", "T3", "T4", "T5", "T6"];
+  const matches = generateMatches(
+    "blast",
+    teams.map((t) => t.name),
+    {},
+  );
+  const partial = matches.map((m) => {
+    if (m.stageKey !== "blast-group-a") return m;
+    const i1 = orderA.indexOf(m.team1);
+    const i2 = orderA.indexOf(m.team2);
+    if (i1 === -1 || i2 === -1) return m;
+    return { ...m, winner: i1 < i2 ? m.team1 : m.team2, status: "finished" };
+  });
+  const map = computeBlastPlaceholderToTeamMap(teams, partial, {
+    "Group A #1": "OverrideA",
+    "Group B #1": "OverrideB",
+  });
+  assert.equal(map?.["Group A #1"], "OverrideA");
+  assert.equal(map?.["Group B #1"], undefined);
+});
+
 test("getQualifierSeedingOverrides reads engine_config map", () => {
   assert.deepEqual(
     getQualifierSeedingOverrides({

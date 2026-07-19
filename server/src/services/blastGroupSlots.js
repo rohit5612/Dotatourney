@@ -94,7 +94,10 @@ export function blastGroupSlotsForMatch(match, teamCount) {
  * @param {Record<string, string>} placeholderMap
  */
 export function resolveBlastGroupTeam(current, slotKey, placeholderMap) {
-  if (slotKey && placeholderMap[slotKey]) return placeholderMap[slotKey];
+  if (slotKey) {
+    if (placeholderMap[slotKey]) return placeholderMap[slotKey];
+    return slotKey;
+  }
   if (current in placeholderMap) return placeholderMap[current];
   return current;
 }

@@ -5,7 +5,7 @@ import {
   blastGroupSlotsForMatch,
   resolveBlastGroupTeam,
 } from "./blastGroupSlots.js";
-import { mergeQualifierSeedingOverrides, stripGroupStandingsOverrides } from "./blastQualifierSeeding.js";
+import { mergeQualifierSeedingOverrides, parseBlastGroupSlotLetter, stripGroupStandingsOverrides } from "./blastQualifierSeeding.js";
 import { buildGroupedStandings } from "./standingsEngine.js";
 
 export function blastGroupStageKeys(matches) {
@@ -48,6 +48,18 @@ export function blastGroupStageFinished(matches) {
   });
 }
 
+function filterOverridesForCompletedGroups(overrides, completedGroups) {
+  const stripped = stripGroupStandingsOverrides(overrides);
+  if (!stripped || !Object.keys(stripped).length) return null;
+  /** @type {Record<string, string>} */
+  const filtered = {};
+  for (const [key, value] of Object.entries(stripped)) {
+    const letter = parseBlastGroupSlotLetter(key);
+    if (letter && completedGroups.includes(letter)) filtered[key] = value;
+  }
+  return Object.keys(filtered).length ? filtered : null;
+}
+
 /**
  * Builds placeholder → team name map when one or more BLAST groups are fully decided.
  *
@@ -64,10 +76,11 @@ export function blastGroupStageFinished(matches) {
 export function computeBlastPlaceholderToTeamMap(teams, matches, overrides = null) {
   const completedGroups = blastCompletedGroupLetters(matches);
   const allGroupsComplete = blastGroupStageFinished(matches);
-  if (!completedGroups.length && (!overrides || !Object.keys(overrides).length)) return null;
+  const groupOverrides = filterOverridesForCompletedGroups(overrides, completedGroups);
+  if (!completedGroups.length && !groupOverrides) return null;
 
   const grouped = buildGroupedStandings(teams, matches, "blast");
-  if (!grouped.length && (!overrides || !Object.keys(overrides).length)) return null;
+  if (!grouped.length && !groupOverrides) return null;
 
   const gA = grouped.find((g) => g.label === "Group A");
   const gB = grouped.find((g) => g.label === "Group B");
@@ -87,19 +100,19 @@ export function computeBlastPlaceholderToTeamMap(teams, matches, overrides = nul
   }
 
   if (!allGroupsComplete || !sizes || !gA || !gB) {
-    return mergeQualifierSeedingOverrides(map, stripGroupStandingsOverrides(overrides));
+    return mergeQualifierSeedingOverrides(map, groupOverrides);
   }
 
   const winnerA = gA.rows[0]?.team;
   const winnerB = gB.rows[0]?.team;
-  if (!winnerA || !winnerB) return mergeQualifierSeedingOverrides(map, stripGroupStandingsOverrides(overrides));
+  if (!winnerA || !winnerB) return mergeQualifierSeedingOverrides(map, groupOverrides);
 
   if (sizes.mainPlayoffPath === "ten_qf_seconds") {
-    return mergeQualifierSeedingOverrides(map, stripGroupStandingsOverrides(overrides));
+    return mergeQualifierSeedingOverrides(map, groupOverrides);
   }
 
   if (sizes.mainPlayoffPath === "tiered_merged_standings" && n === 12) {
-    return mergeQualifierSeedingOverrides(map, stripGroupStandingsOverrides(overrides));
+    return mergeQualifierSeedingOverrides(map, groupOverrides);
   }
 
   if (sizes.mainPlayoffPath === "tiered_merged_standings" && grouped.length === 2) {
@@ -119,10 +132,10 @@ export function computeBlastPlaceholderToTeamMap(teams, matches, overrides = nul
     for (let j = 0; j < lc; j += 1) {
       map[`BLC${j + 1}`] = fullRank[lcStart + j];
     }
-    return mergeQualifierSeedingOverrides(map, stripGroupStandingsOverrides(overrides));
+    return mergeQualifierSeedingOverrides(map, groupOverrides);
   }
 
-  return mergeQualifierSeedingOverrides(map, stripGroupStandingsOverrides(overrides));
+  return mergeQualifierSeedingOverrides(map, groupOverrides);
 }
 
 /**
@@ -149,12 +162,8 @@ export function applyBlastGroupSeeding(teams, matches, overrides = null) {
     if (!hasGroupSlot) return m;
 
     const canResync = blastGroupSlotResyncAllowed(m);
-    const t1 = canResync
-      ? resolveBlastGroupTeam(m.team1, slots.blastSlot1, placeholderMap)
-      : resolveBlastGroupTeam(m.team1, undefined, placeholderMap);
-    const t2 = canResync
-      ? resolveBlastGroupTeam(m.team2, slots.blastSlot2, placeholderMap)
-      : resolveBlastGroupTeam(m.team2, undefined, placeholderMap);
+    const t1 = resolveBlastGroupTeam(m.team1, canResync ? slots.blastSlot1 : undefined, placeholderMap);
+    const t2 = resolveBlastGroupTeam(m.team2, canResync ? slots.blastSlot2 : undefined, placeholderMap);
 
     const meta = { ...(m.meta || {}) };
     if (slots.blastSlot1) meta.blastSlot1 = slots.blastSlot1;
