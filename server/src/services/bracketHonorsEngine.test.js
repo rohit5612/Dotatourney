@@ -81,6 +81,41 @@ describe("bracketHonorsEngine", () => {
     assert.equal(badge.kind, "in_semifinals");
   });
 
+  it("treats engine round numbers 1,2,3 as quarterfinals, semifinals, final", () => {
+    const matches = [
+      {
+        stageKey: "blast-playoffs",
+        roundIndex: 1,
+        matchIndex: 0,
+        team1: "Alpha",
+        team2: "Beta",
+        winner: null,
+        status: "upcoming",
+      },
+      {
+        stageKey: "blast-playoffs",
+        roundIndex: 2,
+        matchIndex: 0,
+        team1: "SFR1M1W",
+        team2: "SFR1M2W",
+        winner: null,
+        status: "upcoming",
+      },
+      {
+        stageKey: "blast-playoffs",
+        roundIndex: 3,
+        matchIndex: 0,
+        team1: "CHAMPION",
+        team2: "CHAMPION",
+        winner: null,
+        status: "upcoming",
+      },
+    ];
+    const badge = deriveTeamBracketBadge("Alpha", matches);
+    assert.equal(badge.kind, "in_quarterfinals");
+    assert.equal(badge.label, "Quarterfinals");
+  });
+
   it("respects displayPodiumCount from admin settings", () => {
     const matches = [
       {

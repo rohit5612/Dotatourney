@@ -470,6 +470,14 @@ export function createStageMatch(stageIndex, stages, config) {
   };
 }
 
+function normalizeMatchRoundIndices(matches) {
+  const sorted = [...new Set((matches || []).map((match) => match.roundIndex ?? 0))].sort((a, b) => a - b);
+  return (matches || []).map((match) => {
+    const idx = sorted.indexOf(match.roundIndex ?? 0);
+    return { ...match, roundIndex: idx >= 0 ? idx : match.roundIndex ?? 0 };
+  });
+}
+
 export function normalizeEngineStageSeeding(config) {
   const stages = Array.isArray(config?.stages) ? config.stages : [];
   const nextStages = stages.map((stage, index) => {
@@ -477,7 +485,7 @@ export function normalizeEngineStageSeeding(config) {
       const { matches, seedPlan, ...rest } = stage;
       return rest;
     }
-    const matches = resolveStageMatches(stage, index, stages, config);
+    const matches = normalizeMatchRoundIndices(resolveStageMatches(stage, index, stages, config));
     const elimination = defaultStageElimination(stage);
     return { ...stage, elimination, matches };
   });

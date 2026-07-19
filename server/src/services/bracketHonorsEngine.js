@@ -1,17 +1,29 @@
 /** BLAST-only bracket honors: placement badges, podium teams, champion / runner-up. */
 
+import {
+  distinctStageRoundIndices,
+  findPlayoffFinalMatch,
+  isPlayoffStageKey,
+  playoffMatchesInRound,
+  resolvePlayoffStageKey,
+  stageRoundOrdinal,
+} from "./playoffRoundUtils.js";
+
 function isBlastGroupStageKey(stageKey) {
   return /^blast-group-[a-h]$/i.test(stageKey || "");
 }
 
-function matchDepth(match) {
+function matchDepth(match, allMatches) {
   const stageKey = match?.stageKey || "";
   const round = match?.roundIndex ?? 0;
 
   if (isBlastGroupStageKey(stageKey)) return 10;
   if (stageKey === "blast-lastchance") return 30 + round * 2;
   if (stageKey === "blast-playin" || stageKey === "blast-qualifiers-playin") return 50 + round * 2;
-  if (stageKey === "blast-playoffs") return 70 + round * 10;
+  if (isPlayoffStageKey(stageKey)) {
+    const ordinal = stageRoundOrdinal(allMatches, stageKey, round);
+    return 70 + ordinal * 10;
+  }
   return 0;
 }
 
@@ -24,15 +36,13 @@ function teamInMatch(teamName, match) {
 }
 
 function findBlastFinal(matches) {
-  return (matches || []).find(
-    (match) => match.stageKey === "blast-playoffs" && (match.roundIndex ?? 0) === 2 && (match.matchIndex ?? 0) === 0,
-  );
+  return findPlayoffFinalMatch(matches);
 }
 
 function playoffMatches(matches, roundIndex) {
-  return (matches || [])
-    .filter((match) => match.stageKey === "blast-playoffs" && (match.roundIndex ?? 0) === roundIndex)
-    .sort((a, b) => (a.matchIndex ?? 0) - (b.matchIndex ?? 0));
+  const stageKey = resolvePlayoffStageKey(matches);
+  if (!stageKey) return [];
+  return playoffMatchesInRound(matches, stageKey, roundIndex);
 }
 
 function loserOf(match) {
@@ -54,6 +64,9 @@ export function buildBlastPlacementTeams(matches) {
   const finalMatch = findBlastFinal(matches);
   if (!finalMatch?.winner) return [];
 
+  const stageKey = resolvePlayoffStageKey(matches);
+  const rounds = stageKey ? distinctStageRoundIndices(matches, stageKey) : [];
+
   /** @type {{ placement: number, role: string, teamName: string }[]} */
   const out = [];
   const seen = new Set();
@@ -68,13 +81,13 @@ export function buildBlastPlacementTeams(matches) {
   push(1, "Champion", finalMatch.winner);
   push(2, "Runner-up", loserOf(finalMatch));
 
-  for (const sf of playoffMatches(matches, 1)) {
+  for (const sf of rounds.length >= 2 ? playoffMatches(matches, rounds[rounds.length - 2]) : []) {
     if (!isFinished(sf)) continue;
     push(3, "3rd Place", loserOf(sf));
   }
 
   let placement = 5;
-  for (const qf of playoffMatches(matches, 0)) {
+  for (const qf of rounds.length >= 1 ? playoffMatches(matches, rounds[0]) : []) {
     if (!isFinished(qf)) continue;
     push(placement, "Top 8", loserOf(qf));
     placement += 1;
@@ -103,7 +116,7 @@ export function deriveTeamBracketBadge(teamName, matches) {
   let lastExitDepth = 0;
 
   for (const match of involved) {
-    const depth = matchDepth(match);
+    const depth = matchDepth(match, matches);
     if (depth <= 10) continue;
 
     if (!isFinished(match)) {

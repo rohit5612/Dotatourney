@@ -11,6 +11,7 @@ import { getTournament, hydrateMatchRow } from "./tournamentRepository.js";
 import { resolveSeasonStatusFromTournament } from "./seasonUpsert.js";
 import { buildMatchRosterCards } from "./cardManifestService.js";
 import { buildPublicHonorsPayload } from "./bracketHonorsEngine.js";
+import { decorateMatchesForClient } from "./playoffRoundUtils.js";
 import { buildGroupedStandings, buildStandings } from "./standingsEngine.js";
 import { buildGroupedStandingsWithSeeding } from "./groupStandingsOverrides.js";
 import { buildTeamsWithActivePlayers, mergeSnapshotTeamsWithRoster } from "./rosterMembershipService.js";
@@ -364,7 +365,7 @@ export async function getSeasonBySlug(slug) {
       tournamentPayload = {
         tournament,
         teams: exposeTeamsPublicly ? teams : [],
-        matches,
+        matches: decorateMatchesForClient(matches),
         honors: buildPublicHonorsPayload(matches, format, tournament.tournament_honors),
         standings: buildStandings(standingsTeams, matches, format),
         groupedStandings: buildGroupedStandingsWithSeeding(

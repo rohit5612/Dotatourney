@@ -1,3 +1,4 @@
+import { normalizePlanRoundIndex, planRoundOrdinals } from "./playoffRoundUtils.js";
 import { resolveGroupStageConfig } from "./engineGroupConfig.js";
 import { blastLastChanceRanks } from "./engineStages.js";
 
@@ -370,11 +371,12 @@ export function compileEngineStageMatches(engineConfig, addMatchFn) {
 
     const stageKey = stageBracketKey(stage, format);
     const plan = resolveStageMatches(stage, stageIndex, stages, engineConfig);
+    const planRounds = planRoundOrdinals(plan);
     const roundMatchCounter = new Map();
 
     for (let matchIndex = 0; matchIndex < plan.length; matchIndex += 1) {
       const matchDef = plan[matchIndex];
-      const roundIndex = matchDef.roundIndex ?? 0;
+      const roundIndex = normalizePlanRoundIndex(matchDef.roundIndex ?? 0, planRounds);
       const roundCount = roundMatchCounter.get(roundIndex) || 0;
       roundMatchCounter.set(roundIndex, roundCount + 1);
       const matchIndexInRound = roundCount;

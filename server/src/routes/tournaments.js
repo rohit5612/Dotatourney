@@ -23,6 +23,7 @@ import { compileEngineConfigToGenerator, engineBracketTabs, engineStageTabs } fr
 import { buildGroupIndices, formatUsesGroupAssignment, resolveGroupStageConfig, validateGroupAssignment } from "../services/groupAssignment.js";
 import { reapplyAllProgression } from "../services/progressionEngine.js";
 import { buildPublicHonorsPayload } from "../services/bracketHonorsEngine.js";
+import { decorateMatchesForClient } from "../services/playoffRoundUtils.js";
 import { applySeriesRulesToMatches } from "../services/seriesRulesEngine.js";
 import { archivePlayerRegistration, getPlayerRegistrationById, listPlayerRegistrations, updatePlayerRegistration } from "../services/registrationRepository.js";
 import { sendPlayerRegistrationDecisionEmail } from "../services/emailService.js";
@@ -512,7 +513,7 @@ router.get("/:id", async (req, res, next) => {
     const honors = buildPublicHonorsPayload(matches, data.tournament.format, data.tournament.tournament_honors);
     return res.json({
       ...data,
-      matches,
+      matches: decorateMatchesForClient(matches),
       tabs: engineBracketTabs(data.tournament.engine_config) || stageTabsForFormat(data.tournament.format, { teamCount: data.tournament.team_count }),
       standings,
       groupedStandings,

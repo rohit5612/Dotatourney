@@ -136,6 +136,47 @@ describe("progressionEngine", () => {
     assert.equal(corrected.find((m) => m.id === "sf1").team2, "Emberfall");
   });
 
+  it("reapplyAllProgression works with legacy 1-based playoff round indices", () => {
+    const qf0 = {
+      id: "qf0",
+      stageKey: "blast-playoffs",
+      roundIndex: 1,
+      matchIndex: 0,
+      team1: "T1",
+      team2: "T2",
+      winner: "T1",
+      status: "finished",
+      meta: { winToken: "SFR1M1W" },
+    };
+    const qf1 = {
+      id: "qf1",
+      stageKey: "blast-playoffs",
+      roundIndex: 1,
+      matchIndex: 1,
+      team1: "T3",
+      team2: "T4",
+      winner: "T4",
+      status: "finished",
+      meta: { winToken: "SFR1M2W" },
+    };
+    const sf = {
+      id: "sf0",
+      stageKey: "blast-playoffs",
+      roundIndex: 2,
+      matchIndex: 0,
+      team1: "SFR1M1W",
+      team2: "SFR1M2W",
+      winner: null,
+      status: "upcoming",
+      meta: { winToken: "CHAMPION" },
+    };
+
+    const corrected = reapplyAllProgression([qf0, qf1, sf]);
+    const nextSf = corrected.find((m) => m.id === "sf0");
+    assert.equal(nextSf.team1, "T1");
+    assert.equal(nextSf.team2, "T4");
+  });
+
   it("reapplyAllProgression overrides stale team feed meta from wrong upstream", () => {
     const groupWin = {
       id: "ga1",

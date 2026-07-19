@@ -6,6 +6,7 @@ import {
 } from "./bracketLayout.js";
 import { BracketTokenHelp } from "./BracketTokenHelp.jsx";
 import { datetimeLocalToIso, toDatetimeLocalValue } from "../../utils/datetime.js";
+import { resolveDisplayWinToken } from "../../utils/playoffPresentation.js";
 
 /** 1-based round index from bracket win-token prefixes → Quarterfinals / Semifinals / Finals when applicable */
 function bracketTokenRoundLabel(roundStr) {
@@ -261,6 +262,7 @@ export function MatchCard({
   const team2Score = scoreLineValue(scoreDraft, "team2Score", base2, editing);
   const slotValue = match.slotAt ? toDatetimeLocalValue(match.slotAt) : "";
   const seriesLabel = String(match.meta?.seriesType || "").toUpperCase();
+  const displayWinToken = resolveDisplayWinToken(match);
   const requiredWins = Math.max(1, Math.ceil((Number(seriesLabel.replace("BO", "")) || 1) / 2));
   const matchFlowTip = blastVariant === "ten" || blastVariant === "twelve" ? describeBlastMatchFlow(match, blastVariant) : "";
   const leftScore = team1Score === "" ? null : Number(team1Score);
@@ -335,15 +337,15 @@ export function MatchCard({
         <span>Match {match.matchIndex + 1}</span>
         <span className="flex flex-wrap items-center justify-end gap-2">
           {seriesLabel ? <span className="rounded border border-border px-1.5 py-0.5">{seriesLabel}</span> : null}
-          {match.meta?.winToken ? (
+          {displayWinToken ? (
             <span
               className="cursor-help rounded border border-border px-1.5 py-0.5"
               title={
-                describeBracketToken(match.meta.winToken, blastBracketDepths, blastVariant) ||
-                `${match.meta.winToken}: winner of this match feeds into the next bracket slot.`
+                describeBracketToken(displayWinToken, blastBracketDepths, blastVariant) ||
+                `${displayWinToken}: winner of this match feeds into the next bracket slot.`
               }
             >
-              {match.meta.winToken}
+              {displayWinToken}
             </span>
           ) : null}
           <span className="capitalize">{displayStatus}</span>

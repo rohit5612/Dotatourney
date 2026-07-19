@@ -738,7 +738,7 @@ export function EngineWizard({ setMessage, onTemplatesChanged, embedded = false 
                             <span>Elimination</span>
                           </label>
                           <label className="engine-wizard__field engine-wizard__field--inline">
-                            <span>Round</span>
+                            <span>Round (0 = first)</span>
                             <input
                               type="number"
                               min={0}
