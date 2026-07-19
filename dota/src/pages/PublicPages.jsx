@@ -458,7 +458,12 @@ export function PublicApp({ path, navigate }) {
   const displayEvent = useMemo(() => {
     if (!event) return event;
     const format = event.tournament?.format;
-    const matches = resolveBlastBracketMatches(event.matches || [], event.groupedStandings || [], format);
+    const matches = resolveBlastBracketMatches(
+      event.matches || [],
+      event.groupedStandings || [],
+      format,
+      event.tournament?.engine_config,
+    );
     return { ...event, matches };
   }, [event]);
 

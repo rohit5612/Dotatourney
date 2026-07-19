@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BracketDiagram } from "../components/BracketDiagram";
 import { BracketStageTabs } from "../components/navigation/TournamentTabs.jsx";
 import { GroupAssignmentPanel } from "../components/GroupAssignmentPanel.jsx";
+import { QualifierSeedingPanel } from "../components/QualifierSeedingPanel.jsx";
 import { normalizedBlastBracketTabs } from "../components/bracket/bracketLayout.js";
 import { resolveBracketTabs } from "../utils/engineBracketTabs.js";
 import { formatUsesGroupAssignment, isGroupAssignmentValid } from "../utils/groupAssignment.js";
@@ -31,6 +32,9 @@ export function BracketPage({
   updateBracketActivation,
   approveRoster,
   saveGroupAssignments,
+  saveQualifierSeeding,
+  refreshQualifierSeeding,
+  qualifierSeeding,
   applySeriesRulesToUpcoming,
   refreshBracketProgression,
 }) {
@@ -244,6 +248,17 @@ export function BracketPage({
           bracketActive={bracketActive}
           bracketGenerated={totalMatches > 0}
           onSave={saveGroupAssignments}
+          disabled={!approvedRoster}
+        />
+      ) : null}
+      {mode === "tournament" ? (
+        <QualifierSeedingPanel
+          format={setup?.format}
+          matches={state?.matches || []}
+          qualifierSeeding={qualifierSeeding}
+          teamNames={(approvedRoster?.teams || []).map((team) => team.name)}
+          onSave={saveQualifierSeeding}
+          onRefresh={refreshQualifierSeeding}
           disabled={!approvedRoster}
         />
       ) : null}

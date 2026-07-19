@@ -17,6 +17,7 @@ import {
 } from "../services/publicCache.js";
 import { getPublishedTournament, getPublishedTournamentForPublicRequest } from "../services/tournamentRepository.js";
 import { applyBlastGroupSeeding } from "../services/blastSeeding.js";
+import { getQualifierSeedingOverrides } from "../services/blastQualifierSeeding.js";
 import { buildPublicHonorsPayload } from "../services/bracketHonorsEngine.js";
 import { buildGroupedStandings, buildStandings } from "../services/standingsEngine.js";
 import { buildTeamsWithActivePlayers } from "../services/rosterMembershipService.js";
@@ -264,7 +265,8 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
 
   let bracketMatches = data.matches;
   if (format === "blast" && visibilityMode !== "demo") {
-    bracketMatches = applyBlastGroupSeeding(standingsTeams, bracketMatches).matches;
+    const overrides = getQualifierSeedingOverrides(data.tournament.engine_config);
+    bracketMatches = applyBlastGroupSeeding(standingsTeams, bracketMatches, overrides).matches;
   }
   const matches = bracketMatches.map((match) => publicMatch(match, visibilityMode));
   const honors = buildPublicHonorsPayload(matches, format, data.tournament.tournament_honors);

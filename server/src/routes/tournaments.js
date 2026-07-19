@@ -1,7 +1,18 @@
 import { randomUUID } from "node:crypto";
 import express from "express";
 import { z } from "zod";
-import { persistBlastGroupSeedingIfReady } from "../services/blastSeeding.js";
+import {
+  persistBlastGroupSeedingIfReady,
+  computeBlastPlaceholderToTeamMap,
+  blastGroupStageFinished,
+} from "../services/blastSeeding.js";
+import {
+  getQualifierSeedingOverrides,
+  listBlastQualifierSlotKeys,
+  normalizeQualifierSeedingOverrides,
+  saveQualifierSeedingOverrides,
+  validateQualifierSeedingOverrides,
+} from "../services/blastQualifierSeeding.js";
 import { generateMatches, getFormatTeamCountMessage, stageTabsForFormat } from "../services/formatGenerator.js";
 import { compileEngineConfigToGenerator, engineBracketTabs, engineStageTabs } from "../services/tournamentEngineService.js";
 import { buildGroupIndices, formatUsesGroupAssignment, resolveGroupStageConfig, validateGroupAssignment } from "../services/groupAssignment.js";
@@ -193,7 +204,14 @@ async function persistProgressedMatches(tournamentId, snapshot, baseMatches) {
   let afterSeeding = progressed;
   if (snapshot.tournament.format === "blast") {
     const standingsTeams = snapshot.approvedRoster?.teams || snapshot.teams;
-    const seeded = await persistBlastGroupSeedingIfReady(tournamentId, standingsTeams, progressed, updateMatch);
+    const overrides = getQualifierSeedingOverrides(snapshot.tournament.engine_config);
+    const seeded = await persistBlastGroupSeedingIfReady(
+      tournamentId,
+      standingsTeams,
+      progressed,
+      updateMatch,
+      overrides,
+    );
     afterSeeding = seeded.matches;
   }
 
@@ -461,7 +479,14 @@ router.get("/:id", async (req, res, next) => {
     const standingsTeams = data.approvedRoster?.teams || data.teams;
     let matches = data.matches;
     if (data.tournament.format === "blast") {
-      const seeded = await persistBlastGroupSeedingIfReady(req.params.id, standingsTeams, matches, updateMatch);
+      const overrides = getQualifierSeedingOverrides(data.tournament.engine_config);
+      const seeded = await persistBlastGroupSeedingIfReady(
+        req.params.id,
+        standingsTeams,
+        matches,
+        updateMatch,
+        overrides,
+      );
       matches = seeded.matches;
       if (seeded.changed) invalidatePublicCache();
     }
@@ -789,6 +814,102 @@ router.put("/:id/group-assignments", async (req, res, next) => {
     if (result.error) return res.status(400).json({ message: result.error });
 
     return res.json({ approvedRoster: result.approvedRoster });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+function buildQualifierSeedingPayload(snapshot) {
+  const teams = snapshot.approvedRoster?.teams || snapshot.teams || [];
+  const teamCount = teams.length || snapshot.tournament.team_count || 0;
+  const overrides = getQualifierSeedingOverrides(snapshot.tournament.engine_config);
+  const groupsComplete = blastGroupStageFinished(snapshot.matches || []);
+  const autoMap = groupsComplete ? computeBlastPlaceholderToTeamMap(teams, snapshot.matches, null) : null;
+  const slotKeys = listBlastQualifierSlotKeys(teamCount);
+  const effectiveMap = autoMap ? { ...autoMap, ...overrides } : null;
+
+  return {
+    groupsComplete,
+    teamCount,
+    overrides,
+    autoMap,
+    effectiveMap,
+    slots: slotKeys.map((key) => ({
+      key,
+      autoTeam: autoMap?.[key] || "",
+      team: effectiveMap?.[key] || autoMap?.[key] || "",
+      isOverridden: Boolean(overrides[key]),
+    })),
+  };
+}
+
+router.get("/:id/qualifier-seeding", async (req, res, next) => {
+  try {
+    const snapshot = await getTournament(req.params.id);
+    if (!snapshot) return res.status(404).json({ message: "Tournament not found" });
+    if (snapshot.tournament.format !== "blast") {
+      return res.status(400).json({ message: "Qualifier seeding is only available for BLAST format tournaments" });
+    }
+    return res.json(buildQualifierSeedingPayload(snapshot));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.put("/:id/qualifier-seeding", async (req, res, next) => {
+  try {
+    const snapshot = await getTournament(req.params.id);
+    if (!snapshot) return res.status(404).json({ message: "Tournament not found" });
+    if (snapshot.tournament.format !== "blast") {
+      return res.status(400).json({ message: "Qualifier seeding is only available for BLAST format tournaments" });
+    }
+    if (!snapshot.matches?.length) {
+      return res.status(400).json({ message: "Generate a bracket before setting qualifier seeding" });
+    }
+    if (!blastGroupStageFinished(snapshot.matches)) {
+      return res.status(400).json({ message: "Finish all group stage matches before manual qualifier ordering" });
+    }
+
+    const payload = z
+      .object({
+        assignments: z.record(z.string(), z.string()).optional(),
+        reset: z.boolean().optional(),
+      })
+      .parse(req.body);
+
+    const teams = snapshot.approvedRoster?.teams || snapshot.teams || [];
+    const teamCount = teams.length || snapshot.tournament.team_count || 0;
+    const slotKeys = listBlastQualifierSlotKeys(teamCount);
+    const autoMap = computeBlastPlaceholderToTeamMap(teams, snapshot.matches, null);
+
+    let nextOverrides = {};
+    if (payload.reset) {
+      nextOverrides = {};
+    } else {
+      const draft = payload.assignments || {};
+      nextOverrides = normalizeQualifierSeedingOverrides(autoMap, draft);
+      const validationMessage = validateQualifierSeedingOverrides(nextOverrides, teams, slotKeys);
+      if (validationMessage) {
+        return res.status(400).json({ message: validationMessage });
+      }
+    }
+
+    const tournament = await saveQualifierSeedingOverrides(req.params.id, nextOverrides);
+    if (!tournament) return res.status(404).json({ message: "Tournament not found" });
+
+    const refreshed = await getTournament(req.params.id);
+    const result = await persistProgressedMatches(req.params.id, refreshed, refreshed.matches);
+    if (result.error) {
+      return res.status(500).json({ message: result.error });
+    }
+
+    return res.json({
+      tournament,
+      ...buildQualifierSeedingPayload({ ...refreshed, matches: result.matches }),
+      matches: result.matches,
+      standings: result.standings,
+      groupedStandings: result.groupedStandings,
+    });
   } catch (error) {
     return next(error);
   }

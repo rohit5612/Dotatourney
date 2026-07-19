@@ -88,9 +88,10 @@ function isGroupTableComplete(rows) {
  * Build Group A–H #n → team name map when all BO1 groups are fully decided.
  * @param {object[]} groupedStandings
  * @param {string} [format]
+ * @param {Record<string, string>} [overrides]
  * @returns {Record<string, string> | null}
  */
-export function computeBlastPlaceholderMap(groupedStandings, format) {
+export function computeBlastPlaceholderMap(groupedStandings, format, overrides = null) {
   if (format !== "blast") return null;
   const groups = [...(groupedStandings || [])]
     .filter((group) => parseGroupLetterFromLabel(group.label))
@@ -106,7 +107,8 @@ export function computeBlastPlaceholderMap(groupedStandings, format) {
       map[`Group ${letter} #${index + 1}`] = row.team;
     });
   }
-  return map;
+  if (!overrides || !Object.keys(overrides).length) return map;
+  return { ...map, ...overrides };
 }
 
 export function applyBlastPlaceholderMap(matches, placeholderMap, groupedStandings) {
@@ -133,10 +135,23 @@ export function applyBlastPlaceholderMap(matches, placeholderMap, groupedStandin
  * @param {object[]} matches
  * @param {object[]} groupedStandings
  * @param {string} [format]
+ * @param {Record<string, string> | { qualifierSeedingOverrides?: Record<string, string> } | null} [overridesOrEngineConfig]
  * @returns {object[]}
  */
-export function resolveBlastBracketMatches(matches, groupedStandings, format) {
-  const map = computeBlastPlaceholderMap(groupedStandings, format);
+export function resolveBlastBracketMatches(matches, groupedStandings, format, overridesOrEngineConfig = null) {
+  const overrides =
+    overridesOrEngineConfig?.qualifierSeedingOverrides && typeof overridesOrEngineConfig.qualifierSeedingOverrides === "object"
+      ? overridesOrEngineConfig.qualifierSeedingOverrides
+      : overridesOrEngineConfig || null;
+  const baseMap = computeBlastPlaceholderMap(groupedStandings, format, null) || {};
+  const mergedOverrides =
+    overrides && typeof overrides === "object"
+      ? Object.fromEntries(Object.entries(overrides).map(([key, value]) => [key, String(value || "").trim()]).filter(([, value]) => value))
+      : {};
+  const map =
+    Object.keys(baseMap).length || Object.keys(mergedOverrides).length
+      ? { ...baseMap, ...mergedOverrides }
+      : null;
   return applyBlastPlaceholderMap(matches, map, groupedStandings);
 }
 

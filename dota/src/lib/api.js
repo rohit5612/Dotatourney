@@ -292,6 +292,12 @@ export const api = {
     request(`/tournaments/${id}/bracket/refresh-progression`, {
       method: "POST",
     }),
+  getQualifierSeeding: (id) => request(`/tournaments/${id}/qualifier-seeding`),
+  saveQualifierSeeding: (id, payload) =>
+    request(`/tournaments/${id}/qualifier-seeding`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
   recordResult: (id, matchId, winner) =>
     request(`/tournaments/${id}/matches/${matchId}/result`, {
       method: "POST",

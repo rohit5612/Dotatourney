@@ -5,9 +5,10 @@ import {
   blastGroupSlotsForMatch,
   resolveBlastGroupTeam,
 } from "./blastGroupSlots.js";
+import { mergeQualifierSeedingOverrides } from "./blastQualifierSeeding.js";
 import { buildGroupedStandings } from "./standingsEngine.js";
 
-function blastGroupStageKeys(matches) {
+export function blastGroupStageKeys(matches) {
   const keys = new Set();
   for (const match of matches || []) {
     if (/^blast-group-[a-h]$/i.test(match.stageKey || "")) keys.add(match.stageKey);
@@ -15,7 +16,7 @@ function blastGroupStageKeys(matches) {
   return [...keys];
 }
 
-function blastGroupStageFinished(matches) {
+export function blastGroupStageFinished(matches) {
   const stageKeys = blastGroupStageKeys(matches);
   if (!stageKeys.length) return false;
   return stageKeys.every((stageKey) => {
@@ -34,9 +35,10 @@ function blastGroupStageFinished(matches) {
  * Group A/B #N always mirror in-group standings (for display).
  * @param {{ name: string }[]} teams
  * @param {object[]} matches
+ * @param {Record<string, string>} [overrides]
  * @returns {Record<string, string> | null}
  */
-export function computeBlastPlaceholderToTeamMap(teams, matches) {
+export function computeBlastPlaceholderToTeamMap(teams, matches, overrides = null) {
   if (!blastGroupStageFinished(matches)) return null;
 
   const grouped = buildGroupedStandings(teams, matches, "blast");
@@ -59,18 +61,18 @@ export function computeBlastPlaceholderToTeamMap(teams, matches) {
     }
   }
 
-  if (!gA || !gB) return map;
+  if (!gA || !gB) return mergeQualifierSeedingOverrides(map, overrides);
 
   const winnerA = gA.rows[0]?.team;
   const winnerB = gB.rows[0]?.team;
-  if (!winnerA || !winnerB) return map;
+  if (!winnerA || !winnerB) return mergeQualifierSeedingOverrides(map, overrides);
 
   if (sizes.mainPlayoffPath === "ten_qf_seconds") {
-    return map;
+    return mergeQualifierSeedingOverrides(map, overrides);
   }
 
   if (sizes.mainPlayoffPath === "tiered_merged_standings" && n === 12) {
-    return map;
+    return mergeQualifierSeedingOverrides(map, overrides);
   }
 
   if (sizes.mainPlayoffPath === "tiered_merged_standings" && grouped.length === 2) {
@@ -90,19 +92,20 @@ export function computeBlastPlaceholderToTeamMap(teams, matches) {
     for (let j = 0; j < lc; j += 1) {
       map[`BLC${j + 1}`] = fullRank[lcStart + j];
     }
-    return map;
+    return mergeQualifierSeedingOverrides(map, overrides);
   }
 
-  return null;
+  return mergeQualifierSeedingOverrides(map, overrides);
 }
 
 /**
  * Replaces BLAST qualifier placeholders with real teams after groups complete.
  * @param {{ name: string }[]} teams
  * @param {object[]} matches
+ * @param {Record<string, string>} [overrides]
  */
-export function applyBlastGroupSeeding(teams, matches) {
-  const placeholderMap = computeBlastPlaceholderToTeamMap(teams, matches);
+export function applyBlastGroupSeeding(teams, matches, overrides = null) {
+  const placeholderMap = computeBlastPlaceholderToTeamMap(teams, matches, overrides);
   if (!placeholderMap) {
     return { matches, changedIds: [] };
   }
@@ -147,10 +150,11 @@ export function applyBlastGroupSeeding(teams, matches) {
  * @param {{ name: string }[]} teams
  * @param {object[]} matches
  * @param {(tournamentId: string, matchId: string, row: object) => Promise<unknown>} updateMatch
+ * @param {Record<string, string>} [overrides]
  * @returns {Promise<{ matches: object[]; changed: boolean }>}
  */
-export async function persistBlastGroupSeedingIfReady(tournamentId, teams, matches, updateMatch) {
-  const { matches: seeded, changedIds } = applyBlastGroupSeeding(teams, matches);
+export async function persistBlastGroupSeedingIfReady(tournamentId, teams, matches, updateMatch, overrides = null) {
+  const { matches: seeded, changedIds } = applyBlastGroupSeeding(teams, matches, overrides);
   if (!changedIds.length) return { matches, changed: false };
 
   for (const matchId of changedIds) {

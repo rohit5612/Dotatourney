@@ -6,6 +6,7 @@ import {
   parseSponsorsConfigLenient,
 } from "./seasonContentSchema.js";
 import { applyBlastGroupSeeding } from "./blastSeeding.js";
+import { getQualifierSeedingOverrides } from "./blastQualifierSeeding.js";
 import { getTournament, hydrateMatchRow } from "./tournamentRepository.js";
 import { resolveSeasonStatusFromTournament } from "./seasonUpsert.js";
 import { buildMatchRosterCards } from "./cardManifestService.js";
@@ -337,7 +338,8 @@ export async function getSeasonBySlug(slug) {
       const exposeTeamsPublicly = hasApprovedRoster || visibilityMode !== "demo";
       let matches = (data.matches || []).map(hydrateMatchRow);
       if (format === "blast" && visibilityMode !== "demo" && teams.length > 0) {
-        matches = applyBlastGroupSeeding(teams, matches).matches;
+        const overrides = getQualifierSeedingOverrides(tournament.engine_config);
+        matches = applyBlastGroupSeeding(teams, matches, overrides).matches;
       }
       const standingsTeams =
         visibilityMode === "demo"

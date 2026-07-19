@@ -104,6 +104,7 @@ export function AdminConsole() {
   const [poolDraft, setPoolDraft] = useState([]);
   const [rosters, setRosters] = useState([]);
   const [approvedRoster, setApprovedRoster] = useState(null);
+  const [qualifierSeeding, setQualifierSeeding] = useState(null);
   const [activeRosterId, setActiveRosterId] = useState("");
   const [isTeamPaneActive, setIsTeamPaneActive] = useState(false);
   const [registrations, setRegistrations] = useState([]);
@@ -289,6 +290,20 @@ export function AdminConsole() {
     }
     await refreshRegistrations(payload.tournament?.id || id);
     await refreshRosters(payload.tournament?.id || id);
+    await refreshQualifierSeeding(payload.tournament?.id || id);
+  }
+
+  async function refreshQualifierSeeding(id = tournamentId) {
+    if (!id) {
+      setQualifierSeeding(null);
+      return;
+    }
+    try {
+      const payload = await api.getQualifierSeeding(id);
+      setQualifierSeeding(payload);
+    } catch {
+      setQualifierSeeding(null);
+    }
   }
 
   async function refreshRegistrations(id = tournamentId) {
@@ -811,6 +826,46 @@ export function AdminConsole() {
     }
   }
 
+  async function saveQualifierSeeding(assignments, options = {}) {
+    if (!tournamentId) {
+      setMessage("Create tournament first.");
+      return;
+    }
+    try {
+      const result = await api.saveQualifierSeeding(
+        tournamentId,
+        options.reset ? { reset: true } : { assignments: assignments || {} },
+      );
+      api.clearPublicTournamentCache();
+      setQualifierSeeding({
+        groupsComplete: result.groupsComplete,
+        teamCount: result.teamCount,
+        overrides: result.overrides,
+        autoMap: result.autoMap,
+        effectiveMap: result.effectiveMap,
+        slots: result.slots,
+      });
+      setState((prev) => ({
+        ...prev,
+        matches: result.matches ?? prev?.matches,
+        standings: result.standings ?? prev?.standings,
+        groupedStandings: result.groupedStandings ?? prev?.groupedStandings,
+        tournament: result.tournament ?? prev?.tournament,
+      }));
+      if (result.tournament?.engine_config) {
+        setSetup((prev) => ({ ...prev, engineConfig: result.tournament.engine_config }));
+      }
+      setMessage(
+        options.reset
+          ? "Qualifier seeding reset to automatic group standings."
+          : "Qualifier seeding saved. Last chance, Play-In, and playoff slots updated.",
+      );
+    } catch (error) {
+      setMessage(error.message);
+      throw error;
+    }
+  }
+
   async function deleteRoster(rosterId, name) {
     if (!getAuthToken()) {
       setMessage("Admin session expired. Please log in again before deleting rosters.");
@@ -987,7 +1042,12 @@ export function AdminConsole() {
   const bracketState = useMemo(() => {
     if (!state) return state;
     const format = setup?.format || state.tournament?.format;
-    const matches = resolveBlastBracketMatches(state.matches || [], state.groupedStandings || [], format);
+    const matches = resolveBlastBracketMatches(
+      state.matches || [],
+      state.groupedStandings || [],
+      format,
+      state.tournament?.engine_config,
+    );
     return { ...state, matches };
   }, [state, setup?.format]);
 
@@ -1232,6 +1292,9 @@ export function AdminConsole() {
                 updateBracketActivation={updateBracketActivation}
                 approveRoster={approveRoster}
                 saveGroupAssignments={saveGroupAssignments}
+                saveQualifierSeeding={saveQualifierSeeding}
+                refreshQualifierSeeding={refreshQualifierSeeding}
+                qualifierSeeding={qualifierSeeding}
                 applySeriesRulesToUpcoming={applySeriesRulesToUpcoming}
                 refreshBracketProgression={refreshBracketProgression}
               />
