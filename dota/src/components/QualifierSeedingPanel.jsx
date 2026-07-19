@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { resolveGroupStageConfig } from "../lib/engineGroupConfig.js";
 import {
   blastAnyGroupStageFinished,
   blastCompletedGroupLetters,
@@ -15,13 +16,9 @@ function buildDraftFromSlots(slots) {
   return draft;
 }
 
-function groupLabelFromSlotKey(slotKey) {
-  const match = String(slotKey || "").match(/^Group ([A-H]) #/i);
-  return match ? `Group ${match[1].toUpperCase()}` : null;
-}
-
 export function QualifierSeedingPanel({
   format,
+  engineConfig,
   matches = [],
   qualifierSeeding,
   teamNames = [],
@@ -29,6 +26,10 @@ export function QualifierSeedingPanel({
   onRefresh,
   disabled,
 }) {
+  const plan = useMemo(
+    () => resolveGroupStageConfig(engineConfig || { teamCount: teamNames.length || 12, format: "blast" }),
+    [engineConfig, teamNames.length],
+  );
   const completedGroups = useMemo(
     () => qualifierSeeding?.completedGroups || blastCompletedGroupLetters(matches),
     [qualifierSeeding?.completedGroups, matches],
@@ -60,6 +61,16 @@ export function QualifierSeedingPanel({
     }
     return [...names].sort((a, b) => a.localeCompare(b));
   }, [slots, draft, teamNames]);
+
+  const slotsByGroup = useMemo(() => {
+    const grouped = new Map(plan.groupKeys.map((key) => [key, []]));
+    for (const slot of slots) {
+      const groupKey = slot.groupKey || slot.key.match(/^Group ([A-H]) #/i)?.[1]?.toUpperCase();
+      if (!groupKey || !grouped.has(groupKey)) continue;
+      grouped.get(groupKey).push(slot);
+    }
+    return grouped;
+  }, [slots, plan.groupKeys]);
 
   useEffect(() => {
     setDraft(buildDraftFromSlots(slots));
@@ -105,8 +116,8 @@ export function QualifierSeedingPanel({
     if (!onSave) return;
     const ok = window.confirm(
       groupsComplete
-        ? "Reset all qualifier slots to automatic group standings?"
-        : "Reset saved overrides for completed groups?",
+        ? "Reset all manual group standings to automatic results?"
+        : "Reset saved manual standings for completed groups?",
     );
     if (!ok) return;
     setIsSaving(true);
@@ -128,13 +139,11 @@ export function QualifierSeedingPanel({
     }
   }
 
-  const pendingGroups = ["A", "B", "C", "D", "E", "F", "G", "H"].filter(
-    (letter) => slots.some((slot) => groupLabelFromSlotKey(slot.key) === `Group ${letter}`) && !completedGroups.includes(letter),
-  );
+  const pendingGroups = plan.groupKeys.filter((letter) => !completedGroups.includes(letter));
   const summary =
     overrideCount > 0
-      ? `${overrideCount} manual override${overrideCount === 1 ? "" : "s"} · ${completedGroups.map((g) => `Group ${g}`).join(", ")} ready`
-      : `${completedGroups.map((g) => `Group ${g}`).join(", ")} ready · adjust ranks as groups finish`;
+      ? `${overrideCount} manual rank${overrideCount === 1 ? "" : "s"} · ${completedGroups.map((g) => `Group ${g}`).join(", ")}`
+      : `${completedGroups.map((g) => `Group ${g}`).join(", ")} ready · set final group ranks`;
 
   return (
     <section className={`group-assignment-panel ${expanded ? "" : "group-assignment-panel--collapsed"}`}>
@@ -144,7 +153,7 @@ export function QualifierSeedingPanel({
             {expanded ? "▾" : "▸"}
           </span>
           <span className="group-assignment-toggle-text">
-            <span className="group-assignment-toggle-title">Qualifier seeding</span>
+            <span className="group-assignment-toggle-title">Manual group standings</span>
             <span className="group-assignment-toggle-summary">{summary}</span>
           </span>
         </button>
@@ -163,7 +172,7 @@ export function QualifierSeedingPanel({
             disabled={disabled || !editableSlots.length}
             onClick={resetDraftToAuto}
           >
-            Use standings
+            Use match results
           </button>
           <button
             type="button"
@@ -179,7 +188,7 @@ export function QualifierSeedingPanel({
             disabled={disabled || isSaving || !dirty || !editableSlots.length}
             onClick={() => void handleSave()}
           >
-            {isSaving ? "Saving…" : "Save qualifier order"}
+            {isSaving ? "Saving…" : "Save group standings"}
           </button>
         </div>
       </div>
@@ -188,41 +197,61 @@ export function QualifierSeedingPanel({
         <>
           <p className="group-assignment-copy">
             {groupsComplete
-              ? "All groups are complete. Reorder rank slots before Last chance, Play-In, and playoff matches begin."
-              : `Finished groups can be set now${pendingGroups.length ? ` (${pendingGroups.map((g) => `Group ${g}`).join(", ")} still playing)` : ""}. Global merged slots unlock once every group is done.`}
-            {" "}Finished qualifier matches are not changed.
+              ? "All configured groups are complete. Adjust final ranks per group — bracket, schedule, and standings update together."
+              : `Finished groups can be set now${pendingGroups.length ? ` (${pendingGroups.map((g) => `Group ${g}`).join(", ")} still playing)` : ""}.`}
+            {" "}Only group tables are editable here; merged playoff seeding stays automatic.
           </p>
           <div className="group-assignment-grid">
-            {slots.map((slot) => {
-              const isOverride = draft[slot.key] && draft[slot.key] !== (slot.autoTeam || "");
-              const isEditable = slot.editable !== false;
+            {plan.groupKeys.map((groupKey) => {
+              const groupSlots = slotsByGroup.get(groupKey) || [];
+              const groupComplete = completedGroups.includes(groupKey);
+              const targetSize = plan.groupSizes[plan.groupKeys.indexOf(groupKey)] || groupSlots.length;
               return (
-                <label key={slot.key} className={`group-assignment-slot ${isEditable ? "" : "is-locked"}`}>
-                  <span className="group-assignment-item-label">
-                    {slot.key}
-                    {isOverride ? <span className="group-assignment-badge">Manual</span> : null}
-                    {!isEditable ? <span className="group-assignment-badge is-muted">Locked</span> : null}
-                  </span>
-                  <select
-                    className="group-assignment-select"
-                    value={draft[slot.key] || ""}
-                    disabled={disabled || !isEditable}
-                    onChange={(event) => updateSlot(slot.key, event.target.value)}
-                  >
-                    <option value="">—</option>
-                    {teamOptions.map((name) => (
-                      <option key={`${slot.key}-${name}`} value={name}>
-                        {name}
-                        {name === slot.autoTeam ? " (standings)" : ""}
-                      </option>
-                    ))}
-                  </select>
-                  {slot.autoTeam && draft[slot.key] !== slot.autoTeam ? (
-                    <span className="group-assignment-hint">Standings: {slot.autoTeam}</span>
-                  ) : !isEditable ? (
-                    <span className="group-assignment-hint">Unlocks when this group finishes</span>
-                  ) : null}
-                </label>
+                <div key={groupKey} className="group-assignment-column">
+                  <div className="group-assignment-column-head">
+                    <h3 className="group-assignment-column-title">Group {groupKey}</h3>
+                    <span className={`group-assignment-count ${groupComplete ? "is-valid" : "is-invalid"}`}>
+                      {groupComplete ? "Complete" : "In progress"}
+                    </span>
+                  </div>
+                  <div className="group-assignment-grid" style={{ gridTemplateColumns: "1fr" }}>
+                    {groupSlots.map((slot) => {
+                      const isOverride = draft[slot.key] && draft[slot.key] !== (slot.autoTeam || "");
+                      const isEditable = slot.editable !== false;
+                      return (
+                        <label key={slot.key} className={`group-assignment-slot ${isEditable ? "" : "is-locked"}`}>
+                          <span className="group-assignment-item-label">
+                            #{slot.key.split("#")[1]}
+                            {isOverride ? <span className="group-assignment-badge">Manual</span> : null}
+                            {!isEditable ? <span className="group-assignment-badge is-muted">Locked</span> : null}
+                          </span>
+                          <select
+                            className="group-assignment-select"
+                            value={draft[slot.key] || ""}
+                            disabled={disabled || !isEditable}
+                            onChange={(event) => updateSlot(slot.key, event.target.value)}
+                          >
+                            <option value="">—</option>
+                            {teamOptions.map((name) => (
+                              <option key={`${slot.key}-${name}`} value={name}>
+                                {name}
+                                {name === slot.autoTeam ? " (results)" : ""}
+                              </option>
+                            ))}
+                          </select>
+                          {slot.autoTeam && draft[slot.key] !== slot.autoTeam ? (
+                            <span className="group-assignment-hint">Results: {slot.autoTeam}</span>
+                          ) : !isEditable ? (
+                            <span className="group-assignment-hint">Unlocks when Group {groupKey} finishes</span>
+                          ) : null}
+                        </label>
+                      );
+                    })}
+                    {!groupSlots.length ? (
+                      <p className="group-assignment-hint">No rank slots configured ({targetSize} teams expected).</p>
+                    ) : null}
+                  </div>
+                </div>
               );
             })}
           </div>

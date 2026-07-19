@@ -145,8 +145,20 @@ export function applyBlastPlaceholderMap(matches, placeholderMap, groupedStandin
 export function resolveBlastBracketMatches(matches, groupedStandings, format, overridesOrEngineConfig = null) {
   const overrides =
     overridesOrEngineConfig?.qualifierSeedingOverrides && typeof overridesOrEngineConfig.qualifierSeedingOverrides === "object"
-      ? overridesOrEngineConfig.qualifierSeedingOverrides
-      : overridesOrEngineConfig || null;
+      ? Object.fromEntries(
+          Object.entries(overridesOrEngineConfig.qualifierSeedingOverrides)
+            .filter(([key]) => /^Group [A-H] #\d+$/i.test(key))
+            .map(([key, value]) => [key, String(value || "").trim()])
+            .filter(([, value]) => value),
+        )
+      : overridesOrEngineConfig && typeof overridesOrEngineConfig === "object" && !overridesOrEngineConfig.qualifierSeedingOverrides
+        ? Object.fromEntries(
+            Object.entries(overridesOrEngineConfig)
+              .filter(([key]) => /^Group [A-H] #\d+$/i.test(key))
+              .map(([key, value]) => [key, String(value || "").trim()])
+              .filter(([, value]) => value),
+          )
+        : {};
   const baseMap = computeBlastPlaceholderMap(groupedStandings, format, null) || {};
   const mergedOverrides =
     overrides && typeof overrides === "object"

@@ -17,9 +17,10 @@ import {
 } from "../services/publicCache.js";
 import { getPublishedTournament, getPublishedTournamentForPublicRequest } from "../services/tournamentRepository.js";
 import { applyBlastGroupSeeding } from "../services/blastSeeding.js";
-import { getQualifierSeedingOverrides } from "../services/blastQualifierSeeding.js";
+import { getQualifierSeedingOverrides, stripGroupStandingsOverrides } from "../services/blastQualifierSeeding.js";
 import { buildPublicHonorsPayload } from "../services/bracketHonorsEngine.js";
 import { buildGroupedStandings, buildStandings } from "../services/standingsEngine.js";
+import { buildGroupedStandingsWithSeeding } from "../services/groupStandingsOverrides.js";
 import { buildTeamsWithActivePlayers } from "../services/rosterMembershipService.js";
 import { stageTabsForFormat } from "../services/formatGenerator.js";
 import { engineBracketTabs } from "../services/tournamentEngineService.js";
@@ -265,7 +266,7 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
 
   let bracketMatches = data.matches;
   if (format === "blast" && visibilityMode !== "demo") {
-    const overrides = getQualifierSeedingOverrides(data.tournament.engine_config);
+    const overrides = stripGroupStandingsOverrides(getQualifierSeedingOverrides(data.tournament.engine_config));
     bracketMatches = applyBlastGroupSeeding(standingsTeams, bracketMatches, overrides).matches;
   }
   const matches = bracketMatches.map((match) => publicMatch(match, visibilityMode));
@@ -289,7 +290,12 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
       engineBracketTabs(data.tournament.engine_config) ||
       stageTabsForFormat(format, { teamCount: data.tournament.team_count }),
     standings: buildStandings(standingsTeams, matches, format),
-    groupedStandings: buildGroupedStandings(standingsTeams, matches, format),
+    groupedStandings: buildGroupedStandingsWithSeeding(
+      standingsTeams,
+      matches,
+      format,
+      data.tournament.engine_config,
+    ),
     approvedRegistrationCount,
     substitutePoolOpen,
     commerce,

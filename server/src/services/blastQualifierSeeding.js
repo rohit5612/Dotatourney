@@ -1,5 +1,5 @@
 import { pool } from "../db/pool.js";
-import { getBlastPhaseSizes } from "./formatGenerator.js";
+import { resolveGroupStageConfig } from "./engineGroupConfig.js";
 
 /** @param {object | null | undefined} engineConfig */
 export function getQualifierSeedingOverrides(engineConfig) {
@@ -25,42 +25,50 @@ export function isGlobalBlastQualifierSlot(slotKey) {
   return /^(BLR[1-4]|MID\d+|BLC\d+)$/i.test(String(slotKey || "").trim());
 }
 
-/**
- * @param {number} teamCount
- * @param {string[]} completedGroupLetters
- * @param {boolean} allGroupsComplete
- */
-export function listEditableQualifierSlotKeys(teamCount, completedGroupLetters, allGroupsComplete) {
-  return listBlastQualifierSlotKeys(teamCount).filter((key) => {
-    const letter = parseBlastGroupSlotLetter(key);
-    if (letter) return completedGroupLetters.includes(letter);
-    return allGroupsComplete;
-  });
+/** Keep only per-group rank overrides (Group A #1, etc.). */
+export function stripGroupStandingsOverrides(overrides) {
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const [key, value] of Object.entries(overrides || {})) {
+    if (!parseBlastGroupSlotLetter(key)) continue;
+    const team = String(value || "").trim();
+    if (team) out[key] = team;
+  }
+  return out;
 }
 
-/** @param {number} teamCount */
-export function listBlastQualifierSlotKeys(teamCount) {
-  const sizes = getBlastPhaseSizes(teamCount);
-  if (!sizes) return [];
-
+/**
+ * Group rank slots configured by the tournament engine (Group A #1 … Group H #n).
+ * @param {object | null | undefined} engineConfig
+ */
+export function listBlastGroupSlotKeys(engineConfig) {
+  const plan = resolveGroupStageConfig(engineConfig || {});
   /** @type {string[]} */
   const keys = [];
-  const groupA = Math.ceil(teamCount / 2);
-  const groupB = Math.floor(teamCount / 2);
-  for (let rank = 1; rank <= groupA; rank += 1) keys.push(`Group A #${rank}`);
-  for (let rank = 1; rank <= groupB; rank += 1) keys.push(`Group B #${rank}`);
-
-  if (sizes.mainPlayoffPath === "ten_qf_seconds") return keys;
-  if (sizes.mainPlayoffPath === "tiered_merged_standings" && teamCount === 12) return keys;
-
-  if (sizes.mainPlayoffPath === "tiered_merged_standings") {
-    keys.push("BLR1", "BLR2", "BLR3", "BLR4");
-    const mid = sizes.middleBracketEntrants ?? 0;
-    for (let i = 1; i <= mid; i += 1) keys.push(`MID${i}`);
-    const lc = sizes.lcEntrants ?? 0;
-    for (let j = 1; j <= lc; j += 1) keys.push(`BLC${j}`);
+  for (let index = 0; index < plan.groupKeys.length; index += 1) {
+    const letter = plan.groupKeys[index];
+    const size = plan.groupSizes[index] || 0;
+    for (let rank = 1; rank <= size; rank += 1) {
+      keys.push(`Group ${letter} #${rank}`);
+    }
   }
   return keys;
+}
+
+/** @deprecated Use listBlastGroupSlotKeys(engineConfig) */
+export function listBlastQualifierSlotKeys(_teamCount, engineConfig = null) {
+  return listBlastGroupSlotKeys(engineConfig);
+}
+
+/**
+ * @param {object | null | undefined} engineConfig
+ * @param {string[]} completedGroupLetters
+ */
+export function listEditableQualifierSlotKeys(engineConfig, completedGroupLetters) {
+  return listBlastGroupSlotKeys(engineConfig).filter((key) => {
+    const letter = parseBlastGroupSlotLetter(key);
+    return letter && completedGroupLetters.includes(letter);
+  });
 }
 
 /**

@@ -4,29 +4,53 @@ import { generateMatches } from "./formatGenerator.js";
 import { computeBlastPlaceholderToTeamMap } from "./blastSeeding.js";
 import {
   getQualifierSeedingOverrides,
-  listBlastQualifierSlotKeys,
+  listBlastGroupSlotKeys,
   listEditableQualifierSlotKeys,
   mergeQualifierSeedingOverrides,
   normalizeQualifierSeedingOverrides,
+  stripGroupStandingsOverrides,
   validateQualifierSeedingOverrides,
 } from "./blastQualifierSeeding.js";
+import { applyGroupStandingsOverrides } from "./groupStandingsOverrides.js";
 
-test("listBlastQualifierSlotKeys for n=12 includes group ranks only", () => {
-  const keys = listBlastQualifierSlotKeys(12);
-  assert.deepEqual(keys, [
-    "Group A #1",
-    "Group A #2",
-    "Group A #3",
-    "Group A #4",
-    "Group A #5",
-    "Group A #6",
-    "Group B #1",
-    "Group B #2",
-    "Group B #3",
-    "Group B #4",
-    "Group B #5",
-    "Group B #6",
-  ]);
+const engine12 = { teamCount: 12, format: "blast", groupStage: { enabled: true, groupCount: 2 } };
+const engine4g = { teamCount: 16, format: "blast", groupStage: { enabled: true, groupCount: 4 } };
+
+test("listBlastGroupSlotKeys follows engine groupCount", () => {
+  assert.equal(listBlastGroupSlotKeys(engine12).length, 12);
+  assert.equal(listBlastGroupSlotKeys(engine4g).length, 16);
+  assert.ok(listBlastGroupSlotKeys(engine4g).some((key) => key.startsWith("Group C #")));
+});
+
+test("listEditableQualifierSlotKeys unlocks group slots per finished group", () => {
+  const keys = listEditableQualifierSlotKeys(engine12, ["A"]);
+  assert.ok(keys.includes("Group A #1"));
+  assert.ok(!keys.includes("Group B #1"));
+  assert.ok(!keys.some((key) => key.startsWith("BLR")));
+});
+
+test("stripGroupStandingsOverrides removes global merged slots", () => {
+  assert.deepEqual(
+    stripGroupStandingsOverrides({
+      "Group A #1": "Alpha",
+      BLR1: "Beta",
+    }),
+    { "Group A #1": "Alpha" },
+  );
+});
+
+test("applyGroupStandingsOverrides reorders group rows", () => {
+  const grouped = [
+    {
+      label: "Group A",
+      rows: [
+        { team: "A1", wins: 3 },
+        { team: "A2", wins: 2 },
+      ],
+    },
+  ];
+  const next = applyGroupStandingsOverrides(grouped, { "Group A #1": "A2", "Group A #2": "A1" });
+  assert.deepEqual(next[0].rows.map((row) => row.team), ["A2", "A1"]);
 });
 
 test("mergeQualifierSeedingOverrides overlays manual ranks", () => {
@@ -56,17 +80,9 @@ test("validateQualifierSeedingOverrides rejects duplicate teams", () => {
   assert.match(message || "", /more than one slot/i);
 });
 
-test("listEditableQualifierSlotKeys unlocks group slots per finished group", () => {
-  const keys = listEditableQualifierSlotKeys(12, ["A"], false);
-  assert.ok(keys.includes("Group A #1"));
-  assert.ok(!keys.includes("Group B #1"));
-  assert.ok(!keys.includes("BLR1"));
-});
-
 test("computeBlastPlaceholderToTeamMap works when only Group A is finished", () => {
   const teams = Array.from({ length: 12 }, (_, i) => ({ name: `T${i + 1}` }));
   const orderA = ["T1", "T2", "T3", "T4", "T5", "T6"];
-  const orderB = ["T7", "T8", "T9", "T10", "T11", "T12"];
   const matches = generateMatches(
     "blast",
     teams.map((t) => t.name),

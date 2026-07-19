@@ -5,7 +5,7 @@ import {
   blastGroupSlotsForMatch,
   resolveBlastGroupTeam,
 } from "./blastGroupSlots.js";
-import { mergeQualifierSeedingOverrides } from "./blastQualifierSeeding.js";
+import { mergeQualifierSeedingOverrides, stripGroupStandingsOverrides } from "./blastQualifierSeeding.js";
 import { buildGroupedStandings } from "./standingsEngine.js";
 
 export function blastGroupStageKeys(matches) {
@@ -87,19 +87,19 @@ export function computeBlastPlaceholderToTeamMap(teams, matches, overrides = nul
   }
 
   if (!allGroupsComplete || !sizes || !gA || !gB) {
-    return mergeQualifierSeedingOverrides(map, overrides);
+    return mergeQualifierSeedingOverrides(map, stripGroupStandingsOverrides(overrides));
   }
 
   const winnerA = gA.rows[0]?.team;
   const winnerB = gB.rows[0]?.team;
-  if (!winnerA || !winnerB) return mergeQualifierSeedingOverrides(map, overrides);
+  if (!winnerA || !winnerB) return mergeQualifierSeedingOverrides(map, stripGroupStandingsOverrides(overrides));
 
   if (sizes.mainPlayoffPath === "ten_qf_seconds") {
-    return mergeQualifierSeedingOverrides(map, overrides);
+    return mergeQualifierSeedingOverrides(map, stripGroupStandingsOverrides(overrides));
   }
 
   if (sizes.mainPlayoffPath === "tiered_merged_standings" && n === 12) {
-    return mergeQualifierSeedingOverrides(map, overrides);
+    return mergeQualifierSeedingOverrides(map, stripGroupStandingsOverrides(overrides));
   }
 
   if (sizes.mainPlayoffPath === "tiered_merged_standings" && grouped.length === 2) {
@@ -119,10 +119,10 @@ export function computeBlastPlaceholderToTeamMap(teams, matches, overrides = nul
     for (let j = 0; j < lc; j += 1) {
       map[`BLC${j + 1}`] = fullRank[lcStart + j];
     }
-    return mergeQualifierSeedingOverrides(map, overrides);
+    return mergeQualifierSeedingOverrides(map, stripGroupStandingsOverrides(overrides));
   }
 
-  return mergeQualifierSeedingOverrides(map, overrides);
+  return mergeQualifierSeedingOverrides(map, stripGroupStandingsOverrides(overrides));
 }
 
 /**

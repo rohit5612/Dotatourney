@@ -6,12 +6,13 @@ import {
   parseSponsorsConfigLenient,
 } from "./seasonContentSchema.js";
 import { applyBlastGroupSeeding } from "./blastSeeding.js";
-import { getQualifierSeedingOverrides } from "./blastQualifierSeeding.js";
+import { getQualifierSeedingOverrides, stripGroupStandingsOverrides } from "./blastQualifierSeeding.js";
 import { getTournament, hydrateMatchRow } from "./tournamentRepository.js";
 import { resolveSeasonStatusFromTournament } from "./seasonUpsert.js";
 import { buildMatchRosterCards } from "./cardManifestService.js";
 import { buildPublicHonorsPayload } from "./bracketHonorsEngine.js";
 import { buildGroupedStandings, buildStandings } from "./standingsEngine.js";
+import { buildGroupedStandingsWithSeeding } from "./groupStandingsOverrides.js";
 import { buildTeamsWithActivePlayers, mergeSnapshotTeamsWithRoster } from "./rosterMembershipService.js";
 
 function parseSponsorsConfig(raw) {
@@ -316,13 +317,14 @@ export async function getSeasonBySlug(slug) {
           data.tournament.tournament_honors,
         );
       }
-    }
-    if (format && tournamentPayload?.teams?.length && tournamentPayload?.matches?.length && !tournamentPayload.groupedStandings?.length) {
-      tournamentPayload.groupedStandings = buildGroupedStandings(
-        tournamentPayload.teams,
-        tournamentPayload.matches,
-        format,
-      );
+      if (format && tournamentPayload?.teams?.length && tournamentPayload?.matches?.length && !tournamentPayload.groupedStandings?.length) {
+        tournamentPayload.groupedStandings = buildGroupedStandingsWithSeeding(
+          tournamentPayload.teams,
+          tournamentPayload.matches,
+          format,
+          data?.tournament?.engine_config || tournamentPayload?.tournament?.engine_config,
+        );
+      }
     }
   } else if (season.tournament_id) {
     const data = await getTournament(season.tournament_id);
@@ -338,7 +340,7 @@ export async function getSeasonBySlug(slug) {
       const exposeTeamsPublicly = hasApprovedRoster || visibilityMode !== "demo";
       let matches = (data.matches || []).map(hydrateMatchRow);
       if (format === "blast" && visibilityMode !== "demo" && teams.length > 0) {
-        const overrides = getQualifierSeedingOverrides(tournament.engine_config);
+        const overrides = stripGroupStandingsOverrides(getQualifierSeedingOverrides(tournament.engine_config));
         matches = applyBlastGroupSeeding(teams, matches, overrides).matches;
       }
       const standingsTeams =
@@ -365,7 +367,12 @@ export async function getSeasonBySlug(slug) {
         matches,
         honors: buildPublicHonorsPayload(matches, format, tournament.tournament_honors),
         standings: buildStandings(standingsTeams, matches, format),
-        groupedStandings: buildGroupedStandings(standingsTeams, matches, format),
+        groupedStandings: buildGroupedStandingsWithSeeding(
+          standingsTeams,
+          matches,
+          format,
+          tournament.engine_config,
+        ),
       };
     }
   }

@@ -10,11 +10,13 @@ import {
 } from "../services/blastSeeding.js";
 import {
   getQualifierSeedingOverrides,
-  listBlastQualifierSlotKeys,
+  listBlastGroupSlotKeys,
   listEditableQualifierSlotKeys,
   normalizeQualifierSeedingOverrides,
   saveQualifierSeedingOverrides,
+  stripGroupStandingsOverrides,
   validateQualifierSeedingOverrides,
+  parseBlastGroupSlotLetter,
 } from "../services/blastQualifierSeeding.js";
 import { generateMatches, getFormatTeamCountMessage, stageTabsForFormat } from "../services/formatGenerator.js";
 import { compileEngineConfigToGenerator, engineBracketTabs, engineStageTabs } from "../services/tournamentEngineService.js";
@@ -26,6 +28,7 @@ import { archivePlayerRegistration, getPlayerRegistrationById, listPlayerRegistr
 import { sendPlayerRegistrationDecisionEmail } from "../services/emailService.js";
 import { notifyRegistrationDecision } from "../services/playerNotificationService.js";
 import { buildGroupedStandings, buildStandings } from "../services/standingsEngine.js";
+import { buildGroupedStandingsWithSeeding } from "../services/groupStandingsOverrides.js";
 import { requireAdmin, requirePermission } from "../services/authService.js";
 import { syncCrmRegistrationsToGoogleSheet } from "../services/googleSheetsSync.js";
 import { invalidatePublicCache } from "../services/publicCache.js";
@@ -207,7 +210,7 @@ async function persistProgressedMatches(tournamentId, snapshot, baseMatches) {
   let afterSeeding = progressed;
   if (snapshot.tournament.format === "blast") {
     const standingsTeams = snapshot.approvedRoster?.teams || snapshot.teams;
-    const overrides = getQualifierSeedingOverrides(snapshot.tournament.engine_config);
+    const overrides = stripGroupStandingsOverrides(getQualifierSeedingOverrides(snapshot.tournament.engine_config));
     const seeded = await persistBlastGroupSeedingIfReady(
       tournamentId,
       standingsTeams,
@@ -222,7 +225,12 @@ async function persistProgressedMatches(tournamentId, snapshot, baseMatches) {
   return {
     matches: afterSeeding,
     standings: buildStandings(standingsTeams, afterSeeding, snapshot.tournament.format),
-    groupedStandings: buildGroupedStandings(standingsTeams, afterSeeding, snapshot.tournament.format),
+    groupedStandings: buildGroupedStandingsWithSeeding(
+      standingsTeams,
+      afterSeeding,
+      snapshot.tournament.format,
+      snapshot.tournament.engine_config,
+    ),
   };
 }
 
@@ -482,7 +490,7 @@ router.get("/:id", async (req, res, next) => {
     const standingsTeams = data.approvedRoster?.teams || data.teams;
     let matches = data.matches;
     if (data.tournament.format === "blast") {
-      const overrides = getQualifierSeedingOverrides(data.tournament.engine_config);
+      const overrides = stripGroupStandingsOverrides(getQualifierSeedingOverrides(data.tournament.engine_config));
       const seeded = await persistBlastGroupSeedingIfReady(
         req.params.id,
         standingsTeams,
@@ -495,7 +503,12 @@ router.get("/:id", async (req, res, next) => {
     }
 
     const standings = buildStandings(standingsTeams, matches, data.tournament.format);
-    const groupedStandings = buildGroupedStandings(standingsTeams, matches, data.tournament.format);
+    const groupedStandings = buildGroupedStandingsWithSeeding(
+      standingsTeams,
+      matches,
+      data.tournament.format,
+      data.tournament.engine_config,
+    );
     const honors = buildPublicHonorsPayload(matches, data.tournament.format, data.tournament.tournament_honors);
     return res.json({
       ...data,
@@ -825,13 +838,14 @@ router.put("/:id/group-assignments", async (req, res, next) => {
 function buildQualifierSeedingPayload(snapshot) {
   const teams = snapshot.approvedRoster?.teams || snapshot.teams || [];
   const teamCount = teams.length || snapshot.tournament.team_count || 0;
-  const overrides = getQualifierSeedingOverrides(snapshot.tournament.engine_config);
+  const engineConfig = snapshot.tournament.engine_config;
+  const overrides = stripGroupStandingsOverrides(getQualifierSeedingOverrides(engineConfig));
   const completedGroups = blastCompletedGroupLetters(snapshot.matches || []);
   const groupsComplete = blastGroupStageFinished(snapshot.matches || []);
   const anyGroupsComplete = blastAnyGroupStageFinished(snapshot.matches || []);
   const autoMap = anyGroupsComplete ? computeBlastPlaceholderToTeamMap(teams, snapshot.matches, null) : null;
-  const slotKeys = listBlastQualifierSlotKeys(teamCount);
-  const editableKeys = listEditableQualifierSlotKeys(teamCount, completedGroups, groupsComplete);
+  const slotKeys = listBlastGroupSlotKeys(engineConfig);
+  const editableKeys = listEditableQualifierSlotKeys(engineConfig, completedGroups);
   const effectiveMap = autoMap ? { ...autoMap, ...overrides } : Object.keys(overrides).length ? { ...overrides } : null;
 
   return {
@@ -844,6 +858,7 @@ function buildQualifierSeedingPayload(snapshot) {
     effectiveMap,
     slots: slotKeys.map((key) => ({
       key,
+      groupKey: parseBlastGroupSlotLetter(key),
       autoTeam: autoMap?.[key] || "",
       team: effectiveMap?.[key] || autoMap?.[key] || "",
       isOverridden: Boolean(overrides[key]),
@@ -887,13 +902,12 @@ router.put("/:id/qualifier-seeding", async (req, res, next) => {
       .parse(req.body);
 
     const teams = snapshot.approvedRoster?.teams || snapshot.teams || [];
-    const teamCount = teams.length || snapshot.tournament.team_count || 0;
+    const engineConfig = snapshot.tournament.engine_config;
     const completedGroups = blastCompletedGroupLetters(snapshot.matches || []);
-    const groupsComplete = blastGroupStageFinished(snapshot.matches || []);
-    const slotKeys = listBlastQualifierSlotKeys(teamCount);
-    const editableKeys = listEditableQualifierSlotKeys(teamCount, completedGroups, groupsComplete);
+    const slotKeys = listBlastGroupSlotKeys(engineConfig);
+    const editableKeys = listEditableQualifierSlotKeys(engineConfig, completedGroups);
     const autoMap = computeBlastPlaceholderToTeamMap(teams, snapshot.matches, null) || {};
-    const existingOverrides = getQualifierSeedingOverrides(snapshot.tournament.engine_config);
+    const existingOverrides = stripGroupStandingsOverrides(getQualifierSeedingOverrides(engineConfig));
 
     let nextOverrides = { ...existingOverrides };
     if (payload.reset) {
@@ -918,6 +932,8 @@ router.put("/:id/qualifier-seeding", async (req, res, next) => {
         return res.status(400).json({ message: validationMessage });
       }
     }
+
+    nextOverrides = stripGroupStandingsOverrides(nextOverrides);
 
     const tournament = await saveQualifierSeedingOverrides(req.params.id, nextOverrides);
     if (!tournament) return res.status(404).json({ message: "Tournament not found" });

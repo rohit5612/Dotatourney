@@ -254,6 +254,7 @@ export function BracketPage({
       {mode === "tournament" ? (
         <QualifierSeedingPanel
           format={setup?.format}
+          engineConfig={engineConfig}
           matches={state?.matches || []}
           qualifierSeeding={qualifierSeeding}
           teamNames={(approvedRoster?.teams || []).map((team) => team.name)}

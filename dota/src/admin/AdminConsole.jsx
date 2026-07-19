@@ -859,8 +859,8 @@ export function AdminConsole() {
       }
       setMessage(
         options.reset
-          ? "Qualifier seeding reset to automatic group standings."
-          : "Qualifier seeding saved. Last chance, Play-In, and playoff slots updated.",
+          ? "Manual group standings reset to match results."
+          : "Group standings saved. Bracket, schedule, and standings updated.",
       );
     } catch (error) {
       setMessage(error.message);
