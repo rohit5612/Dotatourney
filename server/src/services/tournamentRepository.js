@@ -1540,6 +1540,11 @@ export async function replaceMatches(tournamentId, matches) {
 }
 
 export async function updateMatch(tournamentId, matchId, update) {
+  const { rows: beforeRows } = await pool.query(
+    "SELECT team1, team2 FROM matches WHERE tournament_id = $1::uuid AND id = $2::uuid",
+    [tournamentId, matchId],
+  );
+  const before = beforeRows[0];
   const meta = parseMeta(update.meta);
   const { t1, t2 } = scoresFromUpdateMeta(update);
   const { rows } = await pool.query(
@@ -1549,6 +1554,16 @@ export async function updateMatch(tournamentId, matchId, update) {
   if (!rows[0]) {
     return null;
   }
+
+  const normalize = (name) => String(name || "").trim().toLowerCase();
+  const teamsChanged =
+    before &&
+    (normalize(before.team1) !== normalize(update.team1) || normalize(before.team2) !== normalize(update.team2));
+  if (teamsChanged) {
+    const { reseedMatchLineups } = await import("./matchLineupService.js");
+    await reseedMatchLineups(tournamentId, matchId);
+  }
+
   return hydrateMatchRow(rows[0]);
 }
 

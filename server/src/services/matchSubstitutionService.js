@@ -6,7 +6,9 @@ import {
   getLineupPlayerAccountIdsForMatchTeam,
   getMatchLineupRows,
   groupLineupsByTeam,
+  matchLineupNeedsReseed,
   revertSubstituteFromLineup,
+  reseedMatchLineups,
   seedMatchLineupsForTournament,
 } from "./matchLineupService.js";
 import {
@@ -88,13 +90,15 @@ async function loadMatchContext(matchId) {
   return rows[0] || null;
 }
 
-async function ensureLineupsSeeded(tournamentId, matchId) {
-  const { rows } = await pool.query(
-    `SELECT COUNT(*)::int AS count FROM match_lineup_players WHERE match_id = $1`,
-    [matchId],
-  );
-  if ((rows[0]?.count ?? 0) === 0) {
+async function ensureLineupsSeeded(tournamentId, matchId, matchRow) {
+  const lineupRows = await getMatchLineupRows(matchId);
+  const starters = lineupRows.filter((row) => row.is_substitute !== true);
+  if (!starters.length) {
     await seedMatchLineupsForTournament(tournamentId, [matchId]);
+    return;
+  }
+  if (matchLineupNeedsReseed(starters, matchRow.team1, matchRow.team2)) {
+    await reseedMatchLineups(tournamentId, matchId);
   }
 }
 
@@ -285,7 +289,7 @@ export async function getPlayerMatchSchedule(playerAccountId) {
   const now = Date.now();
 
   for (const row of matchRows) {
-    await ensureLineupsSeeded(tournamentId, row.id);
+    await ensureLineupsSeeded(tournamentId, row.id, row);
     const context = await resolvePlayerMatchContext(playerAccountId, row, rosterTeamName);
     const match = await buildMatchPayload(row, playerAccountId, context.teamName, {
       isSubstitute: context.isSubstitute,
@@ -333,7 +337,7 @@ export async function createSubstitutionRequest(playerAccountId, matchId, reason
     teamName.toLowerCase() === match.team2?.toLowerCase();
   if (!isOnMatch) throw httpError("Your team is not playing in this match.");
 
-  await ensureLineupsSeeded(match.tournament_id, matchId);
+  await ensureLineupsSeeded(match.tournament_id, matchId, match);
 
   const { rows: lineupCheck } = await pool.query(
     `SELECT id FROM match_lineup_players
@@ -673,7 +677,7 @@ export async function listSubstitutionTargets(tournamentId) {
   for (const row of matchRows) {
     if (isMatchCompleted(row.status) || row.schedule_status === "finished") continue;
 
-    await ensureLineupsSeeded(tournamentId, row.id);
+    await ensureLineupsSeeded(tournamentId, row.id, row);
     const lineupRows = await getMatchLineupRows(row.id);
 
     matches.push({
@@ -712,7 +716,7 @@ export async function manualAssignSubstitute(
     throw httpError("Selected player is not on an approved roster for this tournament.");
   }
 
-  await ensureLineupsSeeded(tournamentId, matchId);
+  await ensureLineupsSeeded(tournamentId, matchId, match);
 
   const { rows: lineupCheck } = await pool.query(
     `SELECT team_name FROM match_lineup_players
