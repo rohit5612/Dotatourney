@@ -91,6 +91,7 @@ import { resolveBlastBracketMatches } from "../utils/blastSeeding.js";
 import { TournamentWinnersBlock } from "../components/honors/TournamentWinnersBlock.jsx";
 import { hasPublicHonorsContent } from "../utils/tournamentHonors.js";
 import { buildBracketTokenHelp } from "../utils/bracketTokenHelp.js";
+import { resolveDisplayTeamName } from "../utils/playoffPresentation.js";
 import { collectTeamLogoUrls, preloadTeamLogos } from "../utils/teamLogoCache.js";
 import { hexToRgbTriplet } from "../hooks/useLogoAccent.js";
 import { rulebookContentClassName, sanitizeRulebookHtml } from "../lib/sanitizeRulebookHtml.js";
@@ -1071,10 +1072,12 @@ const PublicScheduleMatchCard = memo(function PublicScheduleMatchCard({
     : start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   const team1 = match?.team1;
   const team2 = match?.team2;
+  const displayTeam1 = match ? resolveDisplayTeamName(match, 1, allMatches) : team1;
+  const displayTeam2 = match ? resolveDisplayTeamName(match, 2, allMatches) : team2;
   const team1Record = findTeamByName(teamByName, team1);
   const team2Record = findTeamByName(teamByName, team2);
-  const tokenHelp1 = buildBracketTokenHelp(team1, allMatches, { blastBracketDepths, blastVariant });
-  const tokenHelp2 = buildBracketTokenHelp(team2, allMatches, { blastBracketDepths, blastVariant });
+  const tokenHelp1 = buildBracketTokenHelp(displayTeam1, allMatches, { blastBracketDepths, blastVariant });
+  const tokenHelp2 = buildBracketTokenHelp(displayTeam2, allMatches, { blastBracketDepths, blastVariant });
   const seriesLabel = match?.meta?.seriesType ? String(match.meta.seriesType).toUpperCase() : "";
   const scores = getMatchDisplayScores(match);
   const hasResult = isFinished && (scores.ready || Boolean(scores.winner));
@@ -1115,7 +1118,7 @@ const PublicScheduleMatchCard = memo(function PublicScheduleMatchCard({
         {match ? (
           <div className="schedule-match__teams">
             <ScheduleMatchTeam
-              name={team1}
+              name={displayTeam1}
               team={team1Record}
               tokenHelp={tokenHelp1}
               logoPriority={logoPriority}
@@ -1124,7 +1127,7 @@ const PublicScheduleMatchCard = memo(function PublicScheduleMatchCard({
             />
             {centerLabel}
             <ScheduleMatchTeam
-              name={team2}
+              name={displayTeam2}
               team={team2Record}
               tokenHelp={tokenHelp2}
               logoPriority={logoPriority}
@@ -1190,8 +1193,9 @@ function filterScheduleSlotsByTeam(slots, matches, teamName) {
   const needle = selected.toLowerCase();
   return (slots || []).filter((slot) => {
     const match = matches?.find((entry) => entry.id === slot.matchId);
-    const team1 = String(match?.team1 || "").toLowerCase();
-    const team2 = String(match?.team2 || "").toLowerCase();
+    if (!match) return false;
+    const team1 = String(resolveDisplayTeamName(match, 1, matches) || match.team1 || "").toLowerCase();
+    const team2 = String(resolveDisplayTeamName(match, 2, matches) || match.team2 || "").toLowerCase();
     return team1 === needle || team2 === needle;
   });
 }

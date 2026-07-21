@@ -15,6 +15,7 @@ import { createId } from "../utils/client";
 import { normalizeArchiveEmbeds } from "../utils/seasonContentSchema.js";
 import { datetimeLocalToIso, toDatetimeLocalValue } from "../utils/datetime.js";
 import { isValidScheduleInstant, resolveScheduleStatus } from "../utils/schedule.js";
+import { resolveDisplayTeamName } from "../utils/playoffPresentation.js";
 
 const PHASE_TABS = [
   { id: SCHEDULE_PHASE_GROUPS, label: "Groups", shortLabel: "Groups" },
@@ -42,12 +43,16 @@ function compareMatchesBracketOrder(matchA, matchB) {
   return (matchA.matchIndex ?? 0) - (matchB.matchIndex ?? 0);
 }
 
-function rowMatchesSearch({ query, match, row, stageLabel, roundStructureAll }) {
+function rowMatchesSearch({ query, match, row, stageLabel, roundStructureAll, allMatches }) {
   const q = query.trim().toLowerCase();
   if (!q) return true;
+  const displayTeam1 = match ? resolveDisplayTeamName(match, 1, allMatches) : "";
+  const displayTeam2 = match ? resolveDisplayTeamName(match, 2, allMatches) : "";
   const haystack = [
     match?.team1,
     match?.team2,
+    displayTeam1,
+    displayTeam2,
     stageLabel,
     match ? formatMatchRoundSummary(match, roundStructureAll) : "",
     row?.stream,
@@ -87,6 +92,7 @@ function matchPassesScheduleFilters({
   bracketFilter,
   roundFilter,
   teamFilter,
+  allMatches,
 }) {
   if (!match) return false;
 
@@ -99,12 +105,12 @@ function matchPassesScheduleFilters({
 
   if (teamFilter) {
     const needle = teamFilter.toLowerCase();
-    const t1 = String(match.team1 || "").toLowerCase();
-    const t2 = String(match.team2 || "").toLowerCase();
+    const t1 = String(resolveDisplayTeamName(match, 1, allMatches) || match.team1 || "").toLowerCase();
+    const t2 = String(resolveDisplayTeamName(match, 2, allMatches) || match.team2 || "").toLowerCase();
     if (t1 !== needle && t2 !== needle) return false;
   }
 
-  return rowMatchesSearch({ query: searchQuery, match, row, stageLabel, roundStructureAll });
+  return rowMatchesSearch({ query: searchQuery, match, row, stageLabel, roundStructureAll, allMatches });
 }
 
 function paginateIds(ids, page, pageSize) {
@@ -198,6 +204,7 @@ function ScheduleMatchRow({
   match,
   stageLabel,
   roundStructureAll,
+  allMatches,
   locked,
   dirty,
   saving,
@@ -209,6 +216,8 @@ function ScheduleMatchRow({
   onSave,
 }) {
   const readOnly = locked && !isNew;
+  const displayTeam1 = match ? resolveDisplayTeamName(match, 1, allMatches) : "";
+  const displayTeam2 = match ? resolveDisplayTeamName(match, 2, allMatches) : "";
 
   return (
     <article
@@ -227,7 +236,7 @@ function ScheduleMatchRow({
         </div>
         <div className="lg:col-span-3">
           <div className="text-xs uppercase tracking-wider text-muted-foreground">Teams</div>
-          <p className="mt-0.5 font-medium leading-snug">{match ? `${match.team1} vs ${match.team2}` : slot.matchId}</p>
+          <p className="mt-0.5 font-medium leading-snug">{match ? `${displayTeam1} vs ${displayTeam2}` : slot.matchId}</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:col-span-5 lg:grid-cols-2 xl:grid-cols-3">
           <label className="block space-y-1">
@@ -672,6 +681,7 @@ export function SchedulePage({
         bracketFilter,
         roundFilter,
         teamFilter,
+        allMatches: state?.matches || [],
       });
     },
     [
@@ -684,6 +694,7 @@ export function SchedulePage({
       baseRowsByMatchId,
       stageLabels,
       roundStructureAll,
+      state?.matches,
     ],
   );
 
@@ -885,6 +896,7 @@ export function SchedulePage({
         match={match}
         stageLabel={stageLabel}
         roundStructureAll={roundStructureAll}
+        allMatches={state?.matches || []}
         locked={locked}
         dirty={isRowDirty(matchId)}
         saving={savingMatchId === matchId}

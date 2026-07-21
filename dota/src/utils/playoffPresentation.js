@@ -2,7 +2,7 @@
 
 const TEAM_TOKEN_REGEX = /^[A-Z0-9_]+$/;
 
-function isPlayoffStageKey(stageKey) {
+export function isPlayoffStageKey(stageKey) {
   const key = String(stageKey || "");
   return key === "blast-playoffs" || key === "playoffs";
 }
@@ -17,7 +17,7 @@ function distinctStageRoundIndices(matches, stageKey) {
   ].sort((a, b) => a - b);
 }
 
-function stageRoundOrdinal(matches, stageKey, roundIndex) {
+export function stageRoundOrdinal(matches, stageKey, roundIndex) {
   const rounds = distinctStageRoundIndices(matches, stageKey);
   if (!rounds.length) return roundIndex ?? 0;
   const idx = rounds.indexOf(roundIndex ?? 0);
@@ -81,6 +81,42 @@ function resolvePlayoffSlotDisplay(value, consumerMatch, side, allMatches, token
   if (map.has(text)) return map.get(text);
 
   return value;
+}
+
+/** Win-token lookup for bracket SVG connectors (aliases legacy stored tokens). */
+export function buildPlayoffConnectorTokenLookup(matches) {
+  const map = new Map();
+  const aliases = buildStoredToCanonicalDisplayMap(matches);
+  for (const match of matches || []) {
+    const token = match?.meta?.winToken;
+    if (!token || typeof token !== "string") continue;
+    map.set(token, match);
+    if (token.endsWith("W")) {
+      map.set(token.replace(/W$/, "L"), match);
+    }
+    const canonical = canonicalPlayoffWinToken(match, matches);
+    if (canonical && canonical !== token) {
+      map.set(canonical, match);
+      if (canonical.endsWith("W")) {
+        map.set(canonical.replace(/W$/, "L"), match);
+      }
+    }
+    const alias = aliases.get(token);
+    if (alias) {
+      map.set(alias, match);
+      if (alias.endsWith("W")) {
+        map.set(alias.replace(/W$/, "L"), match);
+      }
+    }
+  }
+  return map;
+}
+
+/** Resolve a downstream slot token for connector edge wiring. */
+export function resolveConnectorSlotToken(consumer, side, allMatches) {
+  const presentationKey = side === "team1" ? "presentationTeam1" : "presentationTeam2";
+  if (consumer?.meta?.[presentationKey]) return consumer.meta[presentationKey];
+  return resolvePlayoffSlotDisplay(consumer?.[side], consumer, side, allMatches);
 }
 
 export function resolveDisplayWinToken(match) {
