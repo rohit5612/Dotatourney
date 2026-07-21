@@ -165,13 +165,15 @@ export async function loadAllMembershipStintsForAccount(playerAccountId) {
             t.slug AS tournament_slug,
             s.number AS season_number,
             s.slug AS season_slug,
-            s.status AS season_status
+            s.status AS season_status,
+            pr.registration_status
      FROM roster_snapshot_team_memberships rstm
      JOIN roster_snapshot_players rsp ON rsp.id = rstm.snapshot_player_id
      JOIN roster_snapshots rs ON rs.id = rstm.roster_snapshot_id AND rs.status = 'approved'
      JOIN roster_snapshot_teams rst ON rst.id = rstm.snapshot_team_id
      JOIN tournaments t ON t.id = rs.tournament_id
      LEFT JOIN seasons s ON s.tournament_id = t.id
+     LEFT JOIN player_registrations pr ON pr.id = rsp.registration_id
      WHERE rsp.player_account_id = $1
      ORDER BY rstm.started_at DESC NULLS LAST, rs.approved_at DESC`,
     [playerAccountId],

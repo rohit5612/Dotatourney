@@ -95,6 +95,8 @@ export function mapRegistrationRow(row, { includeAdminFields = true } = {}) {
     base.archivedAt = row.archived_at;
     base.archivedBy = row.archived_by;
     base.archivedReason = row.archived_reason;
+    base.replacedAt = row.replaced_at;
+    base.replacedReason = row.replaced_reason;
   }
   return base;
 }
@@ -105,7 +107,8 @@ const listSelect = `SELECT r.id, r.tournament_id, r.email, r.name, r.display_nam
       pa.bpc_id AS player_bpc_id, pa.slug AS player_slug,
       r.registration_flow_stage, r.card_tier, r.substitute_flag, r.payment_provider,
       r.email_verified_at, r.terms_accepted_at, r.draft_payload,
-      r.archived_at, r.archived_by, r.archived_reason, r.created_at, r.updated_at`;
+      r.archived_at, r.archived_by, r.archived_reason, r.replaced_at, r.replaced_reason,
+      r.created_at, r.updated_at`;
 
 const registrationFrom = `FROM player_registrations r
      LEFT JOIN player_accounts pa ON pa.id = r.player_account_id`;
@@ -210,7 +213,11 @@ export async function syncRegistrationCapState(tournamentId, { client = null, in
     return { ...state, changed: false, substitutePoolOpen: state.reached && !state.registrationsOpen };
   }
   await db.query(
-    `UPDATE tournaments SET registrations_open = FALSE, updated_at = NOW() WHERE id = $1 AND registrations_open = TRUE`,
+    `UPDATE tournaments
+     SET registrations_open = FALSE,
+         registrations_auto_closed_at = NOW(),
+         updated_at = NOW()
+     WHERE id = $1 AND registrations_open = TRUE`,
     [tournamentId],
   );
   if (!client && invalidateCache) invalidatePublicCache();
@@ -219,6 +226,40 @@ export async function syncRegistrationCapState(tournamentId, { client = null, in
     registrationsOpen: false,
     changed: true,
     substitutePoolOpen: true,
+  };
+}
+
+/**
+ * Reopen main registration when a replaced player frees a cap slot.
+ * Only runs when registration was auto-closed by cap (not manual admin close).
+ */
+export async function maybeReopenRegistrationAfterReplacement(tournamentId, client = pool) {
+  const state = await getRegistrationCapState(tournamentId, client);
+  if (state.cap == null || state.reached || state.registrationsOpen) {
+    return { ...state, reopened: false };
+  }
+
+  const { rows } = await client.query(
+    `UPDATE tournaments
+     SET registrations_open = TRUE,
+         registrations_auto_closed_at = NULL,
+         updated_at = NOW()
+     WHERE id = $1
+       AND registrations_open = FALSE
+       AND registrations_auto_closed_at IS NOT NULL
+     RETURNING id`,
+    [tournamentId],
+  );
+
+  if (!rows[0]) {
+    return { ...state, reopened: false };
+  }
+
+  return {
+    ...state,
+    registrationsOpen: true,
+    reopened: true,
+    substitutePoolOpen: false,
   };
 }
 
@@ -535,16 +576,61 @@ export async function completeRegistrationPayment(tournamentId, email, publicCod
   return mapRegistrationRow(rows[0]);
 }
 
+async function assertCanMarkReplaced(existingRow) {
+  if (!existingRow) {
+    const error = new Error("Registration not found");
+    error.status = 404;
+    throw error;
+  }
+  if (existingRow.substitute_flag) {
+    const error = new Error("Substitute pool entries cannot be marked as replaced");
+    error.status = 400;
+    throw error;
+  }
+  if (existingRow.registration_status !== "approved") {
+    const error = new Error("Only approved registrations can be marked as replaced");
+    error.status = 400;
+    throw error;
+  }
+}
+
 export async function updatePlayerRegistration(tournamentId, registrationId, payload) {
   const client = await pool.connect();
+  let shouldInvalidateCache = false;
   try {
     await client.query("BEGIN");
+
+    const { rows: existingRows } = await client.query(
+      `SELECT * FROM player_registrations WHERE tournament_id = $1 AND id = $2 FOR UPDATE`,
+      [tournamentId, registrationId],
+    );
+    const existing = existingRows[0];
+
+    if (payload.registrationStatus === "replaced") {
+      await assertCanMarkReplaced(existing);
+    }
+
+    const replacedReason =
+      payload.registrationStatus === "replaced"
+        ? String(payload.replacedReason || payload.adminNotes || "").trim() || null
+        : null;
+
     const { rows } = await client.query(
       `UPDATE player_registrations
        SET payment_status = COALESCE($3, payment_status),
            registration_status = COALESCE($4, registration_status),
            admin_notes = COALESCE($5, admin_notes),
            display_name = COALESCE($6, display_name),
+           replaced_at = CASE
+             WHEN $4 = 'replaced' AND registration_status <> 'replaced' THEN NOW()
+             WHEN $4 IS NOT NULL AND $4 <> 'replaced' THEN NULL
+             ELSE replaced_at
+           END,
+           replaced_reason = CASE
+             WHEN $4 = 'replaced' AND registration_status <> 'replaced' THEN COALESCE($7, admin_notes)
+             WHEN $4 IS NOT NULL AND $4 <> 'replaced' THEN NULL
+             ELSE replaced_reason
+           END,
            updated_at = NOW()
        WHERE tournament_id = $1 AND id = $2
        RETURNING *`,
@@ -555,6 +641,7 @@ export async function updatePlayerRegistration(tournamentId, registrationId, pay
         payload.registrationStatus,
         payload.adminNotes,
         payload.displayName !== undefined ? String(payload.displayName || "").trim() : null,
+        replacedReason,
       ],
     );
     if (rows[0] && payload.displayName !== undefined) {
@@ -566,17 +653,21 @@ export async function updatePlayerRegistration(tournamentId, registrationId, pay
         [tournamentId, registrationId, displayName],
       );
     }
+    if (rows[0] && payload.registrationStatus === "approved" && !rows[0].substitute_flag) {
+      await syncRegistrationCapState(tournamentId, { client, invalidateCache: false });
+      shouldInvalidateCache = true;
+    }
     if (
       rows[0] &&
-      payload.registrationStatus === "approved" &&
+      payload.registrationStatus === "replaced" &&
+      existing?.registration_status === "approved" &&
       !rows[0].substitute_flag
     ) {
-      await syncRegistrationCapState(tournamentId, { client, invalidateCache: false });
+      const reopenResult = await maybeReopenRegistrationAfterReplacement(tournamentId, client);
+      if (reopenResult.reopened) shouldInvalidateCache = true;
     }
     await client.query("COMMIT");
-    if (rows[0] && payload.registrationStatus === "approved" && !rows[0].substitute_flag) {
-      invalidatePublicCache();
-    }
+    if (shouldInvalidateCache) invalidatePublicCache();
     return rows[0] ? mapRegistrationRow(rows[0]) : null;
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});

@@ -18,6 +18,9 @@ export function getTournamentState(tournament, account) {
   if (status === "approved") {
     return { key: "registered", label: "Registered", tone: "success" };
   }
+  if (status === "replaced") {
+    return { key: "replaced", label: "Replaced", tone: "muted" };
+  }
   if (status === "pending") {
     return { key: "pending", label: "Awaiting approval", tone: "warm" };
   }

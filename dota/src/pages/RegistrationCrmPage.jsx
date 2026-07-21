@@ -15,6 +15,7 @@ function registrationStageLabel(registration) {
     return "Paid · awaiting approval";
   }
   if (registration.registrationStatus === "approved") return "Approved";
+  if (registration.registrationStatus === "replaced") return "Replaced";
   if (registration.registrationStatus === "rejected") return "Rejected";
   if (registration.registrationStatus === "waitlisted") return "Waitlisted";
   return "Pending review";
@@ -46,6 +47,7 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
   const [showArchived, setShowArchived] = useState(false);
   const [sortMode, setSortMode] = useState("date-desc");
   const [archiveDraft, setArchiveDraft] = useState(null);
+  const [replaceDraft, setReplaceDraft] = useState(null);
   const [actionMenuId, setActionMenuId] = useState("");
   const [editDrafts, setEditDrafts] = useState({});
   const [message, setMessage] = useState("");
@@ -90,7 +92,7 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
   }, [registrations, roleFilter, statusFilter, paymentFilter, minMmr, maxMmr, search, showArchived, sortMode]);
 
   const statusCounts = useMemo(() => {
-    const counts = { approved: 0, pending: 0, waitlisted: 0, rejected: 0 };
+    const counts = { approved: 0, pending: 0, waitlisted: 0, rejected: 0, replaced: 0 };
     for (const registration of registrations || []) {
       if (!isRegistrationCrmEligible(registration) || registration.archivedAt) continue;
       const status = registration.registrationStatus;
@@ -142,6 +144,14 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
 
   async function saveRegistration(registration) {
     const draft = editDrafts[registration.id] ?? draftFromRegistration(registration);
+    if (draft.registrationStatus === "replaced" && registration.registrationStatus !== "replaced") {
+      setReplaceDraft({ registration, draft });
+      return;
+    }
+    await persistSaveRegistration(registration, draft);
+  }
+
+  async function persistSaveRegistration(registration, draft) {
     setSavingId(registration.id);
     setMessage("");
     try {
@@ -157,12 +167,21 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
         setMessage("Registration rejected — decision email sent to the player.");
       } else if (draft.registrationStatus === "waitlisted") {
         setMessage("Registration waitlisted — decision email sent to the player.");
+      } else if (draft.registrationStatus === "replaced") {
+        setMessage("Player marked as replaced — cap slot freed. After the replacement registers, update Teams and save.");
       } else {
         setMessage("Registration saved.");
       }
     } finally {
       setSavingId("");
     }
+  }
+
+  async function confirmReplaceRegistration() {
+    if (!replaceDraft) return;
+    const { registration, draft } = replaceDraft;
+    setReplaceDraft(null);
+    await persistSaveRegistration(registration, draft);
   }
 
   async function syncCrmToGoogleSheet() {
@@ -255,6 +274,7 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
               <option value="approved">Approved ({statusCounts.approved})</option>
               <option value="waitlisted">Waitlisted ({statusCounts.waitlisted})</option>
               <option value="rejected">Rejected ({statusCounts.rejected})</option>
+              <option value="replaced">Replaced ({statusCounts.replaced})</option>
             </select>
             <select className="rounded-md border border-input bg-background p-2" value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value)}>
               <option value="">All payments</option>
@@ -355,6 +375,12 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
                   </p>
                   {registration.notes ? <p className="mt-2 text-sm text-muted-foreground">Player notes: {registration.notes}</p> : null}
                   {registration.archivedAt ? <p className="mt-2 text-sm text-secondary">Archived: {registration.archivedReason || "No reason recorded"}</p> : null}
+                  {registration.replacedAt ? (
+                    <p className="mt-2 text-sm text-secondary">
+                      Replaced: {new Date(registration.replacedAt).toLocaleString()}
+                      {registration.replacedReason ? ` — ${registration.replacedReason}` : ""}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="text-sm">
                   <div>
@@ -379,13 +405,16 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
                   <select
                     className="rounded-md border border-input bg-background p-2 disabled:opacity-60"
                     value={draft.registrationStatus}
-                    disabled={archived || !canWrite}
+                    disabled={archived || !canWrite || registration.registrationStatus === "replaced"}
                     onChange={(event) => updateDraft(registration, { registrationStatus: event.target.value })}
                   >
                     <option value="pending">Pending</option>
                     <option value="approved">Approved</option>
                     <option value="waitlisted">Waitlisted</option>
                     <option value="rejected">Rejected</option>
+                    {registration.registrationStatus === "approved" || registration.registrationStatus === "replaced" ? (
+                      <option value="replaced">Replaced</option>
+                    ) : null}
                   </select>
                   <input
                     className="rounded-md border border-input bg-background p-2 disabled:opacity-60 sm:col-span-2 lg:col-span-1"
@@ -433,6 +462,29 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
           <div className="rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground">No registrations match the current filters.</div>
         ) : null}
       </div>
+
+      {replaceDraft ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-lg space-y-3 rounded-lg border border-border bg-card p-4 shadow-2xl">
+            <h3 className="font-serif text-lg">Mark player as replaced</h3>
+            <p className="text-sm text-muted-foreground">
+              This marks <span className="font-medium text-foreground">{replaceDraft.registration.displayName || replaceDraft.registration.name}</span> as
+              permanently replaced. Their registration history is kept, but they will no longer count toward the player cap or appear in the team assignable pool.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Main registration may reopen so a replacement can sign up. After the new player is approved, remove the replaced player and add the replacement in Teams, then save.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn btn-outline" onClick={() => setReplaceDraft(null)}>
+                Cancel
+              </button>
+              <button type="button" className="btn btn-primary" onClick={confirmReplaceRegistration}>
+                Mark as replaced
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {archiveDraft ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">

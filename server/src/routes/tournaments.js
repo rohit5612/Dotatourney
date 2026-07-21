@@ -1257,9 +1257,10 @@ router.patch("/:id/registrations/:registrationId", requirePermission("playerCrm.
     const payload = z
       .object({
         paymentStatus: z.enum(["unpaid", "paid", "refunded"]).optional(),
-        registrationStatus: z.enum(["pending", "approved", "waitlisted", "rejected"]).optional(),
+        registrationStatus: z.enum(["pending", "approved", "waitlisted", "rejected", "replaced"]).optional(),
         adminNotes: z.string().optional(),
         displayName: z.string().optional(),
+        replacedReason: z.string().optional(),
       })
       .parse(req.body);
     const prev = await getPlayerRegistrationById(req.params.id, req.params.registrationId);

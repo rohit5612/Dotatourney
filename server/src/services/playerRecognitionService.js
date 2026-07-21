@@ -299,7 +299,8 @@ export async function buildTeamStintHistory(playerAccountId) {
       endedAt: stint.ended_at,
       approvedAt: stint.approved_at,
       matchesPlayed,
-      wasReplaced: stint.status === "inactive" && matchesPlayed === 0,
+      wasReplaced:
+        stint.registration_status === "replaced" || (stint.status === "inactive" && matchesPlayed === 0),
     });
   }
 
