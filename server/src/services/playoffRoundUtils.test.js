@@ -4,6 +4,66 @@ import { compileEngineStageMatches } from "./engineStageSeeding.js";
 import { decorateMatchesForClient } from "./playoffRoundUtils.js";
 
 describe("playoff round normalization", () => {
+  it("decorateMatchesForClient rewrites feeder slot placeholders for legacy tokens", () => {
+    const matches = [
+      {
+        id: "qf0",
+        stageKey: "blast-playoffs",
+        roundIndex: 1,
+        matchIndex: 0,
+        team1: "T1",
+        team2: "T2",
+        meta: { winToken: "SFR1M1W" },
+      },
+      {
+        id: "qf1",
+        stageKey: "blast-playoffs",
+        roundIndex: 1,
+        matchIndex: 1,
+        team1: "T3",
+        team2: "T4",
+        meta: { winToken: "SFR1M2W" },
+      },
+      {
+        id: "sf0",
+        stageKey: "blast-playoffs",
+        roundIndex: 2,
+        matchIndex: 0,
+        team1: "SFR1M1W",
+        team2: "SFR1M2W",
+        meta: { winToken: "CHAMPION" },
+      },
+      {
+        id: "sf1",
+        stageKey: "blast-playoffs",
+        roundIndex: 2,
+        matchIndex: 1,
+        team1: "SFR1M3W",
+        team2: "SFR1M4W",
+        meta: { winToken: "CHAMPION" },
+      },
+      {
+        id: "fin",
+        stageKey: "blast-playoffs",
+        roundIndex: 3,
+        matchIndex: 0,
+        team1: "CHAMPION",
+        team2: "CHAMPION",
+        meta: { winToken: "CHAMPION" },
+      },
+    ];
+    const decorated = decorateMatchesForClient(matches);
+    const sf = decorated.find((m) => m.id === "sf0");
+    const fin = decorated.find((m) => m.id === "fin");
+    assert.equal(sf?.meta?.presentationTeam1, "QFR1M1W");
+    assert.equal(sf?.meta?.presentationTeam2, "QFR1M2W");
+    assert.equal(sf?.meta?.presentationWinToken, "SFR1M1W");
+    assert.equal(fin?.meta?.presentationTeam1, "SFR1M1W");
+    assert.equal(fin?.meta?.presentationTeam2, "SFR1M2W");
+    assert.equal(sf?.team1, "SFR1M1W");
+    assert.equal(fin?.team1, "CHAMPION");
+  });
+
   it("decorateMatchesForClient adds presentation tokens for legacy 1-based playoff rounds", () => {
     const matches = [
       {

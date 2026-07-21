@@ -107,16 +107,74 @@ export function buildPlayoffTokenAliasMap(matches) {
     const stored = match?.meta?.winToken;
     const canonical = canonicalPlayoffWinToken(match, matches);
     if (!stored || !canonical || stored === canonical) continue;
+    if (stored === "CHAMPION") continue;
     aliases.set(stored, canonical);
     aliases.set(canonical, stored);
-    const storedLoser = stored.replace(/W$/, "L");
-    const canonicalLoser = canonical.replace(/W$/, "L");
-    if (storedLoser !== canonicalLoser) {
-      aliases.set(storedLoser, canonicalLoser);
-      aliases.set(canonicalLoser, storedLoser);
+    if (stored.endsWith("W") && canonical.endsWith("W")) {
+      const storedLoser = stored.replace(/W$/, "L");
+      const canonicalLoser = canonical.replace(/W$/, "L");
+      if (storedLoser !== canonicalLoser) {
+        aliases.set(storedLoser, canonicalLoser);
+        aliases.set(canonicalLoser, storedLoser);
+      }
     }
   }
   return aliases;
+}
+
+/** @param {object[]} matches */
+export function buildStoredToCanonicalDisplayMap(matches) {
+  /** @type {Map<string, string>} */
+  const map = new Map();
+  for (const match of matches || []) {
+    const stored = match?.meta?.winToken;
+    const canonical = canonicalPlayoffWinToken(match, matches);
+    if (!stored || !canonical || stored === canonical) continue;
+    if (stored === "CHAMPION") continue;
+    map.set(stored, canonical);
+    if (stored.endsWith("W") && canonical.endsWith("W")) {
+      const storedLoser = stored.replace(/W$/, "L");
+      const canonicalLoser = canonical.replace(/W$/, "L");
+      if (storedLoser !== canonicalLoser) map.set(storedLoser, canonicalLoser);
+    }
+  }
+  return map;
+}
+
+const TEAM_TOKEN_REGEX = /^[A-Z0-9_]+$/;
+
+/**
+ * Display label for unresolved playoff feeder slots (team1/team2 placeholders).
+ * @param {string} value
+ * @param {object} consumerMatch
+ * @param {"team1"|"team2"} side
+ * @param {object[]} allMatches
+ * @param {Map<string, string>} [tokenDisplayMap]
+ */
+export function resolvePlayoffSlotDisplay(value, consumerMatch, side, allMatches, tokenDisplayMap) {
+  const text = String(value || "").trim();
+  if (!text || !TEAM_TOKEN_REGEX.test(text)) return value;
+
+  if (text === "CHAMPION" && isPlayoffStageKey(consumerMatch?.stageKey || "")) {
+    const stageKey = consumerMatch.stageKey;
+    const rounds = distinctStageRoundIndices(allMatches, stageKey);
+    const consumerOrd = stageRoundOrdinal(allMatches, stageKey, consumerMatch.roundIndex ?? 0);
+    if (rounds.length >= 2 && consumerOrd === rounds.length - 1) {
+      const sfRound = rounds[rounds.length - 2];
+      const sfMatches = playoffMatchesInRound(allMatches, stageKey, sfRound);
+      const sfIndex = side === "team2" ? 1 : 0;
+      const sf = sfMatches[sfIndex];
+      if (sf) {
+        const canon = canonicalPlayoffWinToken(sf, allMatches);
+        if (canon && canon !== "CHAMPION") return canon;
+      }
+    }
+  }
+
+  const map = tokenDisplayMap || buildStoredToCanonicalDisplayMap(allMatches);
+  if (map.has(text)) return map.get(text);
+
+  return value;
 }
 
 /**
@@ -125,24 +183,38 @@ export function buildPlayoffTokenAliasMap(matches) {
  */
 export function decorateMatchesForClient(matches) {
   if (!matches?.length) return matches || [];
+  const tokenDisplayMap = buildStoredToCanonicalDisplayMap(matches);
+
   return matches.map((match) => {
     const presentationWinToken = canonicalPlayoffWinToken(match, matches);
     const presentationSeriesRuleKey = canonicalPlayoffSeriesRuleKey(match, matches);
     const storedToken = match.meta?.winToken;
     const storedRule = match.meta?.seriesRuleKey;
-    if (
-      (!presentationWinToken || presentationWinToken === storedToken) &&
-      (!presentationSeriesRuleKey || presentationSeriesRuleKey === storedRule)
-    ) {
-      return match;
+
+    const presentationTeam1 = resolvePlayoffSlotDisplay(match.team1, match, "team1", matches, tokenDisplayMap);
+    const presentationTeam2 = resolvePlayoffSlotDisplay(match.team2, match, "team2", matches, tokenDisplayMap);
+
+    const meta = { ...(match.meta || {}) };
+    let changed = false;
+
+    if (presentationWinToken && presentationWinToken !== storedToken) {
+      meta.presentationWinToken = presentationWinToken;
+      changed = true;
     }
-    return {
-      ...match,
-      meta: {
-        ...(match.meta || {}),
-        presentationWinToken: presentationWinToken || storedToken,
-        presentationSeriesRuleKey: presentationSeriesRuleKey || storedRule,
-      },
-    };
+    if (presentationSeriesRuleKey && presentationSeriesRuleKey !== storedRule) {
+      meta.presentationSeriesRuleKey = presentationSeriesRuleKey;
+      changed = true;
+    }
+    if (presentationTeam1 !== match.team1) {
+      meta.presentationTeam1 = presentationTeam1;
+      changed = true;
+    }
+    if (presentationTeam2 !== match.team2) {
+      meta.presentationTeam2 = presentationTeam2;
+      changed = true;
+    }
+
+    if (!changed) return match;
+    return { ...match, meta };
   });
 }

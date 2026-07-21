@@ -6,7 +6,7 @@ import {
 } from "./bracketLayout.js";
 import { BracketTokenHelp } from "./BracketTokenHelp.jsx";
 import { datetimeLocalToIso, toDatetimeLocalValue } from "../../utils/datetime.js";
-import { resolveDisplayWinToken } from "../../utils/playoffPresentation.js";
+import { resolveDisplayWinToken, resolveDisplayTeamName } from "../../utils/playoffPresentation.js";
 
 /** 1-based round index from bracket win-token prefixes → Quarterfinals / Semifinals / Finals when applicable */
 function bracketTokenRoundLabel(roundStr) {
@@ -251,6 +251,7 @@ export function MatchCard({
   updateMatch,
   blastBracketDepths,
   blastVariant = null,
+  allMatches = null,
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -263,6 +264,8 @@ export function MatchCard({
   const slotValue = match.slotAt ? toDatetimeLocalValue(match.slotAt) : "";
   const seriesLabel = String(match.meta?.seriesType || "").toUpperCase();
   const displayWinToken = resolveDisplayWinToken(match);
+  const displayTeam1 = resolveDisplayTeamName(match, 1, allMatches);
+  const displayTeam2 = resolveDisplayTeamName(match, 2, allMatches);
   const requiredWins = Math.max(1, Math.ceil((Number(seriesLabel.replace("BO", "")) || 1) / 2));
   const matchFlowTip = blastVariant === "ten" || blastVariant === "twelve" ? describeBlastMatchFlow(match, blastVariant) : "";
   const leftScore = team1Score === "" ? null : Number(team1Score);
@@ -358,7 +361,7 @@ export function MatchCard({
       </div>
       <div className={lockedBodyClass}>
         <TeamLine
-          name={match.team1}
+          name={displayTeam1}
           winner={match.winner === match.team1}
           editable={!teamLinesReadOnly}
           score={teamLinesReadOnly ? base1 : team1Score}
@@ -368,7 +371,7 @@ export function MatchCard({
           blastVariant={blastVariant}
         />
         <TeamLine
-          name={match.team2}
+          name={displayTeam2}
           winner={match.winner === match.team2}
           editable={!teamLinesReadOnly}
           score={teamLinesReadOnly ? base2 : team2Score}

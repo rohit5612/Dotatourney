@@ -25,11 +25,12 @@ function roundColumnSpacingClass(columnIndex) {
 }
 
 /** One row in the elimination canvas (anchor wiring for SVG connectors). */
-function MatchCardRow({ match, editable, scores, setScores, submitResult, updateMatch, blastBracketDepths, blastVariant, registerAnchor }) {
+function MatchCardRow({ match, editable, scores, setScores, submitResult, updateMatch, blastBracketDepths, blastVariant, registerAnchor, allMatches }) {
   return (
     <div ref={(el) => registerAnchor(match.id, el)} className="relative w-full shrink-0">
       <MatchCard
         match={match}
+        allMatches={allMatches}
         editable={editable}
         scoreDraft={scores[match.id] || {}}
         setScoreDraft={(patch) =>
@@ -204,6 +205,7 @@ export function EliminationBracketCanvas({
               blastBracketDepths,
               blastVariant,
               registerAnchor,
+              allMatches: matches,
             };
 
             return (

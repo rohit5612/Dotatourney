@@ -105,6 +105,7 @@ export function BracketDiagram({
                     <MatchCard
                       key={match.id}
                       match={match}
+                      allMatches={matches}
                       editable={editable}
                       scoreDraft={scores[match.id] || {}}
                       setScoreDraft={(patch) =>
