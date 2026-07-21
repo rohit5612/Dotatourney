@@ -663,6 +663,14 @@ export async function updatePlayerRegistration(tournamentId, registrationId, pay
       existing?.registration_status === "approved" &&
       !rows[0].substitute_flag
     ) {
+      await client.query(
+        `DELETE FROM team_players tp
+         USING players p
+         WHERE tp.player_id = p.id
+           AND p.tournament_id = $1
+           AND p.registration_id = $2`,
+        [tournamentId, registrationId],
+      );
       const reopenResult = await maybeReopenRegistrationAfterReplacement(tournamentId, client);
       if (reopenResult.reopened) shouldInvalidateCache = true;
     }

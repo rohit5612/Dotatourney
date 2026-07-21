@@ -136,6 +136,24 @@ export function AdminConsole() {
   }, [path, routerNavigate]);
 
   useEffect(() => {
+    const replacedRegistrationIds = new Set(
+      registrations.filter((registration) => registration.registrationStatus === "replaced").map((registration) => registration.id),
+    );
+    if (!replacedRegistrationIds.size) return;
+    setPoolDraft((prev) => {
+      let changed = false;
+      const next = prev.map((player) => {
+        if (!player.registrationId || !replacedRegistrationIds.has(player.registrationId) || !player.teamId) {
+          return player;
+        }
+        changed = true;
+        return { ...player, teamId: null, isCaptain: false };
+      });
+      return changed ? next : prev;
+    });
+  }, [registrations]);
+
+  useEffect(() => {
     if (!path.startsWith("/admin")) {
       document.documentElement.classList.add("dark");
       return;

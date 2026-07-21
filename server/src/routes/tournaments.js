@@ -174,12 +174,12 @@ const tournamentSchema = z.object({
     .default({ customCards: [] }),
 });
 
-async function validateRosterRegistrations(tournamentId, players) {
-  if (players.some((player) => !player.registrationId)) {
+async function validateRosterRegistrations(registrations, players) {
+  const assigned = players.filter((player) => player.teamId);
+  if (assigned.some((player) => !player.registrationId)) {
     return "Only registered players can be assigned to teams";
   }
 
-  const registrations = await listPlayerRegistrations(tournamentId);
   const readyRegistrationIds = new Set(
     registrations
       .filter(
@@ -191,11 +191,23 @@ async function validateRosterRegistrations(tournamentId, players) {
       .map((registration) => registration.id),
   );
 
-  if (players.some((player) => !readyRegistrationIds.has(player.registrationId))) {
+  if (assigned.some((player) => !readyRegistrationIds.has(player.registrationId))) {
     return "Team rosters can only include paid, approved, active registrations";
   }
 
   return "";
+}
+
+function stripReplacedPlayersFromTeamAssignments(registrations, players) {
+  const replacedRegistrationIds = new Set(
+    registrations.filter((registration) => registration.registrationStatus === "replaced").map((registration) => registration.id),
+  );
+  return players.map((player) => {
+    if (!player.registrationId || !replacedRegistrationIds.has(player.registrationId)) {
+      return player;
+    }
+    return { ...player, teamId: null, isCaptain: false };
+  });
 }
 
 async function persistProgressedMatches(tournamentId, snapshot, baseMatches) {
@@ -565,8 +577,12 @@ router.post("/:id/teams", async (req, res, next) => {
       id: team.id || randomUUID(),
       seed: typeof team.seed === "number" ? team.seed : index + 1,
     }));
-    const players = payload.players.map((player) => ({ ...player, id: player.id || randomUUID() }));
-    const validationMessage = await validateRosterRegistrations(req.params.id, players);
+    const registrations = await listPlayerRegistrations(req.params.id);
+    const players = stripReplacedPlayersFromTeamAssignments(
+      registrations,
+      payload.players.map((player) => ({ ...player, id: player.id || randomUUID() })),
+    );
+    const validationMessage = await validateRosterRegistrations(registrations, players);
     if (validationMessage) return res.status(400).json({ message: validationMessage });
 
     const teamPlayers = players
