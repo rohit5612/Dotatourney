@@ -97,6 +97,8 @@ export function mapRegistrationRow(row, { includeAdminFields = true } = {}) {
     base.archivedReason = row.archived_reason;
     base.replacedAt = row.replaced_at;
     base.replacedReason = row.replaced_reason;
+    base.transferPoolEligible = Boolean(row.transfer_pool_eligible);
+    base.transferPoolReleasedAt = row.transfer_pool_released_at;
   }
   return base;
 }
@@ -108,6 +110,7 @@ const listSelect = `SELECT r.id, r.tournament_id, r.email, r.name, r.display_nam
       r.registration_flow_stage, r.card_tier, r.substitute_flag, r.payment_provider,
       r.email_verified_at, r.terms_accepted_at, r.draft_payload,
       r.archived_at, r.archived_by, r.archived_reason, r.replaced_at, r.replaced_reason,
+      r.transfer_pool_eligible, r.transfer_pool_released_at,
       r.created_at, r.updated_at`;
 
 const registrationFrom = `FROM player_registrations r

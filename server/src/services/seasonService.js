@@ -14,7 +14,7 @@ import { buildPublicHonorsPayload } from "./bracketHonorsEngine.js";
 import { decorateMatchesForClient } from "./playoffRoundUtils.js";
 import { buildGroupedStandings, buildStandings } from "./standingsEngine.js";
 import { buildGroupedStandingsWithSeeding } from "./groupStandingsOverrides.js";
-import { buildTeamsWithActivePlayers, mergeSnapshotTeamsWithRoster } from "./rosterMembershipService.js";
+import { buildTeamsWithActivePlayers, buildTeamsForPublicDisplay, mergeSnapshotTeamsWithRoster } from "./rosterMembershipService.js";
 
 function parseSponsorsConfig(raw) {
   return parseSponsorsConfigLenient(raw);
@@ -306,7 +306,7 @@ export async function getSeasonBySlug(slug) {
     const format = tournamentPayload?.tournament?.format;
     if (season.tournament_id) {
       const data = await getTournament(season.tournament_id);
-      const rosterTeams = buildTeamsWithActivePlayers(data?.approvedRoster);
+      const rosterTeams = buildTeamsForPublicDisplay(data?.approvedRoster);
       if (rosterTeams.length) {
         tournamentPayload.teams = mergeSnapshotTeamsWithRoster(tournamentPayload.teams, rosterTeams);
       }
@@ -335,7 +335,7 @@ export async function getSeasonBySlug(slug) {
       const format = tournament.format;
       const teams =
         data.approvedRoster?.teams?.length > 0
-          ? buildTeamsWithActivePlayers(data.approvedRoster)
+          ? buildTeamsForPublicDisplay(data.approvedRoster)
           : data.teams || [];
       const hasApprovedRoster = Boolean(data.approvedRoster?.teams?.length);
       const exposeTeamsPublicly = hasApprovedRoster || visibilityMode !== "demo";

@@ -25,6 +25,11 @@ import { reapplyAllProgression } from "../services/progressionEngine.js";
 import { buildPublicHonorsPayload } from "../services/bracketHonorsEngine.js";
 import { decorateMatchesForClient } from "../services/playoffRoundUtils.js";
 import { applySeriesRulesToMatches } from "../services/seriesRulesEngine.js";
+import {
+  confirmTeamElimination,
+  listTransferPoolRegistrations,
+  suggestEliminatedTeams,
+} from "../services/teamEliminationService.js";
 import { archivePlayerRegistration, getPlayerRegistrationById, listPlayerRegistrations, updatePlayerRegistration } from "../services/registrationRepository.js";
 import { sendPlayerRegistrationDecisionEmail } from "../services/emailService.js";
 import { notifyRegistrationDecision } from "../services/playerNotificationService.js";
@@ -1240,6 +1245,47 @@ router.patch("/:id/matches/:matchId", async (req, res, next) => {
 router.get("/:id/registrations", async (req, res, next) => {
   try {
     res.json({ registrations: await listPlayerRegistrations(req.params.id, { excludeSubstitutes: true }) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/:id/elimination/suggestions", async (req, res, next) => {
+  try {
+    const result = await suggestEliminatedTeams(req.params.id);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/:id/transfer-pool", async (req, res, next) => {
+  try {
+    const registrations = await listTransferPoolRegistrations(req.params.id);
+    res.json({ registrations });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/:id/elimination/teams/:snapshotTeamId/confirm", async (req, res, next) => {
+  try {
+    const payload = z
+      .object({
+        source: z.enum(["standings_suggested", "manual"]).optional().default("manual"),
+      })
+      .parse(req.body || {});
+    const result = await confirmTeamElimination(req.params.id, req.params.snapshotTeamId, req.adminUser.id, {
+      source: payload.source,
+    });
+    await writeAuditLog({
+      adminUserId: req.adminUser.id,
+      action: "team.elimination.confirm",
+      entityType: "roster_snapshot_team",
+      entityId: req.params.snapshotTeamId,
+      payload,
+    });
+    res.json(result);
   } catch (error) {
     next(error);
   }

@@ -8,7 +8,8 @@ import { upsertSeasonForTournament } from "./seasonUpsert.js";
 import { buildPublicHonorsPayload } from "./bracketHonorsEngine.js";
 import { buildStandings } from "./standingsEngine.js";
 import { parseSeasonLabelFromName, seasonSlugFromLabel } from "../utils/tournamentNaming.js";
-import { buildTeamsWithActivePlayers, reseedFutureMatchLineups } from "./rosterMembershipService.js";
+import { buildTeamsWithActivePlayers, buildTeamsForPublicDisplay, reseedFutureMatchLineups } from "./rosterMembershipService.js";
+import { clearTransferPoolOnAssignment } from "./teamEliminationService.js";
 
 function parseMeta(raw) {
   if (raw == null) return {};
@@ -585,7 +586,8 @@ export async function getRosterSnapshot(tournamentId, rosterId) {
 
   const teamsResult = await pool.query(
     `SELECT id, source_team_id AS "sourceTeamId", name, captain, abbr, seed, logo_url AS "logoUrl", accent_color AS "accentColor",
-            group_key AS "groupKey"
+            group_key AS "groupKey",
+            eliminated_at AS "eliminatedAt", eliminated_by AS "eliminatedBy", elimination_source AS "eliminationSource"
      FROM roster_snapshot_teams
      WHERE roster_snapshot_id = $1
      ORDER BY seed ASC NULLS LAST, created_at ASC`,
@@ -624,6 +626,12 @@ export async function getRosterSnapshot(tournamentId, rosterId) {
     [rosterId],
   );
   const memberships = membershipsResult.rows;
+  const eliminationPlayersResult = await pool.query(
+    `SELECT snapshot_team_id AS "teamId", snapshot_player_id AS "playerId"
+     FROM roster_snapshot_team_elimination_players
+     WHERE roster_snapshot_id = $1`,
+    [rosterId],
+  );
   const teamPlayers =
     memberships.length > 0
       ? memberships
@@ -640,6 +648,7 @@ export async function getRosterSnapshot(tournamentId, rosterId) {
     players: playersResult.rows,
     teamPlayers,
     baselineTeamPlayers: baselineTeamPlayersResult.rows,
+    eliminationPlayers: eliminationPlayersResult.rows,
     memberships,
   };
 }
@@ -983,7 +992,8 @@ export async function syncApprovedRosterFromTeamSave(tournamentId, rosterId, adm
     }
 
     const teamsResult = await client.query(
-      `SELECT id, source_team_id AS "sourceTeamId", name, captain, logo_url AS "logoUrl", accent_color AS "accentColor"
+      `SELECT id, source_team_id AS "sourceTeamId", name, captain, logo_url AS "logoUrl", accent_color AS "accentColor",
+              eliminated_at AS "eliminatedAt"
        FROM roster_snapshot_teams
        WHERE roster_snapshot_id = $1`,
       [rosterId],
@@ -1111,6 +1121,15 @@ export async function syncApprovedRosterFromTeamSave(tournamentId, rosterId, adm
       const current = activeByPlayer.get(playerId);
       if (!current || current.teamId !== teamId) {
         await activateMembership(client, rosterId, tournamentId, teamId, playerId, adminUserId);
+      }
+    }
+
+    for (const [playerId, teamId] of desiredActive.entries()) {
+      const team = snapshotTeams.find((row) => row.id === teamId);
+      if (team?.eliminatedAt) continue;
+      const registrationId = playersById.get(playerId)?.registrationId;
+      if (registrationId) {
+        await clearTransferPoolOnAssignment(tournamentId, registrationId, client);
       }
     }
 

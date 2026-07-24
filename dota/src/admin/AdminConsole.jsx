@@ -108,6 +108,8 @@ export function AdminConsole() {
   const [activeRosterId, setActiveRosterId] = useState("");
   const [isTeamPaneActive, setIsTeamPaneActive] = useState(false);
   const [registrations, setRegistrations] = useState([]);
+  const [eliminationSuggestions, setEliminationSuggestions] = useState([]);
+  const [transferPoolRegistrations, setTransferPoolRegistrations] = useState([]);
   const [tournamentList, setTournamentList] = useState([]);
   const [adminUser, setAdminUser] = useState(null);
   const [newCaptain, setNewCaptain] = useState({ captain: "", team: "" });
@@ -152,6 +154,22 @@ export function AdminConsole() {
       return changed ? next : prev;
     });
   }, [registrations]);
+
+  useEffect(() => {
+    const transferIds = new Set(transferPoolRegistrations.map((registration) => registration.id));
+    if (!transferIds.size) return;
+    setPoolDraft((prev) => {
+      let changed = false;
+      const next = prev.map((player) => {
+        if (!player.registrationId || !transferIds.has(player.registrationId) || !player.teamId) {
+          return player;
+        }
+        changed = true;
+        return { ...player, teamId: null, isCaptain: false };
+      });
+      return changed ? next : prev;
+    });
+  }, [transferPoolRegistrations]);
 
   useEffect(() => {
     if (!path.startsWith("/admin")) {
@@ -307,6 +325,7 @@ export function AdminConsole() {
       );
     }
     await refreshRegistrations(payload.tournament?.id || id);
+    await refreshEliminationState(payload.tournament?.id || id);
     await refreshRosters(payload.tournament?.id || id);
     await refreshQualifierSeeding(payload.tournament?.id || id);
   }
@@ -328,6 +347,37 @@ export function AdminConsole() {
     if (!id) return;
     const payload = await api.getRegistrations(id);
     setRegistrations(payload.registrations);
+  }
+
+  async function refreshEliminationState(id = tournamentId) {
+    if (!id) return;
+    try {
+      const [suggestionsPayload, transferPayload] = await Promise.all([
+        api.getEliminationSuggestions(id),
+        api.getTransferPool(id),
+      ]);
+      setEliminationSuggestions(suggestionsPayload.suggestions || []);
+      setTransferPoolRegistrations(transferPayload.registrations || []);
+    } catch {
+      setEliminationSuggestions([]);
+      setTransferPoolRegistrations([]);
+    }
+  }
+
+  async function confirmTeamElimination(snapshotTeamId, source = "manual") {
+    if (!tournamentId || !snapshotTeamId) return;
+    try {
+      const result = await api.confirmTeamElimination(tournamentId, snapshotTeamId, { source });
+      if (result.approvedRoster) {
+        setApprovedRoster(result.approvedRoster);
+      }
+      await refreshTournament(tournamentId, { keepTeamPane: true });
+      await refreshEliminationState(tournamentId);
+      await refreshRegistrations(tournamentId);
+      setMessage(`"${result.teamName}" marked eliminated — ${result.playersReleased} player(s) released to transfer pool.`);
+    } catch (error) {
+      setMessage(error.message);
+    }
   }
 
   async function refreshRosters(id = tournamentId) {
@@ -1255,7 +1305,10 @@ export function AdminConsole() {
             replaceRosterFromCurrent={replaceRosterFromCurrent}
             approveRoster={approveRoster}
             deleteRoster={deleteRoster}
-            tournamentId={tournamentId}
+            eliminationSuggestions={eliminationSuggestions}
+            transferPoolRegistrations={transferPoolRegistrations}
+            onConfirmTeamElimination={confirmTeamElimination}
+            onRefreshEliminationState={() => refreshEliminationState(tournamentId)}
           />
           </Suspense>
         )}

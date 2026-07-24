@@ -156,7 +156,9 @@ function resolveStintStatus(entry) {
     return { label: "Former", active: false };
   }
   if (entry.status === "active") return { label: "Active", active: true };
+  if (entry.wasTransferred) return { label: "Transferred", active: false };
   if (entry.wasReplaced) return { label: "Replaced", active: false };
+  if (entry.teamEliminated) return { label: "Former (eliminated team)", active: false };
   return { label: "Former", active: false };
 }
 

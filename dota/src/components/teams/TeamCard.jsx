@@ -73,6 +73,12 @@ export const TeamCard = memo(function TeamCard({ team, index = 0, profileBack = 
           <TeamHonorBadge badge={team.bracketBadge} className="teams-card__honor-badge" />
         ) : null}
 
+        {team.eliminatedAt ? (
+          <span className="teams-card__live teams-card__eliminated" style={{ background: "rgba(0,0,0,0.55)" }}>
+            Eliminated
+          </span>
+        ) : null}
+
         <div className="teams-card__spotlight-main">
           {logo ? (
             <div className="teams-card__logo-wrap">

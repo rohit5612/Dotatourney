@@ -166,7 +166,15 @@ export function PlayerHistoryPage() {
                       <p className="player-dash__team-name">{team.teamName}</p>
                       <p className="player-dash__card-sub">{team.tournamentName}</p>
                       <p className="player-dash__team-history-date">
-                        {team.status === "active" ? "Active" : team.wasReplaced ? "Replaced before playing" : "Former"}
+                        {team.status === "active"
+                          ? "Active"
+                          : team.wasTransferred
+                            ? "Transferred"
+                            : team.wasReplaced
+                              ? "Replaced before playing"
+                              : team.teamEliminated
+                                ? "Former (eliminated team)"
+                                : "Former"}
                         {team.matchesPlayed != null ? ` · ${team.matchesPlayed} match${team.matchesPlayed === 1 ? "" : "es"}` : ""}
                       </p>
                       {team.startedAt ? (

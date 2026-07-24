@@ -22,7 +22,7 @@ import { buildPublicHonorsPayload } from "../services/bracketHonorsEngine.js";
 import { decorateMatchesForClient } from "../services/playoffRoundUtils.js";
 import { buildGroupedStandings, buildStandings } from "../services/standingsEngine.js";
 import { buildGroupedStandingsWithSeeding } from "../services/groupStandingsOverrides.js";
-import { buildTeamsWithActivePlayers } from "../services/rosterMembershipService.js";
+import { buildTeamsWithActivePlayers, buildTeamsForPublicDisplay } from "../services/rosterMembershipService.js";
 import { stageTabsForFormat } from "../services/formatGenerator.js";
 import { engineBracketTabs } from "../services/tournamentEngineService.js";
 import {
@@ -252,7 +252,7 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
     accentColor: resolveTeamAccent(team),
   });
   const publicTeams = data.approvedRoster
-    ? buildTeamsWithActivePlayers(data.approvedRoster).map((team) => mapPublicTeam(team))
+    ? buildTeamsForPublicDisplay(data.approvedRoster).map((team) => mapPublicTeam(team))
     : (data.teams || []).map((team) => mapPublicTeam(team));
   const hasApprovedRoster = Boolean(data.approvedRoster?.teams?.length);
   const exposeTeamsPublicly = hasApprovedRoster || visibilityMode !== "demo";

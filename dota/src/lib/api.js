@@ -320,6 +320,13 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   getRegistrations: (id) => request(`/tournaments/${id}/registrations`),
+  getEliminationSuggestions: (id) => request(`/tournaments/${id}/elimination/suggestions`),
+  getTransferPool: (id) => request(`/tournaments/${id}/transfer-pool`),
+  confirmTeamElimination: (id, snapshotTeamId, payload = {}) =>
+    request(`/tournaments/${id}/elimination/teams/${snapshotTeamId}/confirm`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   updateRegistration: (id, registrationId, payload) =>
     request(`/tournaments/${id}/registrations/${registrationId}`, {
       method: "PATCH",

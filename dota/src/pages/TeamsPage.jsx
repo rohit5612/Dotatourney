@@ -37,6 +37,10 @@ export function TeamsPage({
   replaceRosterFromCurrent,
   approveRoster,
   deleteRoster,
+  eliminationSuggestions = [],
+  transferPoolRegistrations = [],
+  onConfirmTeamElimination,
+  onRefreshEliminationState,
 }) {
   const [actionMenuTeamId, setActionMenuTeamId] = useState("");
   const [playerModalTeam, setPlayerModalTeam] = useState(null);
@@ -46,6 +50,38 @@ export function TeamsPage({
   const editingApprovedRoster = Boolean(approvedRoster?.id && activeRosterId === approvedRoster.id);
   const assignedPlayers = poolDraft.filter((player) => player.teamId).length;
   const unassignedPlayers = poolDraft.length - assignedPlayers;
+
+  function resolveRosterTeam(team) {
+    if (!approvedRoster?.teams?.length || !team) return null;
+    return approvedRoster.teams.find(
+      (row) =>
+        row.id === team.id ||
+        row.sourceTeamId === team.id ||
+        String(row.name || "").trim().toLowerCase() === String(team.name || "").trim().toLowerCase(),
+    );
+  }
+
+  function isTeamEliminated(team) {
+    return Boolean(resolveRosterTeam(team)?.eliminatedAt);
+  }
+
+  function isSuggestionForTeam(team) {
+    const rosterTeam = resolveRosterTeam(team);
+    if (!rosterTeam) return false;
+    return eliminationSuggestions.some((row) => row.snapshotTeamId === rosterTeam.id);
+  }
+
+  async function handleConfirmElimination(team, source = "manual") {
+    const rosterTeam = resolveRosterTeam(team);
+    if (!rosterTeam?.id) return;
+    const label = source === "standings_suggested" ? "standings suggest this team is eliminated" : "mark this team as eliminated";
+    const confirmed = window.confirm(
+      `Confirm elimination for "${team.name}"? This freezes their roster on the public Teams page and releases ${rosterTeam.playerCount ?? "their"} player(s) to the transfer pool.`,
+    );
+    if (!confirmed) return;
+    await onConfirmTeamElimination?.(rosterTeam.id, source);
+    await onRefreshEliminationState?.();
+  }
   const playerModalTeamCount = playerModalTeam ? poolDraft.filter((player) => player.teamId === playerModalTeam.id).length : 0;
   const completeTeams = teamDraft.filter((team) => {
     const teamPlayers = poolDraft.filter((player) => player.teamId === team.id);
@@ -63,7 +99,12 @@ export function TeamsPage({
   );
 
   const availableRegistrations = useMemo(() => {
-    return readyRegistrations
+    const byId = new Map(readyRegistrations.map((registration) => [registration.id, registration]));
+    for (const registration of transferPoolRegistrations) {
+      byId.set(registration.id, registration);
+    }
+
+    return [...byId.values()]
       .filter((registration) => {
         const existing = poolDraft.find((player) => player.registrationId === registration.id);
         return !existing?.teamId;
@@ -74,7 +115,7 @@ export function TeamsPage({
           .toLowerCase();
         return !playerSearch || text.includes(playerSearch.toLowerCase());
       });
-  }, [readyRegistrations, poolDraft, playerSearch]);
+  }, [readyRegistrations, transferPoolRegistrations, poolDraft, playerSearch]);
 
   function addPlayerToTeam(registration, teamId) {
     if (poolDraft.filter((player) => player.teamId === teamId).length >= 5) return;
@@ -167,6 +208,56 @@ export function TeamsPage({
           <div className="mt-1 text-2xl font-serif">{completeTeams}</div>
         </div>
       </div>
+
+      {editingApprovedRoster && eliminationSuggestions.length ? (
+        <AdminGlassPanel subtle className="space-y-3">
+          <h3 className="font-serif text-lg">Elimination suggestions</h3>
+          <p className="text-sm text-muted-foreground">
+            Standings mark these teams as eliminated. Confirm to freeze their public roster and release players to the transfer pool.
+          </p>
+          <ul className="space-y-2">
+            {eliminationSuggestions.map((row) => (
+              <li key={row.snapshotTeamId} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-background/40 p-3 text-sm">
+                <span>
+                  <span className="font-medium text-foreground">{row.teamName}</span>
+                  <span className="text-muted-foreground"> · {row.playerCount} players</span>
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={() => {
+                    const team = teamDraft.find(
+                      (entry) =>
+                        resolveRosterTeam(entry)?.id === row.snapshotTeamId ||
+                        String(entry.name).toLowerCase() === String(row.teamName).toLowerCase(),
+                    );
+                    if (team) handleConfirmElimination(team, "standings_suggested");
+                    else onConfirmTeamElimination?.(row.snapshotTeamId, "standings_suggested");
+                  }}
+                >
+                  Confirm elimination
+                </button>
+              </li>
+            ))}
+          </ul>
+        </AdminGlassPanel>
+      ) : null}
+
+      {editingApprovedRoster && transferPoolRegistrations.length ? (
+        <AdminGlassPanel subtle className="space-y-3">
+          <h3 className="font-serif text-lg">Transfer pool</h3>
+          <p className="text-sm text-muted-foreground">
+            Players released from eliminated teams. Add them to active teams below, then save.
+          </p>
+          <ul className="flex flex-wrap gap-2 text-sm">
+            {transferPoolRegistrations.map((registration) => (
+              <li key={registration.id} className="rounded-full border border-border bg-background px-3 py-1">
+                {registration.displayName || registration.name}
+              </li>
+            ))}
+          </ul>
+        </AdminGlassPanel>
+      ) : null}
 
       <section className="space-y-4 rounded-lg border border-border bg-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -267,7 +358,19 @@ export function TeamsPage({
                   <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h4 className="font-serif text-xl font-semibold tracking-tight">{team.name}</h4>
+                    <h4 className="font-serif text-xl font-semibold tracking-tight">
+                      {team.name}
+                      {isTeamEliminated(team) ? (
+                        <span className="ml-2 rounded-full border border-border px-2 py-0.5 text-xs font-sans text-muted-foreground">
+                          Eliminated
+                        </span>
+                      ) : null}
+                      {isSuggestionForTeam(team) ? (
+                        <span className="ml-2 rounded-full border border-amber-500/40 px-2 py-0.5 text-xs font-sans text-amber-600 dark:text-amber-400">
+                          Suggested eliminated
+                        </span>
+                      ) : null}
+                    </h4>
                     <label
                       className="team-accent-swatch mt-2"
                       title="Card glow color (double-click to reset auto-detect)"
@@ -308,6 +411,18 @@ export function TeamsPage({
                         <button type="button" className="btn-menu" onClick={() => editTeam(team)}>
                           Edit team
                         </button>
+                        {editingApprovedRoster && !isTeamEliminated(team) ? (
+                          <button
+                            type="button"
+                            className="btn-menu"
+                            onClick={() => {
+                              setActionMenuTeamId("");
+                              handleConfirmElimination(team, isSuggestionForTeam(team) ? "standings_suggested" : "manual");
+                            }}
+                          >
+                            Mark eliminated
+                          </button>
+                        ) : null}
                         <button type="button" className="btn-menu text-destructive hover:text-destructive" onClick={() => confirmDeleteTeam(team)}>
                           Delete team
                         </button>

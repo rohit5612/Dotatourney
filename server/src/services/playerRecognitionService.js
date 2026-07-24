@@ -269,6 +269,13 @@ export async function resolveTeamHighestStage(tournamentId, teamName, format) {
 
 export async function buildTeamStintHistory(playerAccountId) {
   const stints = await loadAllMembershipStintsForAccount(playerAccountId);
+  const activeStintByTournament = new Map();
+  for (const stint of stints) {
+    if (stint.status === "active") {
+      activeStintByTournament.set(stint.tournament_id, stint.membership_id);
+    }
+  }
+
   const results = [];
 
   for (const stint of stints) {
@@ -282,6 +289,14 @@ export async function buildTeamStintHistory(playerAccountId) {
         seasonStatus: stint.season_status,
       },
     );
+    const wasReplaced =
+      stint.registration_status === "replaced" || (stint.status === "inactive" && matchesPlayed === 0 && !stint.eliminated_at);
+    const wasTransferred =
+      stint.status === "inactive" &&
+      Boolean(stint.eliminated_at) &&
+      activeStintByTournament.has(stint.tournament_id) &&
+      activeStintByTournament.get(stint.tournament_id) !== stint.membership_id;
+
     results.push({
       membershipId: stint.membership_id,
       rosterSnapshotId: stint.roster_snapshot_id,
@@ -299,8 +314,9 @@ export async function buildTeamStintHistory(playerAccountId) {
       endedAt: stint.ended_at,
       approvedAt: stint.approved_at,
       matchesPlayed,
-      wasReplaced:
-        stint.registration_status === "replaced" || (stint.status === "inactive" && matchesPlayed === 0),
+      wasReplaced,
+      wasTransferred,
+      teamEliminated: Boolean(stint.eliminated_at),
     });
   }
 

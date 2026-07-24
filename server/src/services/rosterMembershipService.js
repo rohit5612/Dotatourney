@@ -160,6 +160,7 @@ export async function loadAllMembershipStintsForAccount(playerAccountId) {
             rst.name AS team_name,
             rst.logo_url,
             rst.accent_color,
+            rst.eliminated_at,
             t.id AS tournament_id,
             t.name AS tournament_name,
             t.slug AS tournament_slug,
@@ -194,6 +195,34 @@ export function buildTeamsWithActivePlayers(approvedRoster) {
       teamPlayers.some((record) => record.team_id === team.id && record.player_id === player.id),
     ),
   }));
+}
+
+/** Public teams page: eliminated teams show frozen roster; active teams show current assignments. */
+export function buildTeamsForPublicDisplay(approvedRoster) {
+  if (!approvedRoster?.teams?.length) return [];
+
+  const players = approvedRoster.players || [];
+  const eliminationPlayers = approvedRoster.eliminationPlayers || [];
+  const activeTeams = buildTeamsWithActivePlayers(approvedRoster);
+
+  return approvedRoster.teams.map((team) => {
+    const active = activeTeams.find((row) => row.id === team.id);
+    if (!team.eliminatedAt) {
+      return active || { ...team, players: [] };
+    }
+
+    const frozenPlayerIds = new Set(
+      eliminationPlayers.filter((record) => record.teamId === team.id).map((record) => record.playerId),
+    );
+    const frozenPlayers = players.filter((player) => frozenPlayerIds.has(player.id));
+
+    return {
+      ...(active || team),
+      eliminatedAt: team.eliminatedAt,
+      eliminationSource: team.eliminationSource,
+      players: frozenPlayers.length ? frozenPlayers : active?.players || [],
+    };
+  });
 }
 
 /** Overlay snapshot team metadata with active roster players (by team name). */
