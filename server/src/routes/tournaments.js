@@ -30,6 +30,10 @@ import {
   listTransferPoolRegistrations,
   suggestEliminatedTeams,
 } from "../services/teamEliminationService.js";
+import {
+  listPromotableSubstitutes,
+  promoteSubstituteToMainRoster,
+} from "../services/substitutePromotionService.js";
 import { archivePlayerRegistration, getPlayerRegistrationById, listPlayerRegistrations, updatePlayerRegistration } from "../services/registrationRepository.js";
 import { sendPlayerRegistrationDecisionEmail } from "../services/emailService.js";
 import { notifyRegistrationDecision } from "../services/playerNotificationService.js";
@@ -191,7 +195,9 @@ async function validateRosterRegistrations(registrations, players) {
         (registration) =>
           !registration.archivedAt &&
           registration.registrationStatus === "approved" &&
-          (registration.substituteFlag || registration.paymentStatus === "paid"),
+          (registration.substituteFlag ||
+            registration.paymentStatus === "paid" ||
+            registration.promotedFromSubstituteAt),
       )
       .map((registration) => registration.id),
   );
@@ -1263,6 +1269,35 @@ router.get("/:id/transfer-pool", async (req, res, next) => {
   try {
     const registrations = await listTransferPoolRegistrations(req.params.id);
     res.json({ registrations });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/:id/substitute-roster-pool", async (req, res, next) => {
+  try {
+    const registrations = await listPromotableSubstitutes(req.params.id);
+    res.json({ registrations });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/:id/substitute-roster-pool/:registrationId/promote", async (req, res, next) => {
+  try {
+    const result = await promoteSubstituteToMainRoster(
+      req.params.id,
+      req.params.registrationId,
+      req.adminUser.id,
+    );
+    await writeAuditLog({
+      adminUserId: req.adminUser.id,
+      action: "substitute.roster.promote",
+      entityType: "player_registration",
+      entityId: req.params.registrationId,
+      payload: { tournamentId: req.params.id },
+    });
+    res.json(result);
   } catch (error) {
     next(error);
   }

@@ -322,6 +322,11 @@ export const api = {
   getRegistrations: (id) => request(`/tournaments/${id}/registrations`),
   getEliminationSuggestions: (id) => request(`/tournaments/${id}/elimination/suggestions`),
   getTransferPool: (id) => request(`/tournaments/${id}/transfer-pool`),
+  getSubstituteRosterPool: (id) => request(`/tournaments/${id}/substitute-roster-pool`),
+  promoteSubstituteToMainRoster: (id, registrationId) =>
+    request(`/tournaments/${id}/substitute-roster-pool/${registrationId}/promote`, {
+      method: "POST",
+    }),
   confirmTeamElimination: (id, snapshotTeamId, payload = {}) =>
     request(`/tournaments/${id}/elimination/teams/${snapshotTeamId}/confirm`, {
       method: "POST",

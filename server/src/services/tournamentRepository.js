@@ -819,7 +819,7 @@ function registrationIsReady(registration) {
     registration &&
     registration.registrationStatus === "approved" &&
     !registration.archivedAt &&
-    (registration.substituteFlag || registration.paymentStatus === "paid")
+    (registration.substituteFlag || registration.paymentStatus === "paid" || registration.promotedFromSubstituteAt)
   );
 }
 

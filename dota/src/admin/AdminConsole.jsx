@@ -110,6 +110,7 @@ export function AdminConsole() {
   const [registrations, setRegistrations] = useState([]);
   const [eliminationSuggestions, setEliminationSuggestions] = useState([]);
   const [transferPoolRegistrations, setTransferPoolRegistrations] = useState([]);
+  const [substitutePoolRegistrations, setSubstitutePoolRegistrations] = useState([]);
   const [tournamentList, setTournamentList] = useState([]);
   const [adminUser, setAdminUser] = useState(null);
   const [newCaptain, setNewCaptain] = useState({ captain: "", team: "" });
@@ -352,15 +353,36 @@ export function AdminConsole() {
   async function refreshEliminationState(id = tournamentId) {
     if (!id) return;
     try {
-      const [suggestionsPayload, transferPayload] = await Promise.all([
+      const [suggestionsPayload, transferPayload, substitutePayload] = await Promise.all([
         api.getEliminationSuggestions(id),
         api.getTransferPool(id),
+        api.getSubstituteRosterPool(id),
       ]);
       setEliminationSuggestions(suggestionsPayload.suggestions || []);
       setTransferPoolRegistrations(transferPayload.registrations || []);
+      setSubstitutePoolRegistrations(substitutePayload.registrations || []);
     } catch {
       setEliminationSuggestions([]);
       setTransferPoolRegistrations([]);
+      setSubstitutePoolRegistrations([]);
+    }
+  }
+
+  async function promoteSubstituteToMainRoster(registrationId) {
+    if (!tournamentId || !registrationId) return;
+    const registration = substitutePoolRegistrations.find((row) => row.id === registrationId);
+    const label = registration?.displayName || registration?.name || "this player";
+    const confirmed = window.confirm(
+      `Promote "${label}" to the main roster? This auto-approves them and counts toward the registration cap.`,
+    );
+    if (!confirmed) return;
+    try {
+      await api.promoteSubstituteToMainRoster(tournamentId, registrationId);
+      await refreshRegistrations(tournamentId);
+      await refreshEliminationState(tournamentId);
+      setMessage(`"${label}" promoted to main roster — add them to a team below, then save.`);
+    } catch (error) {
+      setMessage(error.message);
     }
   }
 
@@ -1307,8 +1329,10 @@ export function AdminConsole() {
             deleteRoster={deleteRoster}
             eliminationSuggestions={eliminationSuggestions}
             transferPoolRegistrations={transferPoolRegistrations}
+            substitutePoolRegistrations={substitutePoolRegistrations}
             onConfirmTeamElimination={confirmTeamElimination}
             onRefreshEliminationState={() => refreshEliminationState(tournamentId)}
+            onPromoteSubstitute={promoteSubstituteToMainRoster}
           />
           </Suspense>
         )}

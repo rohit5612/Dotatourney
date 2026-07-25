@@ -39,8 +39,10 @@ export function TeamsPage({
   deleteRoster,
   eliminationSuggestions = [],
   transferPoolRegistrations = [],
+  substitutePoolRegistrations = [],
   onConfirmTeamElimination,
   onRefreshEliminationState,
+  onPromoteSubstitute,
 }) {
   const [actionMenuTeamId, setActionMenuTeamId] = useState("");
   const [playerModalTeam, setPlayerModalTeam] = useState(null);
@@ -93,7 +95,9 @@ export function TeamsPage({
         (registration) =>
           registration.registrationStatus === "approved" &&
           !registration.archivedAt &&
-          (registration.substituteFlag || registration.paymentStatus === "paid"),
+          (registration.substituteFlag ||
+            registration.paymentStatus === "paid" ||
+            registration.promotedFromSubstituteAt),
       ),
     [registrations],
   );
@@ -102,6 +106,11 @@ export function TeamsPage({
     const byId = new Map(readyRegistrations.map((registration) => [registration.id, registration]));
     for (const registration of transferPoolRegistrations) {
       byId.set(registration.id, registration);
+    }
+    for (const registration of substitutePoolRegistrations) {
+      if (!registration.substituteFlag && registration.registrationStatus === "approved") {
+        byId.set(registration.id, registration);
+      }
     }
 
     return [...byId.values()]
@@ -115,7 +124,7 @@ export function TeamsPage({
           .toLowerCase();
         return !playerSearch || text.includes(playerSearch.toLowerCase());
       });
-  }, [readyRegistrations, transferPoolRegistrations, poolDraft, playerSearch]);
+  }, [readyRegistrations, transferPoolRegistrations, substitutePoolRegistrations, poolDraft, playerSearch]);
 
   function addPlayerToTeam(registration, teamId) {
     if (poolDraft.filter((player) => player.teamId === teamId).length >= 5) return;
@@ -237,6 +246,37 @@ export function TeamsPage({
                 >
                   Confirm elimination
                 </button>
+              </li>
+            ))}
+          </ul>
+        </AdminGlassPanel>
+      ) : null}
+
+      {editingApprovedRoster && substitutePoolRegistrations.length ? (
+        <AdminGlassPanel subtle className="space-y-3">
+          <h3 className="font-serif text-lg">Substitute pool (promote to main roster)</h3>
+          <p className="text-sm text-muted-foreground">
+            Promote a substitute to the main roster (auto-approves if pending). They will appear in Add players below.
+          </p>
+          <ul className="space-y-2 text-sm">
+            {substitutePoolRegistrations.map((registration) => (
+              <li
+                key={registration.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-background px-3 py-2"
+              >
+                <span>{registration.displayName || registration.name}</span>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full border border-border px-2 py-0.5 text-xs capitalize text-muted-foreground">
+                    {registration.registrationStatus}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    onClick={() => onPromoteSubstitute?.(registration.id)}
+                  >
+                    Promote
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
