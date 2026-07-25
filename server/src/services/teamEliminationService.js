@@ -187,6 +187,10 @@ export async function confirmTeamElimination(tournamentId, snapshotTeamId, admin
 
     await client.query("COMMIT");
     invalidatePublicCache();
+
+    const { backfillMatchLineupsForTeam } = await import("./matchLineupService.js");
+    await backfillMatchLineupsForTeam(tournamentId, team.name).catch(() => {});
+
     return {
       snapshotTeamId,
       teamName: team.name,
@@ -241,4 +245,22 @@ export async function isEliminatedSnapshotTeam(rosterId, snapshotTeamId, client 
     [snapshotTeamId, rosterId],
   );
   return Boolean(rows[0]?.eliminated_at);
+}
+
+/** Restore completed-match lineups for all eliminated teams (uses frozen elimination rosters). */
+export async function repairAllEliminatedTeamLineups(tournamentId) {
+  const approvedRoster = await getApprovedRosterSnapshot(tournamentId);
+  if (!approvedRoster?.teams?.length) return { teams: 0, seeded: 0 };
+
+  const { backfillMatchLineupsForTeam } = await import("./matchLineupService.js");
+  let teams = 0;
+  let seeded = 0;
+  for (const team of approvedRoster.teams) {
+    if (!team.eliminatedAt) continue;
+    teams += 1;
+    const result = await backfillMatchLineupsForTeam(tournamentId, team.name);
+    seeded += result?.seeded || 0;
+  }
+  if (teams > 0) invalidatePublicCache();
+  return { teams, seeded };
 }

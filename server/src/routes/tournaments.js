@@ -28,6 +28,7 @@ import { applySeriesRulesToMatches } from "../services/seriesRulesEngine.js";
 import {
   confirmTeamElimination,
   listTransferPoolRegistrations,
+  repairAllEliminatedTeamLineups,
   suggestEliminatedTeams,
 } from "../services/teamEliminationService.js";
 import {
@@ -1298,6 +1299,15 @@ router.post("/:id/substitute-roster-pool/:registrationId/promote", async (req, r
       entityId: req.params.registrationId,
       payload: { tournamentId: req.params.id },
     });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/:id/elimination/repair-lineups", async (req, res, next) => {
+  try {
+    const result = await repairAllEliminatedTeamLineups(req.params.id);
     res.json(result);
   } catch (error) {
     next(error);

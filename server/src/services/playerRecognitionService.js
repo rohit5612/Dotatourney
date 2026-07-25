@@ -287,6 +287,7 @@ export async function buildTeamStintHistory(playerAccountId) {
         startedAt: stint.started_at,
         endedAt: stint.ended_at,
         seasonStatus: stint.season_status,
+        teamEliminated: Boolean(stint.eliminated_at),
       },
     );
     const wasReplaced =

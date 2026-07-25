@@ -101,17 +101,38 @@ export async function loadActiveTeamPlayers(rosterId, teamId, client = pool) {
   return rows;
 }
 
-/** Active roster players for a team by name (lineup seeding). */
-export async function loadActiveTeamPlayersByName(rosterId, teamName, client = pool) {
+/** Active roster players for a team by name (lineup seeding). Uses frozen roster when team is eliminated. */
+export async function loadLineupPlayersForTeam(rosterId, teamName, client = pool) {
   const { rows: teamRows } = await client.query(
-    `SELECT id FROM roster_snapshot_teams
+    `SELECT id, eliminated_at
+     FROM roster_snapshot_teams
      WHERE roster_snapshot_id = $1 AND lower(name) = lower($2)
      LIMIT 1`,
     [rosterId, teamName],
   );
-  const teamId = teamRows[0]?.id;
-  if (!teamId) return [];
-  return loadActiveTeamPlayers(rosterId, teamId, client);
+  const team = teamRows[0];
+  if (!team) return [];
+
+  if (team.eliminated_at) {
+    const { rows } = await client.query(
+      `SELECT rsp.id, rsp.player_account_id, rsp.display_name, rsp.name, rsp.role, rsp.roles, rsp.mmr,
+              rsp.is_captain, pa.slug AS player_slug, pa.bpc_id
+       FROM roster_snapshot_team_elimination_players ep
+       JOIN roster_snapshot_players rsp ON rsp.id = ep.snapshot_player_id
+       LEFT JOIN player_accounts pa ON pa.id = rsp.player_account_id
+       WHERE ep.roster_snapshot_id = $1 AND ep.snapshot_team_id = $2
+       ORDER BY rsp.is_captain DESC, rsp.display_name ASC NULLS LAST, rsp.name ASC`,
+      [rosterId, team.id],
+    );
+    if (rows.length) return rows;
+  }
+
+  return loadActiveTeamPlayers(rosterId, team.id, client);
+}
+
+/** Active roster players for a team by name (lineup seeding). */
+export async function loadActiveTeamPlayersByName(rosterId, teamName, client = pool) {
+  return loadLineupPlayersForTeam(rosterId, teamName, client);
 }
 
 /** Former (inactive) roster players for one snapshot team. */
@@ -140,13 +161,13 @@ export async function countPlayedMatchesForStint(
   playerAccountId,
   tournamentId,
   teamName,
-  { startedAt = null, endedAt = null, seasonStatus = null } = {},
+  { startedAt = null, endedAt = null, seasonStatus = null, teamEliminated = false } = {},
 ) {
   const params = [playerAccountId, tournamentId, teamName];
   let timeFilter = "";
-  // For concluded seasons, lineup rows reflect historical appearances — ignore stint
-  // windows that may have been stamped at admin/script time instead of match time.
-  const useStintWindow = seasonStatus !== "concluded";
+  // For concluded seasons or eliminated-team stints, lineup rows are the source of truth —
+  // admin timestamps on membership end dates are not reliable match windows.
+  const useStintWindow = seasonStatus !== "concluded" && !teamEliminated;
   if (useStintWindow && startedAt) {
     params.push(startedAt);
     timeFilter += ` AND COALESCE(ss.start_at, m.created_at) >= $${params.length}`;

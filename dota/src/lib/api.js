@@ -332,6 +332,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  repairEliminatedTeamLineups: (id) =>
+    request(`/tournaments/${id}/elimination/repair-lineups`, {
+      method: "POST",
+    }),
   updateRegistration: (id, registrationId, payload) =>
     request(`/tournaments/${id}/registrations/${registrationId}`, {
       method: "PATCH",

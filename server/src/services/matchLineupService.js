@@ -117,6 +117,30 @@ export async function seedMatchLineupsForTournament(tournamentId, matchIds = nul
   return { seeded };
 }
 
+/** Re-seed match lineups for a team (uses frozen roster when the team is eliminated). */
+export async function backfillMatchLineupsForTeam(tournamentId, teamName) {
+  const label = String(teamName || "").trim();
+  if (!label) return { seeded: 0 };
+
+  const { rows } = await pool.query(
+    `SELECT m.id
+     FROM matches m
+     WHERE m.tournament_id = $1
+       AND (lower(m.team1) = lower($2) OR lower(m.team2) = lower($2))`,
+    [tournamentId, label],
+  );
+  if (!rows.length) return { seeded: 0 };
+  return seedMatchLineupsForTournament(
+    tournamentId,
+    rows.map((row) => row.id),
+  );
+}
+
+/** @deprecated Use backfillMatchLineupsForTeam */
+export async function backfillCompletedMatchLineupsForTeam(tournamentId, teamName) {
+  return backfillMatchLineupsForTeam(tournamentId, teamName);
+}
+
 export async function seedMatchLineupsForScheduledMatches(tournamentId, schedule) {
   const matchIds = (schedule || []).map((slot) => slot.matchId).filter(Boolean);
   if (!matchIds.length) return { seeded: 0 };

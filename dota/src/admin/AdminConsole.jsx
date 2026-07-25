@@ -357,6 +357,7 @@ export function AdminConsole() {
         api.getEliminationSuggestions(id),
         api.getTransferPool(id),
         api.getSubstituteRosterPool(id),
+        api.repairEliminatedTeamLineups(id).catch(() => null),
       ]);
       setEliminationSuggestions(suggestionsPayload.suggestions || []);
       setTransferPoolRegistrations(transferPayload.registrations || []);
