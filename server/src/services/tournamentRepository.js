@@ -1081,7 +1081,15 @@ export async function syncApprovedRosterFromTeamSave(tournamentId, rosterId, adm
       });
     }
 
-    await client.query("UPDATE roster_snapshot_players SET is_captain = FALSE WHERE roster_snapshot_id = $1", [rosterId]);
+    const assignmentPlayerIds = [...new Set(desiredAssignments.map((assignment) => assignment.snapshotPlayerId))];
+    if (assignmentPlayerIds.length) {
+      await client.query(
+        `UPDATE roster_snapshot_players
+         SET is_captain = FALSE
+         WHERE roster_snapshot_id = $1 AND id = ANY($2::uuid[])`,
+        [rosterId, assignmentPlayerIds],
+      );
+    }
     for (const assignment of desiredAssignments) {
       await client.query("UPDATE roster_snapshot_players SET is_captain = $2 WHERE id = $1", [
         assignment.snapshotPlayerId,

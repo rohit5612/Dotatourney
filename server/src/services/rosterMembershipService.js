@@ -30,6 +30,36 @@ function mapRosterPlayerRow(row) {
   };
 }
 
+function normalizeCaptainLabel(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function playerMatchesCaptain(player, captainName) {
+  const target = normalizeCaptainLabel(captainName);
+  if (!target) return false;
+  const candidates = [player.displayName, player.display_name, player.name, player.steamName, player.steam_name]
+    .map(normalizeCaptainLabel)
+    .filter(Boolean);
+  return candidates.some((label) => label === target);
+}
+
+/** Prefer explicit isCaptain flags; fall back to the team's captain label for frozen/legacy rosters. */
+export function applyCaptainFlagsToPlayers(players, captainName) {
+  const list = (players || []).map((player) => ({ ...player }));
+  if (!list.length) return list;
+  if (list.some((player) => Boolean(player.isCaptain))) return list;
+
+  const captain = String(captainName || "").trim();
+  if (!captain) return list;
+
+  let marked = false;
+  return list.map((player) => {
+    if (marked || !playerMatchesCaptain(player, captain)) return player;
+    marked = true;
+    return { ...player, isCaptain: true };
+  });
+}
+
 /** Whether this roster snapshot uses membership rows (post-migration). */
 export async function rosterHasMemberships(rosterId, client = pool) {
   const { rows } = await client.query(
@@ -191,8 +221,11 @@ export function buildTeamsWithActivePlayers(approvedRoster) {
 
   return approvedRoster.teams.map((team) => ({
     ...team,
-    players: players.filter((player) =>
-      teamPlayers.some((record) => record.team_id === team.id && record.player_id === player.id),
+    players: applyCaptainFlagsToPlayers(
+      players.filter((player) =>
+        teamPlayers.some((record) => record.team_id === team.id && record.player_id === player.id),
+      ),
+      team.captain,
     ),
   }));
 }
@@ -215,12 +248,13 @@ export function buildTeamsForPublicDisplay(approvedRoster) {
       eliminationPlayers.filter((record) => record.teamId === team.id).map((record) => record.playerId),
     );
     const frozenPlayers = players.filter((player) => frozenPlayerIds.has(player.id));
+    const rosterPlayers = frozenPlayers.length ? frozenPlayers : active?.players || [];
 
     return {
       ...(active || team),
       eliminatedAt: team.eliminatedAt,
       eliminationSource: team.eliminationSource,
-      players: frozenPlayers.length ? frozenPlayers : active?.players || [],
+      players: applyCaptainFlagsToPlayers(rosterPlayers, team.captain),
     };
   });
 }
