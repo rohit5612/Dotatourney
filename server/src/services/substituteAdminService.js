@@ -4,6 +4,7 @@ import {
   mapRegistrationRow,
   updatePlayerRegistration,
 } from "./registrationRepository.js";
+import { invalidatePublicCache } from "./publicCache.js";
 import {
   assignSubstitutionRequest,
   cancelSubstitutionRequestByAdmin,
@@ -96,6 +97,74 @@ export async function updateSubstitutePoolRegistration(tournamentId, registratio
     registrationStatus: payload.registrationStatus,
     adminNotes: payload.adminNotes,
   });
+}
+
+/** Move a replaced or rejected main-roster registration into the substitute pool. */
+export async function moveRegistrationToSubstitutePool(tournamentId, registrationId) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const { rows: existingRows } = await client.query(
+      `SELECT * FROM player_registrations WHERE tournament_id = $1 AND id = $2 FOR UPDATE`,
+      [tournamentId, registrationId],
+    );
+    const existing = existingRows[0];
+    if (!existing) {
+      const error = new Error("Registration not found");
+      error.status = 404;
+      throw error;
+    }
+    if (existing.archived_at) {
+      const error = new Error("Archived registrations cannot be moved to the substitute pool");
+      error.status = 400;
+      throw error;
+    }
+    if (existing.substitute_flag) {
+      const error = new Error("Registration is already in the substitute pool");
+      error.status = 400;
+      throw error;
+    }
+    if (!["replaced", "rejected"].includes(existing.registration_status)) {
+      const error = new Error("Only replaced or rejected registrations can be moved to the substitute pool");
+      error.status = 400;
+      throw error;
+    }
+
+    await client.query(
+      `DELETE FROM team_players tp
+       USING players p
+       WHERE tp.player_id = p.id
+         AND p.tournament_id = $1
+         AND p.registration_id = $2`,
+      [tournamentId, registrationId],
+    );
+
+    const { rows } = await client.query(
+      `UPDATE player_registrations
+       SET substitute_flag = TRUE,
+           registration_status = 'pending',
+           transfer_pool_eligible = FALSE,
+           transfer_pool_released_at = NULL,
+           promoted_from_substitute_at = NULL,
+           promoted_from_substitute_by = NULL,
+           replaced_at = NULL,
+           replaced_reason = NULL,
+           updated_at = NOW()
+       WHERE tournament_id = $1 AND id = $2
+       RETURNING *`,
+      [tournamentId, registrationId],
+    );
+
+    await client.query("COMMIT");
+    invalidatePublicCache();
+    return mapRegistrationRow(rows[0]);
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function listSubstitutionRequests(tournamentId, { status } = {}) {

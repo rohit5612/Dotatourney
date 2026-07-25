@@ -342,6 +342,10 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ reason }),
     }),
+  moveRegistrationToSubstitutePool: (id, registrationId) =>
+    request(`/tournaments/${id}/registrations/${registrationId}/move-to-substitute-pool`, {
+      method: "POST",
+    }),
   importTournament: (id, data) =>
     request(`/tournaments/${id}/import`, {
       method: "POST",

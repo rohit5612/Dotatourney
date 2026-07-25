@@ -48,6 +48,7 @@ import { listTeamProfileHistory, listPlayerTeamStints } from "../services/teamHi
 import {
   listSubstitutePool,
   listSubstitutionRequests,
+  moveRegistrationToSubstitutePool,
   updateSubstitutePoolRegistration,
   updateSubstitutionRequest,
   assignSubstitutionRequest,
@@ -1348,6 +1349,26 @@ router.patch("/:id/substitutes/:registrationId", requirePermission("playerCrm.su
     return next(error);
   }
 });
+
+router.post(
+  "/:id/registrations/:registrationId/move-to-substitute-pool",
+  requirePermission("playerCrm.registrations.update"),
+  async (req, res, next) => {
+    try {
+      const registration = await moveRegistrationToSubstitutePool(req.params.id, req.params.registrationId);
+      await writeAuditLog({
+        adminUserId: req.adminUser.id,
+        action: "registration.move_to_substitute_pool",
+        entityType: "player_registration",
+        entityId: req.params.registrationId,
+        payload: { tournamentId: req.params.id },
+      });
+      res.json({ registration });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 router.patch("/:id/registrations/:registrationId", requirePermission("playerCrm.registrations.update"), async (req, res, next) => {
   try {

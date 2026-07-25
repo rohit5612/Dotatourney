@@ -48,6 +48,7 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
   const [sortMode, setSortMode] = useState("date-desc");
   const [archiveDraft, setArchiveDraft] = useState(null);
   const [replaceDraft, setReplaceDraft] = useState(null);
+  const [substituteMoveDraft, setSubstituteMoveDraft] = useState(null);
   const [actionMenuId, setActionMenuId] = useState("");
   const [editDrafts, setEditDrafts] = useState({});
   const [message, setMessage] = useState("");
@@ -182,6 +183,30 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
     const { registration, draft } = replaceDraft;
     setReplaceDraft(null);
     await persistSaveRegistration(registration, draft);
+  }
+
+  async function confirmMoveToSubstitutePool() {
+    if (!substituteMoveDraft) return;
+    const { registration } = substituteMoveDraft;
+    setSubstituteMoveDraft(null);
+    setSavingId(registration.id);
+    setMessage("");
+    try {
+      await api.moveRegistrationToSubstitutePool(tournamentId, registration.id);
+      setEditDrafts((prev) => {
+        const next = { ...prev };
+        delete next[registration.id];
+        return next;
+      });
+      await refreshRegistrations();
+      setMessage(
+        `${registration.displayName || registration.name} moved to the substitute pool — review them under Player CRM → Substitutes.`,
+      );
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setSavingId("");
+    }
   }
 
   async function syncCrmToGoogleSheet() {
@@ -438,7 +463,21 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
                       Actions
                     </button>
                     {actionMenuId === registration.id ? (
-                      <div className="absolute right-0 z-10 mt-2 w-44 rounded-md border border-border bg-card p-1 shadow-xl">
+                      <div className="absolute right-0 z-10 mt-2 w-56 rounded-md border border-border bg-card p-1 shadow-xl">
+                        {registration.registrationStatus === "replaced" ||
+                        registration.registrationStatus === "rejected" ? (
+                          <button
+                            type="button"
+                            className="btn-menu"
+                            disabled={archived || !canWrite || savingId === registration.id}
+                            onClick={() => {
+                              setSubstituteMoveDraft({ registration });
+                              setActionMenuId("");
+                            }}
+                          >
+                            Move to substitute pool
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           className="btn-menu text-destructive hover:text-destructive"
@@ -480,6 +519,26 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
               </button>
               <button type="button" className="btn btn-primary" onClick={confirmReplaceRegistration}>
                 Mark as replaced
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {substituteMoveDraft ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-lg space-y-3 rounded-lg border border-border bg-card p-4 shadow-2xl">
+            <h3 className="font-serif text-lg">Move to substitute pool</h3>
+            <p className="text-sm text-muted-foreground">
+              Move <span className="font-medium text-foreground">{substituteMoveDraft.registration.displayName || substituteMoveDraft.registration.name}</span>{" "}
+              into the substitute pool as a pending entry. They will leave this registration list and appear under Player CRM → Substitutes.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn btn-outline" onClick={() => setSubstituteMoveDraft(null)}>
+                Cancel
+              </button>
+              <button type="button" className="btn btn-primary" onClick={confirmMoveToSubstitutePool}>
+                Move to substitute pool
               </button>
             </div>
           </div>
