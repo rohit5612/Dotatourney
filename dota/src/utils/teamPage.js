@@ -353,20 +353,57 @@ export function findTeamByName(lookup, name) {
   return lookup?.get(key) ?? null;
 }
 
+function buildOverallRankMap(standings) {
+  const overallRank = new Map();
+  for (const [idx, row] of (standings || []).entries()) {
+    const key = String(row.team || "").trim();
+    if (key) overallRank.set(key, idx);
+  }
+  return overallRank;
+}
+
 function compareByOverallRank(a, b, overallRank) {
   const ra = overallRank.get(a) ?? Number.MAX_SAFE_INTEGER;
   const rb = overallRank.get(b) ?? Number.MAX_SAFE_INTEGER;
   if (ra !== rb) return ra - rb;
-  return a.localeCompare(b);
+  return String(a).localeCompare(String(b));
+}
+
+function teamBracketDepth(team, honors) {
+  return honors?.badgesByTeam?.[team.name]?.depth ?? 0;
+}
+
+function compareTeamsByBracketPriority(a, b, honors, overallRank) {
+  const depthA = teamBracketDepth(a, honors);
+  const depthB = teamBracketDepth(b, honors);
+  if (depthA !== depthB) return depthB - depthA;
+
+  const standingCmp = compareByOverallRank(a.name, b.name, overallRank);
+  if (standingCmp !== 0) return standingCmp;
+
+  const seedA = a.seed ?? Number.MAX_SAFE_INTEGER;
+  const seedB = b.seed ?? Number.MAX_SAFE_INTEGER;
+  if (seedA !== seedB) return seedA - seedB;
+
+  return String(a.name || "").localeCompare(String(b.name || ""));
 }
 
 /**
- * After the final, order by bracket placement (champion → runner-up → SF → QF → …).
+ * Live bracket order: Grand Final → Semifinals → Quarterfinals → Play-In → Last Chance.
+ */
+function orderTeamsByBracketDepth(teams, honors, standings) {
+  const overallRank = buildOverallRankMap(standings);
+  return [...(teams || [])].sort((a, b) => compareTeamsByBracketPriority(a, b, honors, overallRank));
+}
+
+/**
+ * After the final, order by bracket placement (champion → runner-up → SF → QF → play-ins → last chance).
  * Teams missing from placement data fall back to badge depth, then seed.
  */
-function orderTeamsByTournamentPlacement(teams, honors) {
+function orderTeamsByTournamentPlacement(teams, honors, standings = []) {
   const byName = new Map((teams || []).map((team) => [team.name, team]));
   const placementTeams = honors?.placementTeams || [];
+  const overallRank = buildOverallRankMap(standings);
   const ordered = [];
   const seen = new Set();
 
@@ -378,22 +415,21 @@ function orderTeamsByTournamentPlacement(teams, honors) {
   }
 
   const remainder = (teams || []).filter((team) => !seen.has(team.name));
-  remainder.sort((a, b) => {
-    const depthA = honors?.badgesByTeam?.[a.name]?.depth ?? 0;
-    const depthB = honors?.badgesByTeam?.[b.name]?.depth ?? 0;
-    if (depthA !== depthB) return depthB - depthA;
-    return (a.seed ?? Number.MAX_SAFE_INTEGER) - (b.seed ?? Number.MAX_SAFE_INTEGER);
-  });
+  remainder.sort((a, b) => compareTeamsByBracketPriority(a, b, honors, overallRank));
 
   return [...ordered, ...remainder];
 }
 
 /**
- * Teams page: group-tier order while the event is live; bracket placement once the final has a winner.
+ * Teams page: bracket stage priority while live; placement order once the final has a winner.
  */
 export function orderTeamsForTeamsPage(teams, { standings = [], groupedStandings = [], honors } = {}) {
   if (honors?.finalFinished && honors?.placementTeams?.length) {
-    return orderTeamsByTournamentPlacement(teams, honors);
+    return orderTeamsByTournamentPlacement(teams, honors, standings);
+  }
+
+  if (honors?.supported && honors?.badgesByTeam && Object.keys(honors.badgesByTeam).length > 0) {
+    return orderTeamsByBracketDepth(teams, honors, standings);
   }
 
   const list = teams || [];
@@ -408,11 +444,7 @@ export function orderTeamsForTeamsPage(teams, { standings = [], groupedStandings
     orderedNames.push(key);
   };
 
-  const overallRank = new Map();
-  for (const [idx, row] of (standings || []).entries()) {
-    const key = String(row.team || "").trim();
-    if (key) overallRank.set(key, idx);
-  }
+  const overallRank = buildOverallRankMap(standings);
 
   const groups = [...(groupedStandings || [])].sort((a, b) => {
     const ra = groupLabelSortRank(a.label || "");
