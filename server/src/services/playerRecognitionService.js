@@ -2,7 +2,7 @@ import { pool } from "../db/pool.js";
 import { buildPublicHonorsPayload } from "./bracketHonorsEngine.js";
 import { formatPublicMatchStageLabel } from "../utils/matchStageLabel.js";
 import {
-  buildTeamsWithActivePlayers,
+  buildTeamsForPublicDisplay,
   countPlayedMatchesForStint,
   loadAllMembershipStintsForAccount,
 } from "./rosterMembershipService.js";
@@ -52,9 +52,23 @@ function normalizeName(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function parseJsonField(raw) {
+  if (raw == null) return null;
+  if (typeof raw === "object") return raw;
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 async function loadConcludedSeasonHonors() {
   const { rows } = await pool.query(
     `SELECT s.number AS season_number, s.slug AS season_slug, s.name AS season_name,
+            s.snapshot, s.trophy_engraving,
             t.id AS tournament_id, t.tournament_honors, t.format, t.season_card_badge
      FROM seasons s
      JOIN tournaments t ON t.id = s.tournament_id
@@ -78,22 +92,30 @@ function resolveChampionTeamName(honors) {
   ).trim();
 }
 
-/** All rostered players on a team (baseline snapshot links, not only active memberships). */
-function championTeamPlayers(approvedRoster, championTeamName) {
-  if (!approvedRoster?.teams?.length || !championTeamName) return [];
+function championPlayersFromTeams(teams, championTeamName) {
+  if (!championTeamName) return [];
+  const team = (teams || []).find((entry) => normalizeName(entry.name) === normalizeName(championTeamName));
+  return team?.players || [];
+}
 
-  const team = approvedRoster.teams.find(
-    (entry) => normalizeName(entry.name) === normalizeName(championTeamName),
-  );
-  if (!team) return [];
+function resolveSeasonRecognitionContext(season, matchRows) {
+  const snapshot = parseJsonField(season.snapshot);
+  const trophyEngraving = parseJsonField(season.trophy_engraving) || {};
+  const honorsRaw = season.tournament_honors || {};
+  const honorsFromMatches = buildPublicHonorsPayload(matchRows, season.format, honorsRaw);
+  const snapshotHonors = snapshot?.honors;
+  const honors =
+    snapshotHonors?.podiumTeams?.length || snapshotHonors?.champion?.teamName
+      ? { ...honorsFromMatches, ...snapshotHonors }
+      : honorsFromMatches;
+  const mvp = honorsRaw?.mvp || snapshotHonors?.mvp || trophyEngraving?.mvp || honors.mvp || null;
+  return { honors, mvp, snapshotTeams: snapshot?.teams || null };
+}
 
-  const linkedPlayerIds = new Set(
-    (approvedRoster.teamPlayers || [])
-      .filter((record) => record.team_id === team.id)
-      .map((record) => record.player_id),
-  );
-
-  return (approvedRoster.players || []).filter((player) => linkedPlayerIds.has(player.id));
+async function resolveSeasonTeams(season, snapshotTeams) {
+  if (snapshotTeams?.length) return snapshotTeams;
+  const approvedRoster = await getApprovedRosterSnapshot(season.tournament_id);
+  return buildTeamsForPublicDisplay(approvedRoster);
 }
 
 function rosterPlayersMatchingMvp(teams, mvp) {
@@ -172,68 +194,70 @@ function appendRecognition(index, accountId, recognition) {
   index.set(key, bucket);
 }
 
-/** Map player account id → season honor badges (S1•MVP, S1•Champion, …). */
+/** Apply S{n}•Champion / S{n}•MVP badges for one concluded season. */
+export function applySeasonRecognitions(index, season, { honors, teams, mvp }) {
+  const prefix = seasonBadgePrefix(season);
+  const seasonTitle = season.season_name || `Season ${season.season_number}`;
+
+  if (mvp) {
+    for (const { player } of rosterPlayersMatchingMvp(teams, mvp)) {
+      appendRecognition(index, rosterPlayerAccountId(player), {
+        id: `${prefix}-mvp`,
+        label: `${prefix}•MVP`,
+        kind: "mvp",
+        seasonNumber: season.season_number,
+        seasonSlug: season.season_slug,
+        seasonName: seasonTitle,
+        detail: `Tournament MVP · ${seasonTitle}`,
+      });
+    }
+  }
+
+  const championTeamName = resolveChampionTeamName(honors);
+  if (championTeamName) {
+    for (const player of championPlayersFromTeams(teams, championTeamName)) {
+      appendRecognition(index, rosterPlayerAccountId(player), {
+        id: `${prefix}-champion`,
+        label: `${prefix}•Champion`,
+        kind: "champion",
+        seasonNumber: season.season_number,
+        seasonSlug: season.season_slug,
+        seasonName: seasonTitle,
+        teamName: championTeamName,
+        detail: `${seasonTitle} · ${championTeamName}`,
+      });
+    }
+  }
+
+  for (const card of honors.customCards || []) {
+    for (const { player } of rosterPlayersMatchingHonor(teams, card)) {
+      appendRecognition(index, rosterPlayerAccountId(player), {
+        id: `${prefix}-custom-${card.id || card.title}`,
+        label: card.title ? `${prefix}•${card.title}` : `${prefix}•Honor`,
+        kind: "custom",
+        seasonNumber: season.season_number,
+        seasonSlug: season.season_slug,
+        seasonName: seasonTitle,
+        title: card.title || "",
+        detail: card.title ? `${card.title} · ${seasonTitle}` : seasonTitle,
+      });
+    }
+  }
+}
+
+/** Map player account id → season honor badges (S1•MVP, S1•Champion, S2•MVP, …). */
 export async function buildGlobalRecognitionIndex() {
   const index = new Map();
   const seasons = await loadConcludedSeasonHonors();
 
   for (const season of seasons) {
-    const prefix = seasonBadgePrefix(season);
-    const seasonTitle = season.season_name || `Season ${season.season_number}`;
-    const honorsRaw = season.tournament_honors || {};
     const { rows: matchRows } = await pool.query(
       `SELECT * FROM matches WHERE tournament_id = $1`,
       [season.tournament_id],
     );
-    const honors = buildPublicHonorsPayload(matchRows, season.format, honorsRaw);
-    const approvedRoster = await getApprovedRosterSnapshot(season.tournament_id);
-    const teams = buildTeamsWithActivePlayers(approvedRoster);
-
-    const mvp = honors.mvp;
-    if (mvp) {
-      for (const { player } of rosterPlayersMatchingMvp(teams, mvp)) {
-        appendRecognition(index, rosterPlayerAccountId(player), {
-          id: `${prefix}-mvp`,
-          label: `${prefix}•MVP`,
-          kind: "mvp",
-          seasonNumber: season.season_number,
-          seasonSlug: season.season_slug,
-          seasonName: seasonTitle,
-          detail: `Tournament MVP · ${seasonTitle}`,
-        });
-      }
-    }
-
-    const championTeamName = resolveChampionTeamName(honors);
-    if (championTeamName) {
-      for (const player of championTeamPlayers(approvedRoster, championTeamName)) {
-        appendRecognition(index, rosterPlayerAccountId(player), {
-          id: `${prefix}-champion`,
-          label: `${prefix}•Champion`,
-          kind: "champion",
-          seasonNumber: season.season_number,
-          seasonSlug: season.season_slug,
-          seasonName: seasonTitle,
-          teamName: championTeamName,
-          detail: `${seasonTitle} · ${championTeamName}`,
-        });
-      }
-    }
-
-    for (const card of honors.customCards || []) {
-      for (const { player } of rosterPlayersMatchingHonor(teams, card)) {
-        appendRecognition(index, rosterPlayerAccountId(player), {
-          id: `${prefix}-custom-${card.id || card.title}`,
-          label: card.title ? `${prefix}•${card.title}` : `${prefix}•Honor`,
-          kind: "custom",
-          seasonNumber: season.season_number,
-          seasonSlug: season.season_slug,
-          seasonName: seasonTitle,
-          title: card.title || "",
-          detail: card.title ? `${card.title} · ${seasonTitle}` : seasonTitle,
-        });
-      }
-    }
+    const { honors, mvp, snapshotTeams } = resolveSeasonRecognitionContext(season, matchRows);
+    const teams = await resolveSeasonTeams(season, snapshotTeams);
+    applySeasonRecognitions(index, season, { honors, teams, mvp });
   }
 
   for (const [key, list] of index) {
