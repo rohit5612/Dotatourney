@@ -24,16 +24,6 @@ export function stageRoundOrdinal(matches, stageKey, roundIndex) {
   return idx >= 0 ? idx : roundIndex ?? 0;
 }
 
-function distinctStageRoundIndices(matches, stageKey) {
-  return [
-    ...new Set(
-      (matches || [])
-        .filter((match) => match.stageKey === stageKey)
-        .map((match) => match.roundIndex ?? 0),
-    ),
-  ].sort((a, b) => a - b);
-}
-
 function playoffRoundsFromEnd(allMatches, stageKey, roundIndex) {
   const rounds = distinctStageRoundIndices(allMatches, stageKey);
   if (!rounds.length) return 0;
@@ -74,6 +64,88 @@ function playoffMatchesInRound(matches, stageKey, roundIndex) {
     .sort((a, b) => (a.matchIndex ?? 0) - (b.matchIndex ?? 0));
 }
 
+function compareMatchOrder(a, b) {
+  const stageDiff = String(a.stageKey || "").localeCompare(String(b.stageKey || ""));
+  if (stageDiff !== 0) return stageDiff;
+  const roundDiff = (a.roundIndex ?? 0) - (b.roundIndex ?? 0);
+  if (roundDiff !== 0) return roundDiff;
+  return (a.matchIndex ?? 0) - (b.matchIndex ?? 0);
+}
+
+function inferFeedTokenFromStructure(producer, consumer, side, allMatches) {
+  const token = producer.meta?.winToken;
+  if (!token || compareMatchOrder(producer, consumer) >= 0) return null;
+
+  const producerRound = producer.roundIndex ?? 0;
+  const consumerRound = consumer.roundIndex ?? 0;
+  const producerMatch = producer.matchIndex ?? 0;
+  const consumerMatch = consumer.matchIndex ?? 0;
+
+  if (producer.stageKey !== consumer.stageKey) return null;
+
+  if (isPlayoffStageKey(consumer.stageKey)) {
+    const producerOrd = stageRoundOrdinal(allMatches, consumer.stageKey, producerRound);
+    const consumerOrd = stageRoundOrdinal(allMatches, consumer.stageKey, consumerRound);
+    if (consumerOrd !== producerOrd + 1) return null;
+
+    if (
+      consumer.stageKey === "blast-playoffs" &&
+      consumerOrd === producerOrd + 1 &&
+      consumerMatch === producerMatch &&
+      /^QFR/.test(String(producer.meta?.winToken || ""))
+    ) {
+      return side === "team2" ? token : null;
+    }
+    if (consumerOrd >= 2 && consumerMatch === 0) {
+      if (side === "team1" && producerMatch === 0) return token;
+      if (side === "team2" && producerMatch === 1) return token;
+      return null;
+    }
+    const nextMatch = Math.floor(producerMatch / 2);
+    if (consumerMatch === nextMatch) {
+      return side === (producerMatch % 2 === 0 ? "team1" : "team2") ? token : null;
+    }
+    return null;
+  }
+
+  if (consumerRound !== producerRound + 1) return null;
+  if (consumerMatch === producerMatch) return token;
+  return null;
+}
+
+function consumerSideFedByProducer(consumer, side, producer, allMatches) {
+  const structuralToken = inferFeedTokenFromStructure(producer, consumer, side, allMatches);
+  const producerWinToken = producer.meta?.winToken;
+  if (!producerWinToken || structuralToken !== producerWinToken) return false;
+
+  const slotValue = String(consumer[side] || "");
+  const feedMeta = consumer.meta?.[`${side}Feed`];
+
+  if (feedMeta === producerWinToken) return true;
+  if (slotValue === producerWinToken) return true;
+
+  const producerFeedLabel = canonicalPlayoffWinToken(producer, allMatches);
+  if (producerFeedLabel && slotValue === producerFeedLabel) return true;
+  if (producerFeedLabel && feedMeta === producerFeedLabel) return true;
+
+  const resolvedSlot = resolvePlayoffSlotDisplay(slotValue, consumer, side, allMatches);
+  if (producerFeedLabel && resolvedSlot === producerFeedLabel) return true;
+
+  return false;
+}
+
+function findFeederMatchForConsumerSlot(consumer, side, allMatches) {
+  const sorted = [...(allMatches || [])].sort(compareMatchOrder);
+  for (let index = sorted.length - 1; index >= 0; index -= 1) {
+    const candidate = sorted[index];
+    if (compareMatchOrder(candidate, consumer) >= 0) continue;
+    if (consumerSideFedByProducer(consumer, side, candidate, allMatches)) return candidate;
+    const structural = inferFeedTokenFromStructure(candidate, consumer, side, allMatches);
+    if (structural && candidate.meta?.winToken === structural) return candidate;
+  }
+  return null;
+}
+
 function resolvePlayoffSlotDisplay(value, consumerMatch, side, allMatches, tokenDisplayMap) {
   const text = String(value || "").trim();
   if (!text || !TEAM_TOKEN_REGEX.test(text)) return value;
@@ -95,7 +167,8 @@ function resolvePlayoffSlotDisplay(value, consumerMatch, side, allMatches, token
   }
 
   const map = tokenDisplayMap || buildStoredToCanonicalDisplayMap(allMatches);
-  if (map.has(text)) return map.get(text);
+  const roundsFromEnd = playoffRoundsFromEnd(allMatches, consumerMatch.stageKey, consumerMatch.roundIndex ?? 0);
+  if (roundsFromEnd > 0 && map.has(text)) return map.get(text);
 
   return value;
 }
@@ -147,8 +220,22 @@ export function resolveDisplaySeriesRuleKey(match) {
 /** Display-only team slot label; underlying match.team1/team2 stay unchanged for progression saves. */
 export function resolveDisplayTeamName(match, side, allMatches = null) {
   const raw = side === 1 ? match?.team1 : match?.team2;
+  if (!TEAM_TOKEN_REGEX.test(String(raw || "").trim())) return raw;
+
+  const slotSide = side === 1 ? "team1" : "team2";
   const presentationKey = side === 1 ? "presentationTeam1" : "presentationTeam2";
-  if (match?.meta?.[presentationKey]) return match.meta[presentationKey];
-  if (!allMatches?.length) return raw;
-  return resolvePlayoffSlotDisplay(raw, match, side === 1 ? "team1" : "team2", allMatches);
+  const displayToken =
+    match?.meta?.[presentationKey] || resolvePlayoffSlotDisplay(raw, match, slotSide, allMatches);
+
+  if (!allMatches?.length) return displayToken;
+
+  const feeder = findFeederMatchForConsumerSlot(match, slotSide, allMatches);
+  if (feeder?.winner) {
+    if (String(displayToken).endsWith("L")) {
+      return feeder.winner === feeder.team1 ? feeder.team2 : feeder.team1;
+    }
+    return feeder.winner;
+  }
+
+  return displayToken;
 }

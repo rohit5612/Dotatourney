@@ -514,7 +514,7 @@ router.get("/:id", async (req, res, next) => {
     }
 
     const standingsTeams = data.approvedRoster?.teams || data.teams;
-    let matches = data.matches;
+    let matches = reapplyAllProgression(data.matches);
     if (data.tournament.format === "blast") {
       const overrides = stripGroupStandingsOverrides(getQualifierSeedingOverrides(data.tournament.engine_config));
       const seeded = await persistBlastGroupSeedingIfReady(

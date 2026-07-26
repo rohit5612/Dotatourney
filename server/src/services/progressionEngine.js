@@ -1,6 +1,8 @@
 import {
   buildPlayoffTokenAliasMap,
+  canonicalPlayoffWinToken,
   isPlayoffStageKey,
+  playoffRoundsFromEnd,
   resolvePlayoffSlotDisplay,
   stageRoundOrdinal,
 } from "./playoffRoundUtils.js";
@@ -130,15 +132,37 @@ function resolveProgressionFeedToken(value, consumer, side, allMatches) {
   return text;
 }
 
+function consumerSideFedByProducer(consumer, side, producer, allMatches) {
+  const structuralToken = inferFeedTokenFromStructure(producer, consumer, side, allMatches);
+  const producerWinToken = producer.meta?.winToken;
+  if (!producerWinToken || structuralToken !== producerWinToken) return false;
+
+  const slotValue = String(consumer[side] || "");
+  const feedMeta = consumer.meta?.[`${side}Feed`];
+
+  if (feedMeta === producerWinToken) return true;
+  if (slotValue === producerWinToken) return true;
+
+  const producerFeedLabel = canonicalPlayoffWinToken(producer, allMatches);
+  if (producerFeedLabel && slotValue === producerFeedLabel) return true;
+  if (producerFeedLabel && feedMeta === producerFeedLabel) return true;
+
+  const resolvedSlot = resolvePlayoffSlotDisplay(slotValue, consumer, side, allMatches);
+  if (producerFeedLabel && resolvedSlot === producerFeedLabel) return true;
+
+  return false;
+}
+
 function slotShouldReceiveToken(match, side, token, producer, allMatches) {
   const slotValue = String(match[side] || "");
   if (!TEAM_TOKEN_REGEX.test(slotValue) || slotValue !== token) return false;
 
   const feedMeta = match.meta?.[`${side}Feed`];
-  if (feedMeta) return feedMeta === token;
+  if (feedMeta && feedMeta !== token) return false;
 
   const structural = inferFeedTokenFromStructure(producer, match, side, allMatches);
-  if (structural) return structural === token;
+  if (structural === token) return true;
+  if (consumerSideFedByProducer(match, side, producer, allMatches)) return true;
 
   if (!isPlayoffStageKey(match.stageKey || "")) {
     const otherSide = side === "team1" ? "team2" : "team1";
@@ -146,6 +170,24 @@ function slotShouldReceiveToken(match, side, token, producer, allMatches) {
   }
 
   return false;
+}
+
+function slotShouldReceiveOutcome(match, side, token, producer, allMatches) {
+  const isLoserToken = String(token || "").endsWith("L");
+  if (!isLoserToken && consumerSideFedByProducer(match, side, producer, allMatches)) return true;
+  return slotShouldReceiveToken(match, side, token, producer, allMatches);
+}
+
+export function findFeederMatchForConsumerSlot(consumer, side, allMatches) {
+  const sorted = [...(allMatches || [])].sort(compareMatchOrder);
+  for (let index = sorted.length - 1; index >= 0; index -= 1) {
+    const candidate = sorted[index];
+    if (compareMatchOrder(candidate, consumer) >= 0) continue;
+    if (consumerSideFedByProducer(consumer, side, candidate, allMatches)) return candidate;
+    const structural = inferFeedTokenFromStructure(candidate, consumer, side, allMatches);
+    if (structural && candidate.meta?.winToken === structural) return candidate;
+  }
+  return null;
 }
 
 export function buildProgressionFeedMap(matches) {
@@ -249,26 +291,28 @@ export function applyProgression(matches, changedMatch) {
 
   const loser = changedMatch.winner === changedMatch.team1 ? changedMatch.team2 : changedMatch.team1;
   const winnerToken = changedMatch.meta.winToken;
-  const loserToken = winnerToken.replace(/W$/, "L");
+  const loserToken = winnerToken.endsWith("W") ? winnerToken.replace(/W$/, "L") : null;
 
   return matches.map((match) => {
     const next = { ...match, meta: { ...(match.meta || {}) } };
 
-    if (slotShouldReceiveToken(next, "team1", winnerToken, changedMatch, matches)) {
+    if (slotShouldReceiveOutcome(next, "team1", winnerToken, changedMatch, matches)) {
       next.team1 = changedMatch.winner;
       next.meta.team1Feed = winnerToken;
     }
-    if (slotShouldReceiveToken(next, "team2", winnerToken, changedMatch, matches)) {
+    if (slotShouldReceiveOutcome(next, "team2", winnerToken, changedMatch, matches)) {
       next.team2 = changedMatch.winner;
       next.meta.team2Feed = winnerToken;
     }
-    if (slotShouldReceiveToken(next, "team1", loserToken, changedMatch, matches)) {
-      next.team1 = loser;
-      next.meta.team1Feed = loserToken;
-    }
-    if (slotShouldReceiveToken(next, "team2", loserToken, changedMatch, matches)) {
-      next.team2 = loser;
-      next.meta.team2Feed = loserToken;
+    if (loserToken) {
+      if (slotShouldReceiveOutcome(next, "team1", loserToken, changedMatch, matches)) {
+        next.team1 = loser;
+        next.meta.team1Feed = loserToken;
+      }
+      if (slotShouldReceiveOutcome(next, "team2", loserToken, changedMatch, matches)) {
+        next.team2 = loser;
+        next.meta.team2Feed = loserToken;
+      }
     }
     return next;
   });

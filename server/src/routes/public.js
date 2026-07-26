@@ -20,6 +20,7 @@ import { applyBlastGroupSeeding } from "../services/blastSeeding.js";
 import { getQualifierSeedingOverrides, stripGroupStandingsOverrides } from "../services/blastQualifierSeeding.js";
 import { buildPublicHonorsPayload } from "../services/bracketHonorsEngine.js";
 import { decorateMatchesForClient } from "../services/playoffRoundUtils.js";
+import { reapplyAllProgression } from "../services/progressionEngine.js";
 import { buildGroupedStandings, buildStandings } from "../services/standingsEngine.js";
 import { buildGroupedStandingsWithSeeding } from "../services/groupStandingsOverrides.js";
 import { buildTeamsWithActivePlayers, buildTeamsForPublicDisplay } from "../services/rosterMembershipService.js";
@@ -265,7 +266,7 @@ async function publicPayload(data, fallbackIdentifier = DEFAULT_FALLBACK_SLUG) {
             new Set(data.matches.flatMap((m) => [m.team1, m.team2]).filter((n) => typeof n === "string" && n.trim() !== "")),
           ).map((name) => ({ name }));
 
-  let bracketMatches = data.matches;
+  let bracketMatches = reapplyAllProgression(data.matches);
   if (format === "blast" && visibilityMode !== "demo") {
     const overrides = stripGroupStandingsOverrides(getQualifierSeedingOverrides(data.tournament.engine_config));
     bracketMatches = applyBlastGroupSeeding(standingsTeams, bracketMatches, overrides).matches;

@@ -261,6 +261,69 @@ describe("progressionEngine", () => {
     assert.equal(fin.team2, "SFR1M1W");
   });
 
+  it("reapplyAllProgression fills final from CHAMPION-token semifinal winners", () => {
+    const qf1 = {
+      id: "qf1",
+      stageKey: "blast-playoffs",
+      roundIndex: 1,
+      matchIndex: 0,
+      team1: "PIR2M1W",
+      team2: "PIR2M2W",
+      winner: "PIR2M1W",
+      status: "finished",
+      meta: { winToken: "SFR1M1W" },
+    };
+    const qf2 = {
+      id: "qf2",
+      stageKey: "blast-playoffs",
+      roundIndex: 1,
+      matchIndex: 1,
+      team1: "PIR2M3W",
+      team2: "PIR2M4W",
+      winner: "PIR2M3W",
+      status: "finished",
+      meta: { winToken: "SFR1M2W" },
+    };
+    const sf1 = {
+      id: "sf1",
+      stageKey: "blast-playoffs",
+      roundIndex: 2,
+      matchIndex: 0,
+      team1: "Emberfall",
+      team2: "Crimson Veil",
+      winner: "Emberfall",
+      status: "finished",
+      meta: { winToken: "CHAMPION" },
+    };
+    const sf2 = {
+      id: "sf2",
+      stageKey: "blast-playoffs",
+      roundIndex: 2,
+      matchIndex: 1,
+      team1: "Vanguard",
+      team2: "Kingsguard",
+      winner: null,
+      status: "upcoming",
+      meta: { winToken: "CHAMPION" },
+    };
+    const finalMatch = {
+      id: "final1",
+      stageKey: "blast-playoffs",
+      roundIndex: 3,
+      matchIndex: 0,
+      team1: "CHAMPION",
+      team2: "CHAMPION",
+      winner: null,
+      status: "upcoming",
+      meta: { winToken: "CHAMPION" },
+    };
+
+    const corrected = reapplyAllProgression([qf1, qf2, sf1, sf2, finalMatch]);
+    const fin = corrected.find((m) => m.id === "final1");
+    assert.equal(fin.team1, "Emberfall");
+    assert.equal(fin.team2, "SFR1M2W");
+  });
+
   it("reapplyAllProgression overrides stale team feed meta from wrong upstream", () => {
     const groupWin = {
       id: "ga1",

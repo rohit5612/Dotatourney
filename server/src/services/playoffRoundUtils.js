@@ -180,7 +180,8 @@ export function resolvePlayoffSlotDisplay(value, consumerMatch, side, allMatches
   }
 
   const map = tokenDisplayMap || buildStoredToCanonicalDisplayMap(allMatches);
-  if (map.has(text)) return map.get(text);
+  const roundsFromEnd = playoffRoundsFromEnd(allMatches, consumerMatch.stageKey, consumerMatch.roundIndex ?? 0);
+  if (roundsFromEnd > 0 && map.has(text)) return map.get(text);
 
   return value;
 }
