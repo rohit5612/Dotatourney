@@ -78,14 +78,22 @@ export function playoffMatchesInRound(matches, stageKey, roundIndex) {
     .sort((a, b) => (a.matchIndex ?? 0) - (b.matchIndex ?? 0));
 }
 
+/** @param {object[]} allMatches @param {string} stageKey @param {number} roundIndex */
+export function playoffRoundsFromEnd(allMatches, stageKey, roundIndex) {
+  const rounds = distinctStageRoundIndices(allMatches, stageKey);
+  if (!rounds.length) return 0;
+  const ordinal = stageRoundOrdinal(allMatches, stageKey, roundIndex ?? 0);
+  return rounds.length - 1 - ordinal;
+}
+
 /** @param {object} match @param {object[]} allMatches */
 export function canonicalPlayoffWinToken(match, allMatches) {
   const stageKey = match?.stageKey;
   if (!isPlayoffStageKey(stageKey)) return match?.meta?.winToken || null;
   const matchIndex = match.matchIndex ?? 0;
-  const ordinal = stageRoundOrdinal(allMatches, stageKey, match.roundIndex ?? 0);
-  if (ordinal >= 2) return "CHAMPION";
-  if (ordinal === 1) return `SFR1M${matchIndex + 1}W`;
+  const roundsFromEnd = playoffRoundsFromEnd(allMatches, stageKey, match.roundIndex ?? 0);
+  if (roundsFromEnd <= 0) return "CHAMPION";
+  if (roundsFromEnd === 1) return `SFR1M${matchIndex + 1}W`;
   return `QFR1M${matchIndex + 1}W`;
 }
 
@@ -93,9 +101,9 @@ export function canonicalPlayoffWinToken(match, allMatches) {
 export function canonicalPlayoffSeriesRuleKey(match, allMatches) {
   const stageKey = match?.stageKey;
   if (!isPlayoffStageKey(stageKey)) return match?.meta?.seriesRuleKey || null;
-  const ordinal = stageRoundOrdinal(allMatches, stageKey, match.roundIndex ?? 0);
-  if (ordinal >= 2) return "blast-po-final";
-  if (ordinal === 1) return "blast-po-semifinal";
+  const roundsFromEnd = playoffRoundsFromEnd(allMatches, stageKey, match.roundIndex ?? 0);
+  if (roundsFromEnd <= 0) return "blast-po-final";
+  if (roundsFromEnd === 1) return "blast-po-semifinal";
   return "blast-po-quarterfinal";
 }
 

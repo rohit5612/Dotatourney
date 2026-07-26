@@ -177,6 +177,90 @@ describe("progressionEngine", () => {
     assert.equal(nextSf.team2, "T4");
   });
 
+  it("reapplyAllProgression fills only one final slot when semi 1 completes (semis + final)", () => {
+    const sf1 = {
+      id: "sf1",
+      stageKey: "blast-playoffs",
+      roundIndex: 1,
+      matchIndex: 0,
+      team1: "Emberfall",
+      team2: "Crimson Veil",
+      winner: "Emberfall",
+      status: "finished",
+      meta: { winToken: "SFR1M1W" },
+    };
+    const sf2 = {
+      id: "sf2",
+      stageKey: "blast-playoffs",
+      roundIndex: 1,
+      matchIndex: 1,
+      team1: "Vanguard",
+      team2: "Kingsguard",
+      winner: null,
+      status: "upcoming",
+      meta: { winToken: "SFR1M2W" },
+    };
+    const finalMatch = {
+      id: "final1",
+      stageKey: "blast-playoffs",
+      roundIndex: 2,
+      matchIndex: 0,
+      team1: "CHAMPION",
+      team2: "CHAMPION",
+      winner: null,
+      status: "upcoming",
+      meta: { winToken: "CHAMPION" },
+    };
+
+    const corrected = reapplyAllProgression([sf1, sf2, finalMatch]);
+    const fin = corrected.find((m) => m.id === "final1");
+    assert.equal(fin.team1, "Emberfall");
+    assert.equal(fin.team2, "SFR1M2W");
+    assert.equal(fin.meta.team1Feed, "SFR1M1W");
+    assert.equal(fin.meta.team2Feed, "SFR1M2W");
+  });
+
+  it("applyProgression does not duplicate winner when both final slots share the same token", () => {
+    const sf1 = {
+      id: "sf1",
+      stageKey: "blast-playoffs",
+      roundIndex: 1,
+      matchIndex: 0,
+      team1: "Emberfall",
+      team2: "Crimson Veil",
+      winner: "Emberfall",
+      status: "finished",
+      meta: { winToken: "SFR1M1W" },
+    };
+    const sf2 = {
+      id: "sf2",
+      stageKey: "blast-playoffs",
+      roundIndex: 1,
+      matchIndex: 1,
+      team1: "Vanguard",
+      team2: "Kingsguard",
+      winner: null,
+      status: "upcoming",
+      meta: { winToken: "SFR1M2W" },
+    };
+    const finalMatch = {
+      id: "final1",
+      stageKey: "blast-playoffs",
+      roundIndex: 2,
+      matchIndex: 0,
+      team1: "SFR1M1W",
+      team2: "SFR1M1W",
+      winner: null,
+      status: "upcoming",
+      meta: { winToken: "CHAMPION" },
+    };
+
+    const progressed = applyProgression([sf1, sf2, finalMatch], sf1);
+    const fin = progressed.find((m) => m.id === "final1");
+    assert.equal(fin.team1, "Emberfall");
+    assert.equal(fin.team2, "SFR1M1W");
+  });
+
   it("reapplyAllProgression overrides stale team feed meta from wrong upstream", () => {
     const groupWin = {
       id: "ga1",

@@ -7,7 +7,7 @@ export function isPlayoffStageKey(stageKey) {
   return key === "blast-playoffs" || key === "playoffs";
 }
 
-function distinctStageRoundIndices(matches, stageKey) {
+export function distinctStageRoundIndices(matches, stageKey) {
   return [
     ...new Set(
       (matches || [])
@@ -24,13 +24,30 @@ export function stageRoundOrdinal(matches, stageKey, roundIndex) {
   return idx >= 0 ? idx : roundIndex ?? 0;
 }
 
+function distinctStageRoundIndices(matches, stageKey) {
+  return [
+    ...new Set(
+      (matches || [])
+        .filter((match) => match.stageKey === stageKey)
+        .map((match) => match.roundIndex ?? 0),
+    ),
+  ].sort((a, b) => a - b);
+}
+
+function playoffRoundsFromEnd(allMatches, stageKey, roundIndex) {
+  const rounds = distinctStageRoundIndices(allMatches, stageKey);
+  if (!rounds.length) return 0;
+  const ordinal = stageRoundOrdinal(allMatches, stageKey, roundIndex ?? 0);
+  return rounds.length - 1 - ordinal;
+}
+
 function canonicalPlayoffWinToken(match, allMatches) {
   const stageKey = match?.stageKey;
   if (!isPlayoffStageKey(stageKey)) return match?.meta?.winToken || null;
   const matchIndex = match.matchIndex ?? 0;
-  const ordinal = stageRoundOrdinal(allMatches, stageKey, match.roundIndex ?? 0);
-  if (ordinal >= 2) return "CHAMPION";
-  if (ordinal === 1) return `SFR1M${matchIndex + 1}W`;
+  const roundsFromEnd = playoffRoundsFromEnd(allMatches, stageKey, match.roundIndex ?? 0);
+  if (roundsFromEnd <= 0) return "CHAMPION";
+  if (roundsFromEnd === 1) return `SFR1M${matchIndex + 1}W`;
   return `QFR1M${matchIndex + 1}W`;
 }
 

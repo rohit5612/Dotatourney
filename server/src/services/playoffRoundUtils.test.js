@@ -4,6 +4,43 @@ import { compileEngineStageMatches } from "./engineStageSeeding.js";
 import { decorateMatchesForClient } from "./playoffRoundUtils.js";
 
 describe("playoff round normalization", () => {
+  it("decorateMatchesForClient maps CHAMPION final slots to semifinal feeders in a 2-round playoff", () => {
+    const matches = [
+      {
+        id: "sf1",
+        stageKey: "blast-playoffs",
+        roundIndex: 1,
+        matchIndex: 0,
+        team1: "Emberfall",
+        team2: "Crimson Veil",
+        winner: "Emberfall",
+        meta: { winToken: "SFR1M1W" },
+      },
+      {
+        id: "sf2",
+        stageKey: "blast-playoffs",
+        roundIndex: 1,
+        matchIndex: 1,
+        team1: "Vanguard",
+        team2: "Kingsguard",
+        meta: { winToken: "SFR1M2W" },
+      },
+      {
+        id: "fin",
+        stageKey: "blast-playoffs",
+        roundIndex: 2,
+        matchIndex: 0,
+        team1: "CHAMPION",
+        team2: "CHAMPION",
+        meta: { winToken: "CHAMPION" },
+      },
+    ];
+    const decorated = decorateMatchesForClient(matches);
+    const fin = decorated.find((m) => m.id === "fin");
+    assert.equal(fin?.meta?.presentationTeam1, "SFR1M1W");
+    assert.equal(fin?.meta?.presentationTeam2, "SFR1M2W");
+  });
+
   it("decorateMatchesForClient rewrites feeder slot placeholders for legacy tokens", () => {
     const matches = [
       {
@@ -86,9 +123,10 @@ describe("playoff round normalization", () => {
       },
     ];
     const [qf] = decorateMatchesForClient(matches);
-    assert.equal(qf.meta.presentationWinToken, "QFR1M1W");
-    assert.equal(qf.meta.presentationSeriesRuleKey, "blast-po-quarterfinal");
+    assert.equal(qf.meta.presentationWinToken, undefined);
+    assert.equal(qf.meta.presentationSeriesRuleKey, undefined);
     assert.equal(qf.meta.winToken, "SFR1M1W");
+    assert.equal(qf.meta.seriesRuleKey, "blast-po-semifinal");
   });
 
   it("compiles 1-based playoff rounds with QFR tokens on the first elimination round", () => {

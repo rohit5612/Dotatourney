@@ -1,6 +1,7 @@
 import {
   buildPlayoffTokenAliasMap,
   isPlayoffStageKey,
+  resolvePlayoffSlotDisplay,
   stageRoundOrdinal,
 } from "./playoffRoundUtils.js";
 
@@ -81,7 +82,12 @@ function inferFeedTokenFromStructure(producer, consumer, side, allMatches) {
     if (consumerOrd !== producerOrd + 1) return null;
 
     // BLAST n=12: group #1 waits on team1; QF winner feeds team2 in the paired semifinal row.
-    if (consumer.stageKey === "blast-playoffs" && consumerOrd === 1 && consumerMatch === producerMatch) {
+    if (
+      consumer.stageKey === "blast-playoffs" &&
+      consumerOrd === producerOrd + 1 &&
+      consumerMatch === producerMatch &&
+      /^QFR/.test(String(producer.meta?.winToken || ""))
+    ) {
       return side === "team2" ? token : null;
     }
     if (consumerOrd >= 2 && consumerMatch === 0) {
@@ -116,6 +122,32 @@ function inferFeedTokenFromPrior(prior, consumer, side, allMatches) {
   return null;
 }
 
+function resolveProgressionFeedToken(value, consumer, side, allMatches) {
+  const text = String(value || "").trim();
+  if (!text || !TEAM_TOKEN_REGEX.test(text)) return null;
+  const resolved = resolvePlayoffSlotDisplay(text, consumer, side, allMatches);
+  if (resolved && resolved !== text && TEAM_TOKEN_REGEX.test(resolved)) return resolved;
+  return text;
+}
+
+function slotShouldReceiveToken(match, side, token, producer, allMatches) {
+  const slotValue = String(match[side] || "");
+  if (!TEAM_TOKEN_REGEX.test(slotValue) || slotValue !== token) return false;
+
+  const feedMeta = match.meta?.[`${side}Feed`];
+  if (feedMeta) return feedMeta === token;
+
+  const structural = inferFeedTokenFromStructure(producer, match, side, allMatches);
+  if (structural) return structural === token;
+
+  if (!isPlayoffStageKey(match.stageKey || "")) {
+    const otherSide = side === "team1" ? "team2" : "team1";
+    return String(match[otherSide] || "") !== token;
+  }
+
+  return false;
+}
+
 export function buildProgressionFeedMap(matches) {
   const map = new Map();
   const tokenLookup = buildWinTokenLookup(matches);
@@ -125,7 +157,7 @@ export function buildProgressionFeedMap(matches) {
   for (const match of matches) {
     for (const side of ["team1", "team2"]) {
       const value = String(match[side] || "");
-      if (TEAM_TOKEN_REGEX.test(value)) {
+      if (TEAM_TOKEN_REGEX.test(value) && value !== "CHAMPION") {
         map.set(slotKey(match.id, side), value);
       }
     }
@@ -139,9 +171,18 @@ export function buildProgressionFeedMap(matches) {
       const value = String(match[side] || "");
       if (!value) continue;
 
-      if (tokenLookup.has(value)) {
-        map.set(key, value);
+      const resolvedFeed = resolveProgressionFeedToken(value, match, side, matches);
+      if (resolvedFeed && resolvedFeed !== value) {
+        map.set(key, resolvedFeed);
         continue;
+      }
+
+      if (tokenLookup.has(value)) {
+        const tokenMatch = tokenLookup.get(value);
+        if (tokenMatch?.id !== match.id || value !== match.meta?.winToken) {
+          map.set(key, value);
+          continue;
+        }
       }
 
       const structuralFeed = inferFeedTokenFromPrior(prior, match, side, matches);
@@ -213,19 +254,19 @@ export function applyProgression(matches, changedMatch) {
   return matches.map((match) => {
     const next = { ...match, meta: { ...(match.meta || {}) } };
 
-    if (TEAM_TOKEN_REGEX.test(String(next.team1 || "")) && next.team1 === winnerToken) {
+    if (slotShouldReceiveToken(next, "team1", winnerToken, changedMatch, matches)) {
       next.team1 = changedMatch.winner;
       next.meta.team1Feed = winnerToken;
     }
-    if (TEAM_TOKEN_REGEX.test(String(next.team2 || "")) && next.team2 === winnerToken) {
+    if (slotShouldReceiveToken(next, "team2", winnerToken, changedMatch, matches)) {
       next.team2 = changedMatch.winner;
       next.meta.team2Feed = winnerToken;
     }
-    if (TEAM_TOKEN_REGEX.test(String(next.team1 || "")) && next.team1 === loserToken) {
+    if (slotShouldReceiveToken(next, "team1", loserToken, changedMatch, matches)) {
       next.team1 = loser;
       next.meta.team1Feed = loserToken;
     }
-    if (TEAM_TOKEN_REGEX.test(String(next.team2 || "")) && next.team2 === loserToken) {
+    if (slotShouldReceiveToken(next, "team2", loserToken, changedMatch, matches)) {
       next.team2 = loser;
       next.meta.team2Feed = loserToken;
     }

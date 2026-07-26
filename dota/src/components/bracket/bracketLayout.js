@@ -401,7 +401,12 @@ function inferFeedTokenFromStructure(producer, consumer, side, allMatches) {
     if (consumerOrd !== producerOrd + 1) return null;
 
     // BLAST n=12: group #1 waits on team1; QF winner feeds team2 in the paired semifinal row.
-    if (consumer.stageKey === "blast-playoffs" && consumerOrd === 1 && consumerMatch === producerMatch) {
+    if (
+      consumer.stageKey === "blast-playoffs" &&
+      consumerOrd === producerOrd + 1 &&
+      consumerMatch === producerMatch &&
+      /^QFR/.test(String(producer.meta?.winToken || ""))
+    ) {
       return side === "team2" ? token : null;
     }
     if (consumerOrd >= 2 && consumerMatch === 0) {
