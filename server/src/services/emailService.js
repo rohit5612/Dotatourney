@@ -632,6 +632,9 @@ function receiptTableHtml({
 
   const tierLabel = bundleLabel || (cardTier && cardTier !== "default" ? cardTier : "");
   const paidRupee = (Number(totalPaise || 0) / 100).toFixed(2);
+  const subtotalRupee = Number(subtotal || bundleAmount || 0);
+  const coinsUsed = Math.max(0, Number(coinsApplied ?? coinDiscount ?? 0));
+  const discountRupee = Math.max(0, Number(coinDiscount ?? coinsApplied ?? 0));
 
   return `
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0 0;border-top:1px solid #27272f;padding-top:16px;">
@@ -642,13 +645,17 @@ function receiptTableHtml({
       <tr><td colspan="2" style="padding:8px 0;border-top:1px solid #27272f;"></td></tr>
       <tr>
         <td style="padding:4px 0;color:#a1a1aa;font-size:14px;">Subtotal</td>
-        <td style="padding:4px 0;color:#fff;font-size:14px;text-align:right;">${formatInr(subtotal)}</td>
+        <td style="padding:4px 0;color:#fff;font-size:14px;text-align:right;">${formatInr(subtotalRupee)}</td>
       </tr>
       ${
-        Number(coinsApplied || coinDiscount) > 0
+        coinsUsed > 0
           ? `<tr>
-        <td style="padding:4px 0;color:#a1a1aa;font-size:14px;">BPC coin discount</td>
-        <td style="padding:4px 0;color:#5eead4;font-size:14px;text-align:right;">−${formatInr(coinsApplied || coinDiscount)}</td>
+        <td style="padding:4px 0;color:#a1a1aa;font-size:14px;">BPC coins used</td>
+        <td style="padding:4px 0;color:#5eead4;font-size:14px;text-align:right;">${coinsUsed.toLocaleString("en-IN")}</td>
+      </tr>
+      <tr>
+        <td style="padding:4px 0;color:#a1a1aa;font-size:14px;">Coin discount</td>
+        <td style="padding:4px 0;color:#5eead4;font-size:14px;text-align:right;">−${formatInr(discountRupee)}</td>
       </tr>`
           : ""
       }
@@ -737,14 +744,26 @@ export async function sendPaidRegistrationEmail({
   const code = publicCode || "";
   const subject = `Payment received — ${tour}`;
   const paidRupee = (Number(totalPaise || 0) / 100).toFixed(2);
-  const text = [
+  const subtotalRupee = Number(subtotal || 0);
+  const coinsUsed = Math.max(0, Number(coinsApplied ?? coinDiscount ?? 0));
+  const discountRupee = Math.max(0, Number(coinDiscount ?? coinsApplied ?? 0));
+  const textLines = [
     `Hi ${name || "there"},`,
     ``,
-    `We received your payment of ₹${paidRupee} for ${tour} (registration ${code}).`,
+    `We received your payment for ${tour} (registration ${code}).`,
+    `Subtotal: ₹${subtotalRupee.toLocaleString("en-IN")}`,
+  ];
+  if (coinsUsed > 0) {
+    textLines.push(`BPC coins used: ${coinsUsed.toLocaleString("en-IN")}`);
+    textLines.push(`Coin discount: −₹${discountRupee.toLocaleString("en-IN")}`);
+  }
+  textLines.push(
+    `Amount paid: ₹${Number(paidRupee).toLocaleString("en-IN")}`,
     `An admin will review and approve your registration shortly. You'll receive another email when approved or rejected.`,
     ``,
     `— ${tour}`,
-  ].join("\n");
+  );
+  const text = textLines.join("\n");
   const receiptHtml = receiptTableHtml({
     lineItems,
     subtotal,

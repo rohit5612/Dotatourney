@@ -823,11 +823,16 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
     setUploadingCard(true);
     try {
       const manifestJson = JSON.parse(cardJson);
+      const grantTournamentId =
+        detail?.registrations?.find((reg) => reg.paymentStatus === "paid")?.tournamentId ||
+        detail?.registrations?.[0]?.tournamentId ||
+        null;
       await api.uploadPlayerCard(selectedId, {
         tier: cardTierUpload,
         manifestJson,
         approve: true,
         applyProfileTier,
+        tournamentId: grantTournamentId,
       });
       const data = await api.getPlayerAccount(selectedId);
       setDetail(data);

@@ -177,6 +177,56 @@ export async function getPlayerAccountAdminDetail(id) {
   };
 }
 
+async function resolveAdminCardSeasonContext(accountId, body) {
+  let tournamentId = body.tournamentId || null;
+  let seasonId = body.seasonId || null;
+
+  if (!tournamentId && body.tournamentSlug) {
+    const { rows } = await pool.query(`SELECT id FROM tournaments WHERE slug = $1`, [body.tournamentSlug]);
+    tournamentId = rows[0]?.id || null;
+  }
+
+  if (!tournamentId) {
+    const { rows } = await pool.query(
+      `SELECT tournament_id
+       FROM player_registrations
+       WHERE player_account_id = $1
+         AND archived_at IS NULL
+         AND player_account_id IS NOT NULL
+       ORDER BY
+         CASE WHEN payment_status = 'paid' THEN 0 ELSE 1 END,
+         created_at DESC
+       LIMIT 1`,
+      [accountId],
+    );
+    tournamentId = rows[0]?.tournament_id || null;
+  }
+
+  if (!tournamentId) {
+    const { rows } = await pool.query(
+      `SELECT tournament_id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1`,
+    );
+    tournamentId = rows[0]?.tournament_id || null;
+  }
+
+  if (!tournamentId) {
+    const { rows } = await pool.query(
+      `SELECT tournament_id FROM seasons WHERE status = 'concluded' ORDER BY number DESC LIMIT 1`,
+    );
+    tournamentId = rows[0]?.tournament_id || null;
+  }
+
+  if (!seasonId && tournamentId) {
+    const { rows } = await pool.query(
+      `SELECT id FROM seasons WHERE tournament_id = $1 ORDER BY number DESC LIMIT 1`,
+      [tournamentId],
+    );
+    seasonId = rows[0]?.id || null;
+  }
+
+  return { tournamentId, seasonId };
+}
+
 export async function uploadPlayerCardAdmin(accountId, body, adminUserId) {
   const account = await findAccountById(accountId);
   if (!account) return null;
@@ -188,19 +238,7 @@ export async function uploadPlayerCardAdmin(accountId, body, adminUserId) {
     throw err;
   }
 
-  let seasonId = body.seasonId || null;
-  let tournamentId = body.tournamentId || null;
-  if (!tournamentId && body.tournamentSlug) {
-    const { rows } = await pool.query(`SELECT id FROM tournaments WHERE slug = $1`, [body.tournamentSlug]);
-    tournamentId = rows[0]?.id || null;
-  }
-  if (!seasonId && tournamentId) {
-    const { rows } = await pool.query(
-      `SELECT id FROM seasons WHERE tournament_id = $1 ORDER BY number DESC LIMIT 1`,
-      [tournamentId],
-    );
-    seasonId = rows[0]?.id || null;
-  }
+  const { seasonId, tournamentId } = await resolveAdminCardSeasonContext(accountId, body);
 
   const { upsertCardAsset } = await import("./paymentService.js");
   const asset = await upsertCardAsset(accountId, {
@@ -212,6 +250,18 @@ export async function uploadPlayerCardAdmin(accountId, body, adminUserId) {
     tournamentId,
     status: body.approve === false ? "pending" : "approved",
   });
+
+  // Backfill season/tournament scope on existing rows when admin re-uploads.
+  if (asset && (tournamentId || seasonId)) {
+    await pool.query(
+      `UPDATE player_card_assets
+       SET tournament_id = COALESCE(tournament_id, $2),
+           season_id = COALESCE(season_id, $3),
+           updated_at = NOW()
+       WHERE id = $1`,
+      [asset.id, tournamentId, seasonId],
+    );
+  }
 
   if (body.approve !== false && asset) {
     await pool.query(
@@ -231,9 +281,9 @@ export async function uploadPlayerCardAdmin(accountId, body, adminUserId) {
 
   const card = await buildCardManifest(account, { tournamentId });
   const cardAssets = await listCardAssetsForAccount(accountId);
-  const { syncPlayerActiveSeasonCardSnapshot } = await import("./cardSnapshotService.js");
-  await syncPlayerActiveSeasonCardSnapshot(accountId, { tournamentId }).catch(() => {});
-  return { asset, card, cardAssets };
+  const { syncPlayerCardSnapshotsAfterAdminChange } = await import("./cardSnapshotService.js");
+  const snapshotSync = await syncPlayerCardSnapshotsAfterAdminChange(accountId, { tournamentId }).catch(() => []);
+  return { asset, card, cardAssets, snapshotSync };
 }
 
 export async function removePlayerCardAdmin(accountId) {
@@ -249,7 +299,9 @@ export async function removePlayerCardAdmin(accountId) {
 
   const card = await buildCardManifest(account);
   const cardAssets = await listCardAssetsForAccount(accountId);
-  return { card, cardAssets };
+  const { syncPlayerCardSnapshotsAfterAdminChange } = await import("./cardSnapshotService.js");
+  const snapshotSync = await syncPlayerCardSnapshotsAfterAdminChange(accountId).catch(() => []);
+  return { card, cardAssets, snapshotSync };
 }
 
 export async function patchPlayerAccountAdmin(id, { adminNotes, displayName, avatarUrl, avatarPortraitCrop }) {

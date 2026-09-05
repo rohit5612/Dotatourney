@@ -6,6 +6,7 @@ import { getPlayerRegistrationById, resolveRegistrationDisplayName } from "./reg
 import { resolveEngineConfigForApproval } from "./tournamentEngineService.js";
 import { upsertSeasonForTournament } from "./seasonUpsert.js";
 import { snapshotSeasonCardsForTournament, syncAllActiveSeasonCardSnapshots, finalizeVaultOnNewSeasonPublish } from "./cardSnapshotService.js";
+import { logError } from "../utils/serverLogger.js";
 import { buildPublicHonorsPayload } from "./bracketHonorsEngine.js";
 import { buildStandings } from "./standingsEngine.js";
 import { parseSeasonLabelFromName, seasonSlugFromLabel } from "../utils/tournamentNaming.js";
@@ -1533,7 +1534,9 @@ export async function publishTournament(tournamentId, adminUserId) {
     }
     await client.query("COMMIT");
     if (row) {
-      await finalizeVaultOnNewSeasonPublish(tournamentId).catch(() => {});
+      await finalizeVaultOnNewSeasonPublish(tournamentId).catch((err) => {
+        logError("cards", "finalizeVaultOnNewSeasonPublish failed", err, { tournamentId });
+      });
     }
     return row || null;
   } catch (error) {
