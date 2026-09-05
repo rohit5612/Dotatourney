@@ -109,6 +109,8 @@ export const playerApi = {
   publicAccount: (slug) => playerRequest(`/player/public/accounts/${encodeURIComponent(slug)}`),
   publicProfile: (slug) => playerRequest(`/public/players/${encodeURIComponent(slug)}`),
   publicCard: (slug) => playerRequest(`/public/players/${encodeURIComponent(slug)}/card`),
+  cardDeck: (slug) => playerRequest(`/public/players/${encodeURIComponent(slug)}/card-deck`),
+  myCardDeck: () => playerRequest("/player/card-deck"),
   checkoutPreview: (slug, payload) =>
     playerRequest(`/player/tournaments/${encodeURIComponent(slug)}/checkout/preview`, {
       method: "POST",

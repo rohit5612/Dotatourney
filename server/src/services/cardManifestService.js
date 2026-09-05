@@ -1,5 +1,7 @@
 import { pool } from "../db/pool.js";
 import { findAccountByBpcId, findAccountBySlug } from "./playerAccountRepository.js";
+import { getActiveSeasonTournamentId, getDisplaySeasonTournamentId } from "./paymentService.js";
+import { parseTournamentDeckTheme } from "../utils/tournamentDeckTheme.js";
 import { demoAccessCardTier, isDemoAccessAccount } from "../utils/demoAccessAccount.js";
 
 const PREMIUM_TIERS = new Set(["player", "gold", "holo"]);
@@ -14,23 +16,14 @@ function seasonBadgeFromSeason(season, tournament) {
 }
 
 async function findBestRegistration(accountId, tournamentId) {
-  if (tournamentId) {
-    const { rows } = await pool.query(
-      `SELECT * FROM player_registrations
-       WHERE player_account_id = $1 AND tournament_id = $2 AND archived_at IS NULL
-       ORDER BY created_at DESC LIMIT 1`,
-      [accountId, tournamentId],
-    );
-    return rows[0] || null;
-  }
+  const resolvedTournamentId = tournamentId || (await getDisplaySeasonTournamentId());
+  if (!resolvedTournamentId) return null;
+
   const { rows } = await pool.query(
     `SELECT * FROM player_registrations
-     WHERE player_account_id = $1 AND archived_at IS NULL
-     ORDER BY CASE COALESCE(NULLIF(TRIM(card_tier), ''), 'default')
-       WHEN 'holo' THEN 0 WHEN 'gold' THEN 1 WHEN 'player' THEN 2 ELSE 3 END,
-       created_at DESC
-     LIMIT 1`,
-    [accountId],
+     WHERE player_account_id = $1 AND tournament_id = $2 AND archived_at IS NULL
+     ORDER BY created_at DESC LIMIT 1`,
+    [accountId, resolvedTournamentId],
   );
   return rows[0] || null;
 }
@@ -47,14 +40,53 @@ async function findActiveSeasonForTournament(tournamentId) {
   return rows[0] || null;
 }
 
-async function findCurrentSeason() {
+async function findActiveSeason() {
   const { rows } = await pool.query(
-    `SELECT * FROM seasons
-     WHERE status IN ('active', 'upcoming')
-     ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, number DESC
-     LIMIT 1`,
+    `SELECT * FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1`,
   );
   return rows[0] || null;
+}
+
+async function findLatestConcludedSeason() {
+  const { rows } = await pool.query(
+    `SELECT * FROM seasons WHERE status = 'concluded' ORDER BY number DESC LIMIT 1`,
+  );
+  return rows[0] || null;
+}
+
+async function resolvePublicDisplaySeasonContext() {
+  const active = await findActiveSeason();
+  if (active) return { season: active, graceDisplay: false };
+  const concluded = await findLatestConcludedSeason();
+  if (concluded) return { season: concluded, graceDisplay: true };
+  const { rows } = await pool.query(
+    `SELECT * FROM seasons WHERE status = 'upcoming' ORDER BY number DESC LIMIT 1`,
+  );
+  return { season: rows[0] || null, graceDisplay: false };
+}
+
+async function findFrozenSnapshotManifest(accountId, seasonId) {
+  const { rows } = await pool.query(
+    `SELECT manifest_json FROM player_season_card_snapshots
+     WHERE player_account_id = $1 AND season_id = $2`,
+    [accountId, seasonId],
+  );
+  return parseManifestJson(rows[0]?.manifest_json);
+}
+
+function manifestForMainDisplay(manifest) {
+  if (!manifest) return null;
+  const badge = manifest.seasonValidity?.badge || manifest.seasonBadge;
+  return {
+    ...manifest,
+    frozenSnapshot: false,
+    seasonValidity: {
+      ...(manifest.seasonValidity || {}),
+      collectionOnly: false,
+      active: true,
+      label: badge ? `Valid for ${badge}` : manifest.seasonValidity?.label || "Season card",
+    },
+  };
 }
 
 async function findTournament(tournamentId) {
@@ -63,10 +95,34 @@ async function findTournament(tournamentId) {
   return rows[0] || null;
 }
 
-async function findCardAsset(accountId, tier) {
+async function findCardAsset(accountId, tier, { tournamentId = null, seasonId = null } = {}) {
   if (!tier || tier === "default") return null;
+
+  if (tournamentId) {
+    const scoped = await pool.query(
+      `SELECT * FROM player_card_assets
+       WHERE player_account_id = $1 AND tier = $2 AND tournament_id = $3
+       LIMIT 1`,
+      [accountId, tier, tournamentId],
+    );
+    if (scoped.rows[0]) return scoped.rows[0];
+  }
+
+  if (seasonId) {
+    const scoped = await pool.query(
+      `SELECT * FROM player_card_assets
+       WHERE player_account_id = $1 AND tier = $2 AND season_id = $3
+       LIMIT 1`,
+      [accountId, tier, seasonId],
+    );
+    if (scoped.rows[0]) return scoped.rows[0];
+  }
+
   const { rows } = await pool.query(
-    `SELECT * FROM player_card_assets WHERE player_account_id = $1 AND tier = $2`,
+    `SELECT * FROM player_card_assets
+     WHERE player_account_id = $1 AND tier = $2
+     ORDER BY updated_at DESC
+     LIMIT 1`,
     [accountId, tier],
   );
   return rows[0] || null;
@@ -106,7 +162,7 @@ function isApprovedCardAsset(asset) {
   return Boolean(manifest?.version && manifest?.template);
 }
 
-function seasonValidityFromContext({ season, tournament, asset }) {
+function seasonValidityFromContext({ season, tournament, asset, collectionOnly = false, graceDisplay = false }) {
   const badge = seasonBadgeFromSeason(season, tournament);
   const validFrom =
     tournament?.registrations_open_at ||
@@ -116,6 +172,14 @@ function seasonValidityFromContext({ season, tournament, asset }) {
     null;
   const revoked = asset?.status === "rejected";
   const seasonEnded = season?.status === "concluded";
+  const active = !collectionOnly && !revoked && (!seasonEnded || graceDisplay);
+  const label = collectionOnly
+    ? badge
+      ? `${badge} · Vault`
+      : "Vault"
+    : badge
+      ? `Valid for ${badge}`
+      : "Season card";
   return {
     badge,
     seasonName: season?.name || tournament?.name || null,
@@ -123,8 +187,9 @@ function seasonValidityFromContext({ season, tournament, asset }) {
     seasonNumber: season?.number ?? null,
     validFrom,
     validUntil: null,
-    active: !revoked && !seasonEnded,
-    label: badge ? `Valid for ${badge}` : "Season card",
+    active,
+    collectionOnly,
+    label,
   };
 }
 
@@ -163,9 +228,10 @@ function buildTemplateCardPayload(tier, account, registration, roles) {
   };
 }
 
-function buildCardPayload(asset, account, registration, roles) {
+function buildCardPayload(asset, account, registration, roles, { freeze = false } = {}) {
   const stored = parseManifestJson(asset?.manifest_json);
   if (stored && Object.keys(stored).length > 0) {
+    if (freeze) return { ...stored };
     return applyAccountPortraitToPayload({ ...stored }, account);
   }
   if (asset?.asset_url) {
@@ -175,6 +241,54 @@ function buildCardPayload(asset, account, registration, roles) {
     ...buildTemplateCardPayload(asset?.tier || "gold", account, registration, roles),
     tagline: asset?.tagline || null,
   };
+}
+
+function freezeManifestVisuals(manifest, { account, asset, tournament, season }) {
+  if (!manifest) return null;
+  const payload = manifest.cardPayload || {};
+  const frozenAvatar =
+    String(payload.avatarUrl || "").trim() ||
+    String(manifest.customAvatarUrl || "").trim() ||
+    String(manifest.avatarUrl || "").trim() ||
+    String(account?.avatar_url || "").trim() ||
+    String(account?.steam_avatar_url || "").trim();
+
+  manifest.avatarUrl = frozenAvatar;
+  manifest.customAvatarUrl = frozenAvatar;
+  manifest.steamAvatarUrl = String(account?.steam_avatar_url || "").trim();
+  manifest.steamAvatar = manifest.steamAvatarUrl || frozenAvatar;
+  manifest.customAvatarCrop =
+    account?.avatar_portrait_crop && typeof account.avatar_portrait_crop === "object"
+      ? account.avatar_portrait_crop
+      : manifest.customAvatarCrop || {};
+  if (manifest.cardPayload && typeof manifest.cardPayload === "object") {
+    manifest.cardPayload = {
+      ...manifest.cardPayload,
+      avatarUrl: frozenAvatar,
+      playerName: manifest.cardPayload.playerName || manifest.displayName,
+    };
+  }
+  manifest.frozenSnapshot = true;
+  manifest.tournamentPresentation = {
+    seasonCardBg: tournament?.season_card_bg || null,
+    seasonCardBadge: tournament?.season_card_badge || null,
+    deckBadgeTheme: parseTournamentDeckTheme(tournament?.season_card_deck_theme),
+    themeKey: season?.theme_key || "emerald",
+    tournamentName: tournament?.name || season?.name || null,
+  };
+  if (asset) {
+    manifest.frozenAsset = {
+      assetUrl: asset.asset_url || "",
+      manifestJson: parseManifestJson(asset.manifest_json),
+      tagline: asset.tagline || "",
+      tier: asset.tier,
+      seasonId: asset.season_id || null,
+      tournamentId: asset.tournament_id || null,
+    };
+    manifest.customImage = asset.asset_url || manifest.customImage || null;
+    manifest.tagline = asset.tagline || manifest.tagline || null;
+  }
+  return manifest;
 }
 
 /**
@@ -188,6 +302,7 @@ export async function buildCardManifest(accountRow, options = {}) {
   let season = options.season || null;
   let tournament = null;
   let tournamentId = options.tournamentId || null;
+  let graceDisplay = Boolean(options.graceDisplay);
 
   const registration =
     options.registration ||
@@ -197,13 +312,18 @@ export async function buildCardManifest(accountRow, options = {}) {
     tournamentId = registration.tournament_id;
     season = await findActiveSeasonForTournament(tournamentId);
   }
-  if (!season) {
-    season = await findCurrentSeason();
-    if (season?.tournament_id) tournamentId = season.tournament_id;
+  if (!season && tournamentId) {
+    season = await findActiveSeasonForTournament(tournamentId);
   }
   if (!season && options.seasonSlug) {
     const { rows } = await pool.query(`SELECT * FROM seasons WHERE slug = $1`, [options.seasonSlug]);
     season = rows[0] || null;
+    if (season?.tournament_id) tournamentId = season.tournament_id;
+  }
+  if (!season && !options.freezeSnapshot) {
+    const displayCtx = await resolvePublicDisplaySeasonContext();
+    season = displayCtx.season;
+    graceDisplay = displayCtx.graceDisplay;
     if (season?.tournament_id) tournamentId = season.tournament_id;
   }
 
@@ -211,18 +331,23 @@ export async function buildCardManifest(accountRow, options = {}) {
     tournament = await findTournament(tournamentId);
   }
 
-  const registrationTier =
-    registration?.card_tier ||
-    options.cardTier ||
-    "default";
+  const registrationTier = registration?.card_tier || options.cardTier || "default";
   const purchasedTier =
-    (isDemoAccessAccount(account) ? demoAccessCardTier(account) : null) ||
-    registrationTier;
+    (isDemoAccessAccount(account) ? demoAccessCardTier(account) : null) || registrationTier;
   const adminOverride = String(account.card_tier_override || "").trim() || null;
-  const effectiveTier = adminOverride || purchasedTier || "default";
-  const asset = PREMIUM_TIERS.has(effectiveTier)
-    ? await findCardAsset(account.id, effectiveTier)
-    : null;
+  const freezeSnapshot = Boolean(options.freezeSnapshot);
+  const effectiveTier = freezeSnapshot
+    ? options.cardTier || purchasedTier || "default"
+    : adminOverride || purchasedTier || "default";
+  const asset =
+    options.assetOverride !== undefined
+      ? options.assetOverride
+      : PREMIUM_TIERS.has(effectiveTier)
+        ? await findCardAsset(account.id, effectiveTier, {
+            tournamentId,
+            seasonId: season?.id || null,
+          })
+        : null;
   const assetApproved = isApprovedCardAsset(asset);
   const cardPending = PREMIUM_TIERS.has(effectiveTier) && !assetApproved;
   const usesPremiumTemplate = PREMIUM_TIERS.has(effectiveTier);
@@ -230,9 +355,15 @@ export async function buildCardManifest(accountRow, options = {}) {
   const renderTier = usesPremiumTemplate ? effectiveTier : "default";
   const roles = parseRoles(registration, account);
   const primaryRole = roles[0] || "";
-  const seasonValidity = seasonValidityFromContext({ season, tournament, asset });
+  const seasonValidity = seasonValidityFromContext({
+    season,
+    tournament,
+    asset,
+    collectionOnly: Boolean(options.collectionOnly || options.historicalContext),
+    graceDisplay,
+  });
   const cardPayload = assetApproved
-    ? buildCardPayload(asset, account, registration, roles)
+    ? buildCardPayload(asset, account, registration, roles, { freeze: freezeSnapshot })
     : usesPremiumTemplate
       ? buildTemplateCardPayload(effectiveTier, account, registration, roles)
       : null;
@@ -240,7 +371,7 @@ export async function buildCardManifest(accountRow, options = {}) {
   const manifest = {
     tier: effectiveTier,
     purchasedTier,
-    tierOverride: adminOverride,
+    tierOverride: freezeSnapshot ? null : adminOverride,
     renderTier,
     template: usesPremiumTemplate
       ? parseManifestJson(asset?.manifest_json)?.template || effectiveTier
@@ -271,19 +402,49 @@ export async function buildCardManifest(accountRow, options = {}) {
     cardPayload,
   };
 
+  if (!manifest) return null;
+
+  if (freezeSnapshot) {
+    manifest.cardPending = false;
+    return freezeManifestVisuals(manifest, { account, asset, tournament, season });
+  }
+
   return manifest;
+}
+
+/**
+ * Public-facing card for profiles, community, and overlays.
+ * Keeps the latest concluded season visible until a newer season is published.
+ */
+export async function buildPublicDisplayCardManifest(accountRow, options = {}) {
+  const account = accountRow?.id ? accountRow : await findAccountBySlug(accountRow);
+  if (!account) return null;
+
+  const displayCtx = await resolvePublicDisplaySeasonContext();
+  if (displayCtx.graceDisplay && displayCtx.season && !options.freezeSnapshot) {
+    const frozen = await findFrozenSnapshotManifest(account.id, displayCtx.season.id);
+    const fromSnapshot = manifestForMainDisplay(frozen);
+    if (fromSnapshot) return fromSnapshot;
+  }
+
+  return buildCardManifest(account, {
+    ...options,
+    season: options.season || displayCtx.season,
+    tournamentId: options.tournamentId || displayCtx.season?.tournament_id || null,
+    graceDisplay: options.graceDisplay ?? displayCtx.graceDisplay,
+  });
 }
 
 export async function buildCardManifestBySlug(slug, options = {}) {
   const account = await findAccountBySlug(slug);
   if (!account) return null;
-  return buildCardManifest(account, options);
+  return buildPublicDisplayCardManifest(account, options);
 }
 
 export async function buildCardManifestByBpcId(bpcId, options = {}) {
   const account = await findAccountByBpcId(bpcId);
   if (!account) return null;
-  return buildCardManifest(account, options);
+  return buildPublicDisplayCardManifest(account, options);
 }
 
 export async function listCardAssetsForAccount(accountId) {

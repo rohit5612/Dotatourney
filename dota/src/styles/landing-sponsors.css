@@ -12,15 +12,15 @@
   padding: clamp(4rem, 9vh, 6rem) 0 clamp(4rem, 9vh, 6rem);
   overflow: hidden;
   background:
-    radial-gradient(ellipse 95% 70% at 50% -8%, rgb(16 185 129 / 0.22), transparent 58%),
-    radial-gradient(ellipse 70% 55% at 12% 72%, rgb(6 95 70 / 0.35), transparent 62%),
-    radial-gradient(ellipse 65% 50% at 88% 38%, rgb(13 148 136 / 0.2), transparent 65%),
+    radial-gradient(ellipse 95% 70% at 50% -8%, rgb(240 200 72 / 0.22), transparent 58%),
+    radial-gradient(ellipse 70% 55% at 12% 72%, rgb(184 134 11 / 0.35), transparent 62%),
+    radial-gradient(ellipse 65% 50% at 88% 38%, rgb(229 184 42 / 0.2), transparent 65%),
     linear-gradient(
       180deg,
-      rgb(3 14 11) 0%,
-      rgb(4 18 14) 38%,
-      rgb(5 22 17) 68%,
-      rgb(3 12 10) 100%
+      rgb(12 10 6) 0%,
+      rgb(16 12 6) 38%,
+      rgb(18 14 7) 68%,
+      rgb(10 8 5) 100%
     );
 }
 
@@ -42,7 +42,7 @@
       transparent 100%
     ),
     radial-gradient(ellipse 85% 60% at 50% 0%, rgb(59 130 246 / 0.14), transparent 70%),
-    radial-gradient(ellipse 85% 60% at 50% 0%, rgb(16 185 129 / 0.1), transparent 70%);
+    radial-gradient(ellipse 85% 60% at 50% 0%, rgb(240 200 72 / 0.1), transparent 70%);
 }
 
 .landing-sponsors__glow-orb {
@@ -59,7 +59,7 @@
 .landing-sponsors__glow-orb--left {
   top: 14%;
   left: -8%;
-  background: rgb(5 150 105 / 0.5);
+  background: rgb(229 184 42 / 0.5);
 }
 
 .landing-sponsors__glow-orb--right {
@@ -96,8 +96,8 @@
   inset: 0;
   opacity: 0.38;
   background-image:
-    linear-gradient(rgb(52 211 153 / 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(52 211 153 / 0.04) 1px, transparent 1px);
+    linear-gradient(rgb(240 200 72 / 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(240 200 72 / 0.04) 1px, transparent 1px);
   background-size: 48px 48px;
   mask-image: linear-gradient(180deg, black 0%, transparent 92%);
 }
@@ -134,7 +134,7 @@
   font-weight: 650;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgb(110 231 183 / 0.92);
+  color: rgb(255 233 138 / 0.92);
 }
 
 .landing-sponsors__title {
@@ -152,7 +152,7 @@
   max-width: 34rem;
   font-size: clamp(0.9375rem, 1.8vw, 1.0625rem);
   line-height: 1.55;
-  color: rgb(167 243 208 / 0.72);
+  color: rgb(255 233 138 / 0.72);
 }
 
 .landing-sponsors__divider {
@@ -163,9 +163,9 @@
   background: linear-gradient(
     90deg,
     transparent,
-    rgb(52 211 153 / 0.45) 35%,
-    rgb(110 231 183 / 0.9) 50%,
-    rgb(52 211 153 / 0.45) 65%,
+    rgb(240 200 72 / 0.45) 35%,
+    rgb(255 233 138 / 0.9) 50%,
+    rgb(240 200 72 / 0.45) 65%,
     transparent
   );
   opacity: 0;
@@ -216,10 +216,10 @@
 
 @keyframes landing-sponsors-title-glow {
   from {
-    text-shadow: 0 0 24px rgb(110 231 183 / 0.12);
+    text-shadow: 0 0 24px rgb(255 233 138 / 0.12);
   }
   to {
-    text-shadow: 0 0 36px rgb(110 231 183 / 0.28), 0 0 64px rgb(52 211 153 / 0.12);
+    text-shadow: 0 0 36px rgb(255 233 138 / 0.28), 0 0 64px rgb(240 200 72 / 0.12);
   }
 }
 

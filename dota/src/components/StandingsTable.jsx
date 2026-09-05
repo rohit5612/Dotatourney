@@ -115,7 +115,7 @@ export function StandingsTable({
               <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
                 {showRank ? <th className="p-2">Rank</th> : null}
                 <th className="p-2">Team</th>
-                <th className="p-2 text-emerald-700 dark:text-emerald-400">W</th>
+                <th className="p-2 text-primary">W</th>
                 <th className="p-2 text-red-700 dark:text-red-400">L</th>
                 {showWinPct ? <th className="p-2">Win%</th> : null}
                 {showStatus ? <th className="p-2">Status</th> : null}
@@ -151,7 +151,7 @@ export function StandingsTable({
       <div className="border-b border-border px-3 py-2 font-medium">{title}</div>
       <div className="grid grid-cols-[1fr_3rem_3rem_3rem] gap-2 px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground">
         <span>Team</span>
-        <span className="text-emerald-700 dark:text-emerald-400">W</span>
+        <span className="text-primary">W</span>
         <span className="text-red-700 dark:text-red-400">L</span>
         <span>P</span>
       </div>

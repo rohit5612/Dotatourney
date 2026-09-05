@@ -23,7 +23,7 @@
   position: absolute;
   inset: -20% -10%;
   background:
-    radial-gradient(ellipse 90% 55% at 12% 8%, rgb(94 234 212 / 0.07), transparent 58%),
+    radial-gradient(ellipse 90% 55% at 12% 8%, rgb(240 200 72 / 0.07), transparent 58%),
     radial-gradient(ellipse 75% 50% at 88% 18%, rgb(233 168 74 / 0.09), transparent 55%),
     radial-gradient(ellipse 85% 60% at 50% 42%, rgb(59 130 246 / 0.05), transparent 62%),
     radial-gradient(ellipse 70% 45% at 28% 72%, rgb(139 92 246 / 0.06), transparent 58%),
@@ -126,7 +126,7 @@
   inset: 0;
   background:
     radial-gradient(ellipse 90% 70% at 50% 110%, rgb(233 168 74 / 0.2), transparent 62%),
-    radial-gradient(ellipse 55% 45% at 18% 95%, rgb(94 234 212 / 0.12), transparent 58%);
+    radial-gradient(ellipse 55% 45% at 18% 95%, rgb(240 200 72 / 0.12), transparent 58%);
   mix-blend-mode: screen;
   filter: blur(8px);
 }
@@ -262,7 +262,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse 90% 65% at 50% 100%, rgb(15 118 110 / 0.1), transparent 58%);
+  background: radial-gradient(ellipse 90% 65% at 50% 100%, rgb(184 134 11 / 0.1), transparent 58%);
 }
 
 /* Discord top: glass teal veil */
@@ -284,7 +284,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse 70% 80% at 50% 0%, rgb(94 234 212 / 0.08), transparent 65%);
+  background: radial-gradient(ellipse 70% 80% at 50% 0%, rgb(240 200 72 / 0.08), transparent 65%);
 }
 
 /* Footer top: mist fade (no harsh border) */
@@ -408,7 +408,7 @@
   box-shadow:
     0 1px 0 rgb(255 255 255 / 0.06) inset,
     0 24px 56px rgb(0 0 0 / 0.4),
-    0 0 80px rgb(94 234 212 / 0.06);
+    0 0 80px rgb(240 200 72 / 0.06);
 }
 
 .landing-discord__panel::before {
@@ -416,7 +416,7 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(ellipse 80% 70% at 50% -20%, rgb(94 234 212 / 0.1), transparent 55%);
+  background: radial-gradient(ellipse 80% 70% at 50% -20%, rgb(240 200 72 / 0.1), transparent 55%);
 }
 
 .landing-discord__panel > * {

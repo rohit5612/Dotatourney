@@ -231,6 +231,8 @@ export async function uploadPlayerCardAdmin(accountId, body, adminUserId) {
 
   const card = await buildCardManifest(account, { tournamentId });
   const cardAssets = await listCardAssetsForAccount(accountId);
+  const { syncPlayerActiveSeasonCardSnapshot } = await import("./cardSnapshotService.js");
+  await syncPlayerActiveSeasonCardSnapshot(accountId, { tournamentId }).catch(() => {});
   return { asset, card, cardAssets };
 }
 
@@ -274,5 +276,9 @@ export async function patchPlayerAccountAdmin(id, { adminNotes, displayName, ava
     `UPDATE player_accounts SET ${fields.join(", ")}, updated_at = NOW() WHERE id = $1 RETURNING *`,
     values,
   );
+  if (rows[0] && (avatarUrl !== undefined || avatarPortraitCrop !== undefined)) {
+    const { syncPlayerActiveSeasonCardSnapshot } = await import("./cardSnapshotService.js");
+    await syncPlayerActiveSeasonCardSnapshot(id).catch(() => {});
+  }
   return rows[0] || null;
 }

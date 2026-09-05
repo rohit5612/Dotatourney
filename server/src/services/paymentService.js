@@ -196,6 +196,16 @@ export async function getActiveSeasonTournamentId() {
   return rows[0]?.tournament_id || null;
 }
 
+/** Active season tournament, or latest concluded season while waiting for the next publish. */
+export async function getDisplaySeasonTournamentId() {
+  const activeId = await getActiveSeasonTournamentId();
+  if (activeId) return activeId;
+  const { rows } = await pool.query(
+    `SELECT tournament_id FROM seasons WHERE status = 'concluded' ORDER BY number DESC LIMIT 1`,
+  );
+  return rows[0]?.tournament_id || null;
+}
+
 async function loadPaidActiveSeasonRegistration(client, playerAccountId) {
   const tournamentId = await getActiveSeasonTournamentId();
   if (!tournamentId) return null;
@@ -837,6 +847,11 @@ export async function fulfillPaidCheckout({
         tournamentId: order.tournament_id,
       });
     }
+
+    const { syncPlayerActiveSeasonCardSnapshot } = await import("./cardSnapshotService.js");
+    await syncPlayerActiveSeasonCardSnapshot(order.player_account_id, {
+      tournamentId: order.tournament_id,
+    }).catch(() => {});
 
     try {
       const { rows: tourRows } = await pool.query(`SELECT name FROM tournaments WHERE id = $1`, [order.tournament_id]);

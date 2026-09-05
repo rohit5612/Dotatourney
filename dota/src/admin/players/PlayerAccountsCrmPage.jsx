@@ -622,7 +622,7 @@ function PlayerAccountDetailModal({
                   <ul className="player-crm__list player-crm__list--rows mt-3">
                     {detail.ledger.slice(0, 8).map((entry) => (
                       <li key={entry.id}>
-                        <span className={entry.delta >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}>
+                        <span className={entry.delta >= 0 ? "text-primary" : "text-destructive"}>
                           {entry.delta >= 0 ? "+" : ""}
                           {entry.delta}
                         </span>

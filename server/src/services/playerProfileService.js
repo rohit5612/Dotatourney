@@ -7,7 +7,8 @@ import {
   publicSteamOnlyProfile,
   getCoinBalance,
 } from "./playerAccountRepository.js";
-import { buildCardManifest } from "./cardManifestService.js";
+import { buildPublicDisplayCardManifest } from "./cardManifestService.js";
+import { getDisplaySeasonTournamentId } from "./paymentService.js";
 import { getOrCreateCommerceConfig, publicCommerceConfig } from "./commerceConfigRepository.js";
 import { getPlayerMatchAppearances, getPlayerMatchSchedule } from "./matchSubstitutionService.js";
 import { findActivePlayerTeamOnTournament } from "./rosterMembershipService.js";
@@ -73,7 +74,7 @@ export async function getPublicPlayerProfile(slug) {
   const account = await findAccountBySlug(slug);
   if (!account) return null;
 
-  const card = await buildCardManifest(account);
+  const card = await buildPublicDisplayCardManifest(account);
 
   const { rows: participations } = await pool.query(
     `SELECT sp.*, s.slug AS season_slug, s.name AS season_name, s.number AS season_number, s.status AS season_status
@@ -168,15 +169,35 @@ function cardTierRankSql(column = "card_tier") {
   END`;
 }
 
-export async function getCommunityDirectory({ search = "", tier = "", limit = 48, offset = 0 } = {}) {
-  const params = [];
-  const lateralJoin = `LEFT JOIN LATERAL (
+function activeSeasonRegistrationLateral(activeTournamentId, paramIndex) {
+  if (!activeTournamentId) {
+    return {
+      sql: `LEFT JOIN LATERAL (
+       SELECT NULL::text AS card_tier
+     ) best_card ON TRUE`,
+      usesParam: false,
+    };
+  }
+  return {
+    sql: `LEFT JOIN LATERAL (
        SELECT pr.card_tier
        FROM player_registrations pr
-       WHERE pr.player_account_id = pa.id AND pr.archived_at IS NULL
-       ORDER BY ${cardTierRankSql("pr.card_tier")}, pr.created_at DESC
+       WHERE pr.player_account_id = pa.id
+         AND pr.tournament_id = $${paramIndex}
+         AND pr.archived_at IS NULL
+       ORDER BY pr.created_at DESC
        LIMIT 1
-     ) best_card ON TRUE`;
+     ) best_card ON TRUE`,
+    usesParam: true,
+  };
+}
+
+export async function getCommunityDirectory({ search = "", tier = "", limit = 48, offset = 0 } = {}) {
+  const activeTournamentId = await getDisplaySeasonTournamentId();
+  const params = [];
+  if (activeTournamentId) params.push(activeTournamentId);
+  const lateral = activeSeasonRegistrationLateral(activeTournamentId, 1);
+  const lateralJoin = lateral.sql;
   const effectiveTierExpr = `COALESCE(NULLIF(TRIM(pa.card_tier_override), ''), best_card.card_tier, 'default')`;
 
   let where = `WHERE pa.email_verified_at IS NOT NULL
@@ -219,8 +240,11 @@ export async function getCommunityDirectory({ search = "", tier = "", limit = 48
   const players = [];
   for (const account of rows) {
     const registrationTier = account.directory_card_tier || "default";
-    const card = await buildCardManifest(account, {
-      registration: { card_tier: registrationTier },
+    const card = await buildPublicDisplayCardManifest(account, {
+      registration: {
+        card_tier: registrationTier,
+        tournament_id: activeTournamentId,
+      },
     });
     const recognitions = recognitionIndex.get(String(account.id)) || [];
     players.push({
@@ -241,14 +265,11 @@ const STEAM_ID64_BASE = 76561197960265728n;
 
 /** All community-directory players for overlay asset export (no pagination). */
 export async function listCommunityPlayersForExport({ steam32Id = null } = {}) {
+  const activeTournamentId = await getDisplaySeasonTournamentId();
   const params = [];
-  const lateralJoin = `LEFT JOIN LATERAL (
-       SELECT pr.card_tier
-       FROM player_registrations pr
-       WHERE pr.player_account_id = pa.id AND pr.archived_at IS NULL
-       ORDER BY ${cardTierRankSql("pr.card_tier")}, pr.created_at DESC
-       LIMIT 1
-     ) best_card ON TRUE`;
+  if (activeTournamentId) params.push(activeTournamentId);
+  const lateral = activeSeasonRegistrationLateral(activeTournamentId, 1);
+  const lateralJoin = lateral.sql;
   const effectiveTierExpr = `COALESCE(NULLIF(TRIM(pa.card_tier_override), ''), best_card.card_tier, 'default')`;
 
   let where = `WHERE pa.email_verified_at IS NOT NULL
@@ -274,8 +295,11 @@ export async function listCommunityPlayersForExport({ steam32Id = null } = {}) {
   const players = [];
   for (const account of rows) {
     const registrationTier = account.directory_card_tier || "default";
-    const card = await buildCardManifest(account, {
-      registration: { card_tier: registrationTier },
+    const card = await buildPublicDisplayCardManifest(account, {
+      registration: {
+        card_tier: registrationTier,
+        tournament_id: activeTournamentId,
+      },
     });
     const steam32 = steam64ToSteam32(account.steam_id);
     if (steam32 == null) continue;

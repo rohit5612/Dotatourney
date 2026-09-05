@@ -150,6 +150,13 @@ const tournamentSchema = z.object({
   googleSheetTabName: z.string().optional().default(""),
   seasonCardBg: z.string().max(2_500_000).optional().default(""),
   seasonCardBadge: z.string().max(16).optional().default(""),
+  seasonCardDeckTheme: z
+    .object({
+      badgeBackground: z.string().max(16).optional().default(""),
+      badgeText: z.string().max(16).optional().default(""),
+    })
+    .optional()
+    .default({ badgeBackground: "", badgeText: "" }),
   registrationsOpen: z.boolean().optional().default(false),
   registrationCap: z.union([z.number().int().min(1).max(9999), z.null()]).optional(),
     tournamentHonors: z

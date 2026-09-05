@@ -83,7 +83,7 @@
 }
 
 .season-admin__status--active {
-  color: #047857;
+  color: var(--primary);
   background: rgba(16, 185, 129, 0.14);
 }
 

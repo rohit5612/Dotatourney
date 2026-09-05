@@ -67,8 +67,29 @@ function canCancelRequest(startAt) {
   return Date.now() < cancelDeadline(startAt).getTime();
 }
 
-function formatStageLabel(match) {
-  return formatPublicMatchStageLabel(match);
+function formatStageLabel(match, allMatches = null) {
+  return formatPublicMatchStageLabel(match, allMatches);
+}
+
+async function loadTournamentMatchContexts(tournamentIds) {
+  const contexts = new Map();
+  const uniqueIds = [...new Set((tournamentIds || []).filter(Boolean))];
+  if (!uniqueIds.length) return contexts;
+
+  const { rows } = await pool.query(
+    `SELECT tournament_id, stage_key, round_index, match_index, meta
+     FROM matches
+     WHERE tournament_id = ANY($1::uuid[])`,
+    [uniqueIds],
+  );
+
+  for (const row of rows) {
+    const key = String(row.tournament_id);
+    const bucket = contexts.get(key) || [];
+    bucket.push(row);
+    contexts.set(key, bucket);
+  }
+  return contexts;
 }
 
 function getOpponentTeamName(match, teamName) {
@@ -232,7 +253,7 @@ async function buildMatchPayload(matchRow, playerAccountId, teamName, { isSubsti
   return {
     id: matchRow.id,
     stageKey: matchRow.stage_key,
-    stageLabel: formatStageLabel(matchRow),
+    stageLabel: formatStageLabel(matchRow, null),
     roundIndex: matchRow.round_index,
     matchIndex: matchRow.match_index,
     team1: matchRow.team1,
@@ -1018,6 +1039,8 @@ export async function getPlayerMatchAppearances(playerAccountId) {
     [playerAccountId],
   );
 
+  const tournamentContexts = await loadTournamentMatchContexts(rows.map((row) => row.tournament_id));
+
   return rows.map((row) => {
     let meta = {};
     if (row.meta && typeof row.meta === "object") meta = row.meta;
@@ -1044,6 +1067,7 @@ export async function getPlayerMatchAppearances(playerAccountId) {
     const appearanceLabel = wasReplaced ? "Replaced" : playedAsSub ? "Subbed in" : "Played";
     const playerTeam = row.team_name || "";
     const won = winner && playerTeam ? winner.toLowerCase() === playerTeam.toLowerCase() : null;
+    const tournamentMatches = tournamentContexts.get(String(row.tournament_id)) || null;
 
     return {
       matchId: row.match_id,
@@ -1054,7 +1078,7 @@ export async function getPlayerMatchAppearances(playerAccountId) {
       team1: row.team1,
       team2: row.team2,
       stageKey: row.stage_key,
-      stageLabel: formatStageLabel(row),
+      stageLabel: formatStageLabel(row, tournamentMatches),
       roundIndex: row.round_index,
       matchIndex: row.match_index,
       startAt: row.start_at,

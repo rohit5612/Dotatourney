@@ -56,6 +56,7 @@ import {
   getPlayerDashboardHistory,
   getUpcomingTournamentsForPlayer,
 } from "../services/playerProfileService.js";
+import { buildPlayerCardDeck } from "../services/cardDeckService.js";
 import {
   createSubstitutionRequest,
   cancelSubstitutionRequest,
@@ -620,6 +621,16 @@ router.get("/card-upgrade/eligibility", requirePlayer, async (req, res, next) =>
   try {
     const payload = await getUpgradeEligibility(req.playerAccount);
     res.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/card-deck", requirePlayer, async (req, res, next) => {
+  try {
+    const deck = await buildPlayerCardDeck(req.playerAccount);
+    if (!deck) return res.status(404).json({ message: "Player not found" });
+    res.json(deck);
   } catch (error) {
     next(error);
   }

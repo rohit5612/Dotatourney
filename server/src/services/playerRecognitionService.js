@@ -16,8 +16,8 @@ export function stageLabelFromPlacement(placement) {
   return "Group Stage";
 }
 
-function formatStageLabel(match) {
-  return formatPublicMatchStageLabel(match);
+function formatStageLabel(match, allMatches = null) {
+  return formatPublicMatchStageLabel(match, allMatches);
 }
 
 function parseMatchMeta(raw) {
@@ -65,14 +65,14 @@ function parseJsonField(raw) {
   return null;
 }
 
-async function loadConcludedSeasonHonors() {
+async function loadSeasonsForRecognition() {
   const { rows } = await pool.query(
-    `SELECT s.number AS season_number, s.slug AS season_slug, s.name AS season_name,
+    `SELECT s.number AS season_number, s.slug AS season_slug, s.name AS season_name, s.status,
             s.snapshot, s.trophy_engraving,
             t.id AS tournament_id, t.tournament_honors, t.format, t.season_card_badge
      FROM seasons s
      JOIN tournaments t ON t.id = s.tournament_id
-     WHERE s.status = 'concluded'
+     WHERE s.status IN ('active', 'concluded')
      ORDER BY s.number ASC`,
   );
   return rows;
@@ -105,17 +105,42 @@ function resolveSeasonRecognitionContext(season, matchRows) {
   const honorsFromMatches = buildPublicHonorsPayload(matchRows, season.format, honorsRaw);
   const snapshotHonors = snapshot?.honors;
   const honors =
-    snapshotHonors?.podiumTeams?.length || snapshotHonors?.champion?.teamName
+    season.status === "concluded" && (snapshotHonors?.podiumTeams?.length || snapshotHonors?.champion?.teamName)
       ? { ...honorsFromMatches, ...snapshotHonors }
       : honorsFromMatches;
   const mvp = honorsRaw?.mvp || snapshotHonors?.mvp || trophyEngraving?.mvp || honors.mvp || null;
-  return { honors, mvp, snapshotTeams: snapshot?.teams || null };
+  return {
+    honors,
+    mvp,
+    snapshotTeams: season.status === "concluded" ? snapshot?.teams || null : null,
+  };
 }
 
 async function resolveSeasonTeams(season, snapshotTeams) {
-  if (snapshotTeams?.length) return snapshotTeams;
+  if (season.status === "concluded" && snapshotTeams?.length) return snapshotTeams;
   const approvedRoster = await getApprovedRosterSnapshot(season.tournament_id);
   return buildTeamsForPublicDisplay(approvedRoster);
+}
+
+async function loadTournamentMatchContexts(tournamentIds) {
+  const contexts = new Map();
+  const uniqueIds = [...new Set((tournamentIds || []).filter(Boolean))];
+  if (!uniqueIds.length) return contexts;
+
+  const { rows } = await pool.query(
+    `SELECT tournament_id, stage_key, round_index, match_index, meta
+     FROM matches
+     WHERE tournament_id = ANY($1::uuid[])`,
+    [uniqueIds],
+  );
+
+  for (const row of rows) {
+    const key = String(row.tournament_id);
+    const bucket = contexts.get(key) || [];
+    bucket.push(row);
+    contexts.set(key, bucket);
+  }
+  return contexts;
 }
 
 function rosterPlayersMatchingMvp(teams, mvp) {
@@ -248,7 +273,7 @@ export function applySeasonRecognitions(index, season, { honors, teams, mvp }) {
 /** Map player account id → season honor badges (S1•MVP, S1•Champion, S2•MVP, …). */
 export async function buildGlobalRecognitionIndex() {
   const index = new Map();
-  const seasons = await loadConcludedSeasonHonors();
+  const seasons = await loadSeasonsForRecognition();
 
   for (const season of seasons) {
     const { rows: matchRows } = await pool.query(
@@ -256,6 +281,9 @@ export async function buildGlobalRecognitionIndex() {
       [season.tournament_id],
     );
     const { honors, mvp, snapshotTeams } = resolveSeasonRecognitionContext(season, matchRows);
+    const finalComplete = season.status === "concluded" || honors.finalFinished;
+    if (!finalComplete) continue;
+
     const teams = await resolveSeasonTeams(season, snapshotTeams);
     applySeasonRecognitions(index, season, { honors, teams, mvp });
   }
@@ -366,6 +394,8 @@ export async function buildPublicMatchHistory(playerAccountId) {
     [playerAccountId],
   );
 
+  const tournamentContexts = await loadTournamentMatchContexts(rows.map((row) => row.tournament_id));
+
   return rows
     .filter((row) => {
       const meta = parseMatchMeta(row.meta);
@@ -392,6 +422,7 @@ export async function buildPublicMatchHistory(playerAccountId) {
         winner && playerTeam
           ? winner.toLowerCase() === playerTeam.toLowerCase()
           : null;
+      const tournamentMatches = tournamentContexts.get(String(row.tournament_id)) || null;
 
       return {
         matchId: row.match_id,
@@ -404,7 +435,7 @@ export async function buildPublicMatchHistory(playerAccountId) {
         team1: row.team1,
         team2: row.team2,
         stageKey: row.stage_key,
-        stageLabel: formatStageLabel(row),
+        stageLabel: formatStageLabel(row, tournamentMatches),
         roundIndex: row.round_index,
         matchIndex: row.match_index,
         startAt: row.start_at,

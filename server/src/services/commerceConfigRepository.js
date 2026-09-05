@@ -143,5 +143,12 @@ export async function updateCardAssetStatus(assetId, status) {
     `UPDATE player_card_assets SET status = $2, updated_at = NOW() WHERE id = $1 RETURNING *`,
     [assetId, status],
   );
-  return rows[0] || null;
+  const asset = rows[0] || null;
+  if (asset?.player_account_id) {
+    const { syncPlayerActiveSeasonCardSnapshot } = await import("./cardSnapshotService.js");
+    await syncPlayerActiveSeasonCardSnapshot(asset.player_account_id, {
+      tournamentId: asset.tournament_id,
+    }).catch(() => {});
+  }
+  return asset;
 }

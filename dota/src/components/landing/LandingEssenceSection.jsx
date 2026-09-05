@@ -90,7 +90,7 @@ function RegistrationStepIcon({ stepId }) {
     <svg viewBox="0 0 48 48" className="landing-circuit__step-svg" aria-hidden>
       <rect x="10" y="8" width="28" height="32" rx="4" fill="none" stroke="currentColor" strokeWidth="2" />
       <path d="M16 18h16M16 24h11M16 30h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.55" />
-      <circle cx="34" cy="32" r="9" fill="rgb(52 211 153)" />
+      <circle cx="34" cy="32" r="9" fill="rgb(240 200 72)" />
       <path d="M31 32l2 2 5-5" fill="none" stroke="rgb(4 8 11)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
@@ -108,7 +108,7 @@ function PillarVisual({ type }) {
             width="14"
             height={h}
             rx="3"
-            fill={`rgb(52 211 153 / ${0.28 + i * 0.14})`}
+            fill={`rgb(240 200 72 / ${0.28 + i * 0.14})`}
           />
         ))}
         <path d="M8 48h104" stroke="rgb(255 255 255 / 0.2)" strokeWidth="1.5" strokeLinecap="round" />
@@ -131,10 +131,10 @@ function PillarVisual({ type }) {
   if (type === "snake") {
     return (
       <svg viewBox="0 0 120 56" className="landing-circuit__viz" aria-hidden>
-        <text x="18" y="14" fill="rgb(167 243 208 / 0.8)" fontSize="8" fontWeight="700">
+        <text x="18" y="14" fill="rgb(255 233 138 / 0.8)" fontSize="8" fontWeight="700">
           CAP A
         </text>
-        <text x="88" y="14" fill="rgb(167 243 208 / 0.8)" fontSize="8" fontWeight="700">
+        <text x="88" y="14" fill="rgb(255 233 138 / 0.8)" fontSize="8" fontWeight="700">
           CAP B
         </text>
         {[
@@ -146,8 +146,8 @@ function PillarVisual({ type }) {
           [102, 48, "6"],
         ].map(([x, y, n]) => (
           <g key={n}>
-            <circle cx={x} cy={y} r="7" fill="rgb(6 14 18)" stroke="rgb(110 231 183 / 0.7)" strokeWidth="1.5" />
-            <text x={x} y={y + 3} textAnchor="middle" fill="rgb(167 243 208)" fontSize="7" fontWeight="700">
+            <circle cx={x} cy={y} r="7" fill="rgb(6 14 18)" stroke="rgb(255 233 138 / 0.7)" strokeWidth="1.5" />
+            <text x={x} y={y + 3} textAnchor="middle" fill="rgb(255 233 138)" fontSize="7" fontWeight="700">
               {n}
             </text>
           </g>
@@ -169,8 +169,8 @@ function PillarVisual({ type }) {
         <path d="M12 40h96" stroke="rgb(255 255 255 / 0.15)" strokeWidth="2" strokeLinecap="round" />
         {[20, 44, 68, 92, 108].map((x, i) => (
           <g key={x}>
-            <circle cx={x} cy="40" r={i === 2 ? 6 : 4} fill={i === 2 ? "rgb(52 211 153)" : "rgb(255 255 255 / 0.35)"} />
-            <rect x={x - 8} y={22 - i * 2} width="16" height={10 + i * 2} rx="2" fill={`rgb(52 211 153 / ${0.12 + i * 0.08})`} />
+            <circle cx={x} cy="40" r={i === 2 ? 6 : 4} fill={i === 2 ? "rgb(240 200 72)" : "rgb(255 255 255 / 0.35)"} />
+            <rect x={x - 8} y={22 - i * 2} width="16" height={10 + i * 2} rx="2" fill={`rgb(240 200 72 / ${0.12 + i * 0.08})`} />
           </g>
         ))}
       </svg>
@@ -184,8 +184,8 @@ function PillarVisual({ type }) {
         <text x="34" y="31" textAnchor="middle" fill="rgb(251 191 36)" fontSize="8" fontWeight="700">
           CORE
         </text>
-        <rect x="68" y="20" width="36" height="22" rx="6" fill="rgb(52 211 153 / 0.18)" stroke="rgb(52 211 153 / 0.55)" strokeWidth="1.5" />
-        <text x="86" y="34" textAnchor="middle" fill="rgb(110 231 183)" fontSize="8" fontWeight="700">
+        <rect x="68" y="20" width="36" height="22" rx="6" fill="rgb(240 200 72 / 0.18)" stroke="rgb(240 200 72 / 0.55)" strokeWidth="1.5" />
+        <text x="86" y="34" textAnchor="middle" fill="rgb(255 233 138)" fontSize="8" fontWeight="700">
           SUP
         </text>
         <path d="M52 28h16" stroke="rgb(255 255 255 / 0.25)" strokeWidth="1.5" strokeDasharray="3 3" />
@@ -197,8 +197,8 @@ function PillarVisual({ type }) {
     <svg viewBox="0 0 120 56" className="landing-circuit__viz" aria-hidden>
       <circle cx="60" cy="28" r="10" fill="rgb(239 68 68)" />
       <circle cx="60" cy="28" r="4" fill="rgb(255 255 255 / 0.9)" />
-      <path d="M28 28c8-10 16-10 24 0s16 10 24 0" fill="none" stroke="rgb(52 211 153 / 0.55)" strokeWidth="2" strokeLinecap="round" />
-      <path d="M22 28c10-14 20-14 30 0s20 14 30 0" fill="none" stroke="rgb(52 211 153 / 0.3)" strokeWidth="2" strokeLinecap="round" />
+      <path d="M28 28c8-10 16-10 24 0s16 10 24 0" fill="none" stroke="rgb(240 200 72 / 0.55)" strokeWidth="2" strokeLinecap="round" />
+      <path d="M22 28c10-14 20-14 30 0s20 14 30 0" fill="none" stroke="rgb(240 200 72 / 0.3)" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }

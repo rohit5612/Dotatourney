@@ -94,6 +94,7 @@ export function AdminConsole() {
     paymentUpiId: "",
     seasonCardBg: "",
     seasonCardBadge: "",
+    seasonCardDeckTheme: { badgeBackground: "", badgeText: "" },
     registrationCodeSeq: 0,
     registrationsOpen: false,
     registrationCap: "",
@@ -286,6 +287,16 @@ export function AdminConsole() {
         paymentUpiId: payload.tournament.payment_upi_id ?? prev.paymentUpiId ?? "",
         seasonCardBg: payload.tournament.season_card_bg ?? prev.seasonCardBg ?? "",
         seasonCardBadge: payload.tournament.season_card_badge ?? prev.seasonCardBadge ?? "",
+        seasonCardDeckTheme: {
+          badgeBackground:
+            payload.tournament.season_card_deck_theme?.badgeBackground ??
+            payload.tournament.seasonCardDeckTheme?.badgeBackground ??
+            "",
+          badgeText:
+            payload.tournament.season_card_deck_theme?.badgeText ??
+            payload.tournament.seasonCardDeckTheme?.badgeText ??
+            "",
+        },
         registrationCodeSeq: payload.tournament.registration_code_seq ?? prev.registrationCodeSeq ?? 0,
         registrationsOpen:
           typeof payload.tournament.registrations_open === "boolean"

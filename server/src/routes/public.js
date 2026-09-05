@@ -58,6 +58,7 @@ import {
   buildMatchRosterCards,
   CARD_PNG_STUB,
 } from "../services/cardManifestService.js";
+import { buildPublicCardDeck } from "../services/cardDeckService.js";
 import { normalizeBpcIdParam } from "../services/playerAccountRepository.js";
 import { isValidPhoneNumber, PHONE_NUMBER_ERROR, phoneNumberSchema } from "../utils/phoneNumber.js";
 
@@ -604,6 +605,16 @@ router.get("/players/:slug/card", async (req, res, next) => {
     const manifest = await buildCardManifestBySlug(req.params.slug);
     if (!manifest) return res.status(404).json({ message: "Player not found" });
     return res.json({ card: manifest });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/players/:slug/card-deck", async (req, res, next) => {
+  try {
+    const deck = await buildPublicCardDeck(req.params.slug);
+    if (!deck) return res.status(404).json({ message: "Player not found" });
+    return res.json(deck);
   } catch (error) {
     return next(error);
   }

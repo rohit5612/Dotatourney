@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import { CardTierBadge } from "../../components/cards/CardTierBadge.jsx";
+import { CardDeck } from "../../components/cards/CardDeck.jsx";
 import { PlayerProfileCard } from "../../components/cards/PlayerProfileCard.jsx";
 import { BpcCoin } from "../../components/coins/BpcCoin.jsx";
 import { CardUpgradeModal } from "../../components/player/CardUpgradeModal.jsx";
@@ -26,6 +27,8 @@ export function PlayerOverviewPage() {
   const [upgradeEligibility, setUpgradeEligibility] = useState(null);
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [upgradeSuccess, setUpgradeSuccess] = useState(null);
+  const [cardDeck, setCardDeck] = useState(null);
+  const [cardDeckLoading, setCardDeckLoading] = useState(true);
 
   const refreshCardManifest = useCallback(() => {
     if (!account?.slug) return Promise.resolve();
@@ -54,6 +57,12 @@ export function PlayerOverviewPage() {
       setRecognitions(r.recognitions || []);
     }).catch(() => {});
     loadUpgradeEligibility();
+    setCardDeckLoading(true);
+    playerApi
+      .myCardDeck()
+      .then((deck) => setCardDeck(deck))
+      .catch(() => setCardDeck(null))
+      .finally(() => setCardDeckLoading(false));
   }, [account?.slug, loadMatches, loadUpgradeEligibility]);
 
   const teamInfo = team?.team?.team;
@@ -212,6 +221,15 @@ export function PlayerOverviewPage() {
 
         <MatchesSchedulePanel schedule={matchSchedule} onRefresh={loadMatches} />
       </div>
+
+      <section className="player-dash__card player-dash__overview-panel player-dash__card-deck-wrap" data-tour="card-deck">
+        <CardDeck
+          deck={cardDeck}
+          loading={cardDeckLoading}
+          className="player-dash__card-deck"
+          surfaceTier={cardTier}
+        />
+      </section>
 
       <CardUpgradeModal
         open={upgradeModalOpen}

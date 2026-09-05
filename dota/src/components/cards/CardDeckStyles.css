@@ -1,0 +1,241 @@
+.card-deck {
+  --deck-accent: var(--primary, #f0c848);
+  --deck-glow: color-mix(in srgb, var(--deck-accent) 18%, transparent);
+  --deck-title-color: var(--foreground);
+  --deck-description-color: color-mix(in srgb, var(--foreground) 68%, var(--muted-foreground));
+  --deck-badge-color: color-mix(in srgb, var(--foreground) 96%, white);
+  --deck-badge-border: color-mix(in srgb, var(--foreground) 32%, white);
+  --deck-badge-bg: color-mix(in srgb, var(--background) 48%, white);
+  position: relative;
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.card-deck--accent-gold {
+  --deck-accent: #c9a227;
+  --deck-glow: rgba(201, 162, 39, 0.16);
+}
+
+.card-deck--accent-holo {
+  --deck-accent: #7c5cff;
+  --deck-glow: rgba(124, 92, 255, 0.16);
+}
+
+.card-deck--surface-default {
+  --deck-title-color: color-mix(in srgb, var(--foreground) 96%, white);
+  --deck-description-color: color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground));
+  --deck-badge-color: #f8fafc;
+  --deck-badge-border: color-mix(in srgb, var(--foreground) 38%, white);
+  --deck-badge-bg: color-mix(in srgb, var(--background) 50%, white);
+}
+
+.card-deck--surface-gold {
+  --deck-title-color: color-mix(in srgb, #f4e4a8 88%, var(--foreground));
+  --deck-description-color: color-mix(in srgb, #e8d48a 68%, var(--muted-foreground));
+  --deck-badge-color: #fff4c2;
+  --deck-badge-border: color-mix(in srgb, #f0d060 72%, white);
+  --deck-badge-bg: color-mix(in srgb, #2a2010 55%, #d4a017);
+}
+
+.card-deck--surface-holo {
+  --deck-title-color: color-mix(in srgb, #ece4ff 90%, var(--foreground));
+  --deck-description-color: color-mix(in srgb, #c4b5fd 70%, var(--muted-foreground));
+  --deck-badge-color: #f3ebff;
+  --deck-badge-border: color-mix(in srgb, #b794ff 70%, white);
+  --deck-badge-bg: color-mix(in srgb, #1a1230 55%, #7c5cff);
+}
+
+.card-deck__header {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.15rem 0.1rem 0.35rem;
+}
+
+.card-deck__title {
+  margin: 0;
+  font-family: var(--font-serif, inherit);
+  font-size: clamp(1.05rem, 2vw, 1.3rem);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--deck-title-color);
+}
+
+.card-deck__description {
+  margin: 0;
+  max-width: 36ch;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--deck-description-color);
+}
+
+.community-glass.card-deck .card-deck__title,
+.player-profile__panel.card-deck .card-deck__title {
+  font-size: clamp(1.15rem, 2.2vw, 1.35rem);
+}
+
+.card-deck__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 10.5rem), 1fr));
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.card-deck__tile {
+  position: relative;
+  display: grid;
+  gap: 0.5rem;
+  justify-items: center;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: center;
+  cursor: pointer;
+  overflow: visible;
+  transition: transform 0.18s ease, filter 0.18s ease;
+}
+
+.card-deck__tile:hover,
+.card-deck__tile:focus-visible {
+  transform: translateY(-2px);
+  filter: drop-shadow(0 14px 28px var(--deck-glow));
+  outline: none;
+}
+
+.card-deck__tile--gold {
+  --deck-badge-border: color-mix(in srgb, #f0d060 78%, white);
+  --deck-badge-color: #fff4c2;
+  --deck-badge-bg: color-mix(in srgb, #3d2e08 50%, #c9a227);
+}
+
+.card-deck__tile--holo {
+  --deck-badge-border: color-mix(in srgb, #c4b5fd 76%, white);
+  --deck-badge-color: #f3ebff;
+  --deck-badge-bg: color-mix(in srgb, #221838 50%, #7c5cff);
+}
+
+.card-deck__season-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.24rem 0.68rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  line-height: 1;
+  border: 1px solid var(--deck-badge-border);
+  background: var(--deck-badge-bg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--deck-badge-color);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--deck-badge-border) 35%, transparent);
+  pointer-events: none;
+}
+
+.card-deck__season-badge--lightbox {
+  position: static;
+  justify-self: center;
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.card-deck__season-badge--themed {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.22);
+}
+
+.card-deck__tile-card {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  overflow: visible;
+}
+
+.card-deck__tile-card .bpcl-tier-fx__card-glow {
+  width: 100%;
+  min-width: 0;
+}
+
+.card-deck__tile-card .bpcl-default-card,
+.card-deck__tile-card .bpcl-gold-card,
+.card-deck__tile-card .bpcl-holo-card,
+.card-deck__tile-card .bpcl-player-card,
+.card-deck__tile-card .bpcl-card {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  --default-card-width: 100%;
+  --gold-card-width: 100%;
+  --holo-card-width: 100%;
+  --player-card-width: 100%;
+  --bpcl-card-slot-width: 100%;
+}
+
+.card-deck__lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background: rgba(2, 6, 23, 0.82);
+  backdrop-filter: blur(8px);
+}
+
+.card-deck__lightbox--gold {
+  background: radial-gradient(circle at 15% 10%, rgba(255, 236, 170, 0.1), transparent 38%), rgba(2, 6, 23, 0.86);
+}
+
+.card-deck__lightbox--holo {
+  background: radial-gradient(circle at 20% 12%, rgba(124, 92, 255, 0.16), transparent 40%), rgba(2, 6, 23, 0.88);
+}
+
+.card-deck__lightbox-inner {
+  display: grid;
+  gap: 0.65rem;
+  justify-items: center;
+  max-width: min(100%, 24rem);
+}
+
+.card-deck__lightbox-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.player-profile__card-deck {
+  padding-top: 0.15rem;
+}
+
+.player-dash__card-deck {
+  margin-top: 0.25rem;
+}
+
+.player-dash__card-deck .card-deck--surface-default {
+  --deck-title-color: var(--foreground);
+  --deck-description-color: color-mix(in srgb, var(--foreground) 62%, var(--muted-foreground));
+  --deck-badge-color: color-mix(in srgb, var(--foreground) 94%, white);
+  --deck-badge-border: color-mix(in srgb, var(--foreground) 28%, white);
+  --deck-badge-bg: color-mix(in srgb, var(--background) 72%, white);
+}
+
+@media (max-width: 640px) {
+  .card-deck__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

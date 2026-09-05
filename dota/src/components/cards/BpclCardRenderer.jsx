@@ -1,8 +1,17 @@
 import { useEffect, useState } from "react";
 import { CardRendererSkeleton } from "./CardRendererSkeleton.jsx";
 
+function isVaultManifest(manifest) {
+  return Boolean(
+    manifest?.frozenSnapshot ||
+    manifest?.seasonValidity?.collectionOnly ||
+    manifest?.seasonValidity?.active === false,
+  );
+}
+
 function resolveTemplate(manifest) {
-  if (!manifest || manifest.cardPending) return "default";
+  if (!manifest) return "default";
+  if (manifest.cardPending && !isVaultManifest(manifest)) return "default";
   if (manifest.renderTier === "gold" || manifest.template === "gold") return "gold";
   if (manifest.cardPayload?.template === "gold") return "gold";
   if (manifest.renderTier === "player" || manifest.template === "player") return "player";
@@ -40,7 +49,7 @@ async function loadTierModule(template) {
 }
 
 function CardPendingNote({ manifest }) {
-  if (!manifest?.cardPending) return null;
+  if (!manifest?.cardPending || isVaultManifest(manifest)) return null;
   return (
     <p className="bpcl-card__pending-banner">
       Your {manifest.tier} card is being prepared — admins will upload it within 48 hours. You&apos;re showing the
@@ -52,9 +61,20 @@ function CardPendingNote({ manifest }) {
 function SeasonValidityNote({ manifest }) {
   const validity = manifest?.seasonValidity;
   if (!validity?.badge && !manifest?.seasonBadge) return null;
-  const label = validity?.label || (validity?.badge ? `Valid for ${validity.badge}` : null);
+  const label =
+    validity?.label ||
+    (validity?.collectionOnly
+      ? validity?.badge
+        ? `${validity.badge} · Vault`
+        : "Vault"
+      : validity?.badge
+        ? `Valid for ${validity.badge}`
+        : null);
   if (!label) return null;
-  return <p className="bpcl-card__season-note">{label}</p>;
+  const noteClass = validity?.collectionOnly
+    ? "bpcl-card__season-note bpcl-card__season-note--collection"
+    : "bpcl-card__season-note";
+  return <p className={noteClass}>{label}</p>;
 }
 
 function LazyTierCard({ template, manifest, size, interactive, showAura }) {

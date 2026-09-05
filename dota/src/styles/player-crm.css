@@ -87,7 +87,7 @@
 }
 
 .player-crm__card-status-mark.is-yes {
-  color: #4ade80;
+  color: var(--primary);
 }
 
 .player-crm__card-status-mark.is-no {

@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { HiOutlineArrowLeft, HiOutlineStar, HiOutlineTrophy } from "react-icons/hi2";
+import { CardDeck } from "../../components/cards/CardDeck.jsx";
 import { CardTierBadge } from "../../components/cards/CardTierBadge.jsx";
 import { PlayerProfileCard } from "../../components/cards/PlayerProfileCard.jsx";
 import { HoloProfileViewportFx } from "../../components/player/HoloProfileViewportFx.jsx";
@@ -9,6 +10,7 @@ import { PageLoadingSpinner } from "../../components/PageLoadingSpinner.jsx";
 import { TeamLogoImg } from "../../components/TeamLogoImg.jsx";
 import { SITE_BRAND_SHORT } from "../../constants/siteMeta.js";
 import { api } from "../../lib/api";
+import { playerApi } from "../../lib/playerApi";
 import { usePublicCachedQuery } from "../../hooks/usePublicCachedQuery.js";
 import { useShowMoreList } from "../../hooks/useShowMoreList.js";
 import { teamLogoForName } from "../player/dashboardTeamCard.js";
@@ -147,10 +149,6 @@ function MatchScoreToast({ row }) {
   );
 }
 
-function matchSeasonTag(row) {
-  return row.seasonCardBadge || (row.seasonNumber ? `S${row.seasonNumber}` : row.tournamentName || "");
-}
-
 function resolveStintStatus(entry) {
   if (entry.status === "active" && entry.seasonStatus === "concluded") {
     return { label: "Former", active: false };
@@ -183,6 +181,26 @@ function groupStintsBySeason(teamHistory) {
   return [...groups.values()].sort((a, b) => (b.seasonNumber ?? 0) - (a.seasonNumber ?? 0));
 }
 
+function groupMatchesBySeason(matches) {
+  const groups = new Map();
+  for (const row of matches || []) {
+    const key = row.seasonSlug || String(row.seasonNumber ?? row.tournamentSlug ?? row.tournamentName ?? "");
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        seasonNumber: row.seasonNumber,
+        seasonSlug: row.seasonSlug,
+        seasonStatus: row.seasonStatus,
+        seasonCardBadge: row.seasonCardBadge,
+        seasonLabel: row.seasonNumber ? `Season ${row.seasonNumber}` : row.tournamentName,
+        matches: [],
+      });
+    }
+    groups.get(key).matches.push(row);
+  }
+  return [...groups.values()].sort((a, b) => (b.seasonNumber ?? 0) - (a.seasonNumber ?? 0));
+}
+
 function TeammateChip({ mate, isSelf, linkState }) {
   const content = (
     <>
@@ -207,9 +225,7 @@ function TeammateChip({ mate, isSelf, linkState }) {
 }
 
 function MatchHistoryRow({ row }) {
-  const metaLine = [matchSeasonTag(row), row.stageLabel, row.startAt ? formatDate(row.startAt) : ""]
-    .filter(Boolean)
-    .join(" · ");
+  const metaLine = [row.stageLabel, row.startAt ? formatDate(row.startAt) : ""].filter(Boolean).join(" · ");
   const team1Logo = teamLogoForName(row.team1);
   const team2Logo = teamLogoForName(row.team2);
   const playerOnTeam1 = row.teamName && row.team1 && row.teamName.toLowerCase() === row.team1.toLowerCase();
@@ -247,6 +263,18 @@ export function PublicPlayerProfilePage() {
   const cacheKey = `public:player:${String(slug || "").trim().toLowerCase()}`;
   const fetchProfile = useMemo(() => () => api.getPublicPlayer(slug), [slug]);
   const { data: profile, loading, error } = usePublicCachedQuery(cacheKey, fetchProfile);
+  const [cardDeck, setCardDeck] = useState(null);
+  const [cardDeckLoading, setCardDeckLoading] = useState(true);
+
+  useEffect(() => {
+    if (!slug) return;
+    setCardDeckLoading(true);
+    playerApi
+      .cardDeck(slug)
+      .then((deck) => setCardDeck(deck))
+      .catch(() => setCardDeck(null))
+      .finally(() => setCardDeckLoading(false));
+  }, [slug]);
 
   const account = profile?.account;
   const card = profile?.card;
@@ -281,6 +309,10 @@ export function PublicPlayerProfilePage() {
   } = useShowMoreList(profile?.matchHistory, {
     resetKey: `${slug}:${profile?.matchHistory?.length ?? 0}`,
   });
+  const visibleMatchSeasonGroups = useMemo(
+    () => groupMatchesBySeason(visibleMatchHistory),
+    [visibleMatchHistory],
+  );
 
   const rosterMembers = useMemo(() => {
     if (!currentTeam?.team) return [];
@@ -501,11 +533,37 @@ export function PublicPlayerProfilePage() {
                 {profile.matchHistory?.length ? (
                   <section className={profilePanelClass()}>
                     <h2 className="player-profile__section-title">Match history</h2>
-                    <ul className="player-profile__match-list">
-                      {visibleMatchHistory.map((row) => (
-                        <MatchHistoryRow key={`${row.matchId}-${row.teamName}-${row.appearanceLabel}`} row={row} />
+                    <div className="player-profile__match-seasons">
+                      {visibleMatchSeasonGroups.map((group) => (
+                        <section key={group.key} className="player-profile__match-season" aria-label={group.seasonLabel}>
+                          <header className="player-profile__match-season-head">
+                            <div className="player-profile__match-season-copy">
+                              {group.seasonSlug ? (
+                                <Link to={`/seasons/${group.seasonSlug}`} className="player-profile__match-season-title">
+                                  {group.seasonLabel}
+                                </Link>
+                              ) : (
+                                <p className="player-profile__match-season-title">{group.seasonLabel}</p>
+                              )}
+                              {group.seasonCardBadge ? (
+                                <span className="player-profile__match-season-badge">{group.seasonCardBadge}</span>
+                              ) : null}
+                            </div>
+                            <span className="player-profile__match-season-count">
+                              {group.matches.length} match{group.matches.length === 1 ? "" : "es"}
+                            </span>
+                          </header>
+                          <ul className="player-profile__match-list">
+                            {group.matches.map((row) => (
+                              <MatchHistoryRow
+                                key={`${row.matchId}-${row.teamName}-${row.appearanceLabel}`}
+                                row={row}
+                              />
+                            ))}
+                          </ul>
+                        </section>
                       ))}
-                    </ul>
+                    </div>
                     {hasMoreMatchHistory || canCollapseMatchHistory ? (
                       <div className="player-profile__show-more-wrap">
                         {hasMoreMatchHistory ? (
@@ -630,6 +688,15 @@ export function PublicPlayerProfilePage() {
                       ))}
                     </div>
                   </section>
+                ) : null}
+
+                {!cardDeckLoading && cardDeck?.collection?.length > 0 ? (
+                  <CardDeck
+                    deck={cardDeck}
+                    className={profilePanelClass("player-profile__card-deck")}
+                    surfaceTier={cardTier}
+                    hideWhenEmpty
+                  />
                 ) : null}
 
                 {profile.achievements?.length ? (

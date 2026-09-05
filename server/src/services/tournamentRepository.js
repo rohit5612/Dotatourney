@@ -5,9 +5,11 @@ import { defaultGroupKeysForTeams } from "./groupAssignment.js";
 import { getPlayerRegistrationById, resolveRegistrationDisplayName } from "./registrationRepository.js";
 import { resolveEngineConfigForApproval } from "./tournamentEngineService.js";
 import { upsertSeasonForTournament } from "./seasonUpsert.js";
+import { snapshotSeasonCardsForTournament, syncAllActiveSeasonCardSnapshots, finalizeVaultOnNewSeasonPublish } from "./cardSnapshotService.js";
 import { buildPublicHonorsPayload } from "./bracketHonorsEngine.js";
 import { buildStandings } from "./standingsEngine.js";
 import { parseSeasonLabelFromName, seasonSlugFromLabel } from "../utils/tournamentNaming.js";
+import { serializeTournamentDeckTheme } from "../utils/tournamentDeckTheme.js";
 import { buildTeamsWithActivePlayers, buildTeamsForPublicDisplay, reseedFutureMatchLineups } from "./rosterMembershipService.js";
 import { clearTransferPoolOnAssignment } from "./teamEliminationService.js";
 
@@ -110,6 +112,7 @@ export function buildPublishedSnapshotFromRow(row) {
     payment_upi_id: row.payment_upi_id,
     season_card_bg: row.season_card_bg,
     season_card_badge: row.season_card_badge,
+    season_card_deck_theme: serializeTournamentDeckTheme(row.season_card_deck_theme),
   };
 }
 
@@ -150,10 +153,10 @@ export async function createTournament(payload) {
       description, prize_pool, prize_pool_breakdown, entry_fee, start_date, end_date, registration_deadline,
       discord_url, rulebook, live_youtube_url, announcements, banner_announcements, tournament_honors, visibility_mode, bracket_active, status,
       registration_code_prefix, registration_code_seq, payment_qr_image, payment_upi_id, registrations_open, registration_cap, engine_config,
-      season_card_bg, season_card_badge, engine_template_id, google_sheet_spreadsheet_id, google_sheet_tab_name
+      season_card_bg, season_card_badge, season_card_deck_theme, engine_template_id, google_sheet_spreadsheet_id, google_sheet_tab_name
     )
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
-      $25, $26, $27, $28, $29, $30, $31::jsonb, $32, $33, $34, $35, $36)
+      $25, $26, $27, $28, $29, $30, $31::jsonb, $32, $33, $34::jsonb, $35, $36, $37)
     RETURNING *;
   `;
   const values = [
@@ -190,6 +193,7 @@ export async function createTournament(payload) {
     JSON.stringify(payload.engineConfig || payload.engine_config || null),
     payload.seasonCardBg || "",
     String(payload.seasonCardBadge || "").trim().slice(0, 16),
+    JSON.stringify(serializeTournamentDeckTheme(payload.seasonCardDeckTheme)),
     payload.engineTemplateId || payload.engine_template_id || null,
     payload.googleSheetSpreadsheetId || payload.google_sheet_spreadsheet_id || "",
     payload.googleSheetTabName || payload.google_sheet_tab_name || "",
@@ -232,9 +236,10 @@ export async function updateTournament(tournamentId, payload) {
         engine_config = COALESCE($30::jsonb, engine_config),
         season_card_bg = $31,
         season_card_badge = $32,
-        engine_template_id = COALESCE($33, engine_template_id),
-        google_sheet_spreadsheet_id = $34,
-        google_sheet_tab_name = $35,
+        season_card_deck_theme = $33::jsonb,
+        engine_template_id = COALESCE($34, engine_template_id),
+        google_sheet_spreadsheet_id = $35,
+        google_sheet_tab_name = $36,
         updated_at = NOW()
     WHERE id = $1
     RETURNING *;
@@ -275,6 +280,7 @@ export async function updateTournament(tournamentId, payload) {
       : null,
     payload.seasonCardBg || "",
     String(payload.seasonCardBadge || "").trim().slice(0, 16),
+    JSON.stringify(serializeTournamentDeckTheme(payload.seasonCardDeckTheme)),
     Object.prototype.hasOwnProperty.call(payload, "engineTemplateId") ||
       Object.prototype.hasOwnProperty.call(payload, "engine_template_id")
       ? payload.engineTemplateId ?? payload.engine_template_id ?? null
@@ -1483,9 +1489,29 @@ export async function publishTournament(tournamentId, adminUserId) {
     err.status = 400;
     throw err;
   }
+
+  const { rows: conflictingSeasons } = await pool.query(
+    `SELECT s.id, s.slug, s.number
+     FROM seasons s
+     JOIN tournaments t ON t.id = s.tournament_id
+     WHERE s.status = 'active' AND t.id <> $1`,
+    [tournamentId],
+  );
+  if (conflictingSeasons.length > 0) {
+    const labels = conflictingSeasons.map((row) => row.slug || `S${row.number}`).join(", ");
+    const err = new Error(`Another season is still active (${labels}). Complete it before publishing a new tournament.`);
+    err.status = 409;
+    err.code = "ACTIVE_SEASON_CONFLICT";
+    throw err;
+  }
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    const { rows: previouslyPublished } = await client.query(
+      `SELECT * FROM tournaments WHERE is_published = TRUE AND id <> $1`,
+      [tournamentId],
+    );
     await client.query(
       "UPDATE tournaments SET is_published = FALSE, status = CASE WHEN status = 'published' THEN 'approved' ELSE status END WHERE is_published = TRUE",
     );
@@ -1501,8 +1527,14 @@ export async function publishTournament(tournamentId, adminUserId) {
       const snapshot = buildPublishedSnapshotFromRow(row);
       await client.query(`UPDATE tournaments SET published_snapshot = $2::jsonb WHERE id = $1`, [tournamentId, JSON.stringify(snapshot)]);
       await upsertSeasonForTournament(row, { client });
+      for (const previous of previouslyPublished) {
+        await upsertSeasonForTournament(previous, { client });
+      }
     }
     await client.query("COMMIT");
+    if (row) {
+      await finalizeVaultOnNewSeasonPublish(tournamentId).catch(() => {});
+    }
     return row || null;
   } catch (error) {
     await client.query("ROLLBACK");
@@ -1744,6 +1776,7 @@ export async function completeTournament(tournamentId, adminUserId, { force = fa
       );
     }
     await client.query("COMMIT");
+    await snapshotSeasonCardsForTournament(tournamentId);
     return (await getTournament(tournamentId))?.tournament;
   } catch (e) {
     await client.query("ROLLBACK");

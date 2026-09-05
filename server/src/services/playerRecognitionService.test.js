@@ -93,4 +93,33 @@ describe("playerRecognitionService", () => {
     const badges = index.get("shared-account").map((entry) => entry.label);
     assert.deepEqual(badges, ["S1•MVP", "S1•Champion", "S2•Champion"]);
   });
+
+  it("awards badges for an active season once the grand final is decided", () => {
+    const index = new Map();
+    applySeasonRecognitions(
+      index,
+      {
+        season_number: 2,
+        season_slug: "season-2",
+        season_name: "Season 2",
+        season_card_badge: "S2",
+        status: "active",
+      },
+      {
+        honors: {
+          finalFinished: true,
+          podiumTeams: [{ placement: 1, teamName: "Phantom" }],
+          customCards: [],
+        },
+        teams: [{ name: "Phantom", players: [{ id: "p1", displayName: "Ace", playerAccountId: "account-ace" }] }],
+        mvp: { teamName: "Phantom", playerId: "p1", playerName: "Ace" },
+      },
+    );
+
+    assert.equal(index.get("account-ace")?.length, 2);
+    assert.deepEqual(
+      index.get("account-ace")?.map((entry) => entry.label),
+      ["S2•MVP", "S2•Champion"],
+    );
+  });
 });

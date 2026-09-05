@@ -164,6 +164,7 @@ export function SetupPage({
       paymentUpiId: "",
       seasonCardBg: "",
       seasonCardBadge: "",
+      seasonCardDeckTheme: { badgeBackground: "", badgeText: "" },
       registrationsOpen: false,
       registrationCap: "",
       engineConfig: null,

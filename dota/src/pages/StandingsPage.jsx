@@ -46,7 +46,7 @@ export function StandingsPage({ standings = [], groupedStandings = [], format, t
         </div>
         <div className="rounded-md border border-border bg-background p-3">
           <div className="text-xs uppercase tracking-wider text-muted-foreground">Advancing (group #1 → semis)</div>
-          <div className="mt-1 text-base font-medium text-emerald-700 dark:text-emerald-400">{advancingCount}</div>
+          <div className="mt-1 text-base font-medium text-primary">{advancingCount}</div>
         </div>
         <div className="rounded-md border border-border bg-background p-3">
           <div className="text-xs uppercase tracking-wider text-muted-foreground">Still in contention</div>

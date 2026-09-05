@@ -422,7 +422,7 @@ a.news-page__stat:hover {
 }
 
 .dark .news-page__badge--category {
-  color: #5eead4;
+  color: var(--accent);
 }
 
 .news-page__badge--pinned {

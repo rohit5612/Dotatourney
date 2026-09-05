@@ -8,6 +8,13 @@ import {
 } from "../../utils/tournamentNaming.js";
 import { formatLabelForTemplate, summarizeEngineConfig } from "../../utils/engineTemplateSummary.js";
 import { seasonBadgeShort } from "../../utils/seasonPayload.js";
+import {
+  deckBadgeInlineStyle,
+  hasDeckBadgeTheme,
+  normalizeDeckThemeHexColor,
+  parseTournamentDeckTheme,
+} from "../../utils/tournamentDeckTheme.js";
+import "../../components/cards/CardDeckStyles.css";
 
 const DRAFT_TABS = [
   { id: "identity", label: "Identity" },
@@ -83,6 +90,23 @@ export function TournamentDraftModal({
     number: null,
     tournamentCardBadge: setup.seasonCardBadge,
   });
+  const deckTheme = parseTournamentDeckTheme(setup.seasonCardDeckTheme);
+  const deckBadgePreviewStyle = deckBadgeInlineStyle(deckTheme);
+
+  function setDeckTheme(patch) {
+    setSetup((prev) => ({
+      ...prev,
+      seasonCardDeckTheme: {
+        badgeBackground: prev.seasonCardDeckTheme?.badgeBackground || "",
+        badgeText: prev.seasonCardDeckTheme?.badgeText || "",
+        ...patch,
+      },
+    }));
+  }
+
+  function updateDeckThemeColor(key, value) {
+    setDeckTheme({ [key]: normalizeDeckThemeHexColor(value) });
+  }
 
   if (!open) return null;
 
@@ -436,6 +460,75 @@ export function TournamentDraftModal({
                     </div>
                   </div>
                   {!setup.seasonCardBg ? <p className="setup-draft-season-card__hint">Upload artwork above.</p> : null}
+                </div>
+              </div>
+
+              <div className="setup-draft-season-theme">
+                <div className="setup-draft-season-theme__head">
+                  <div>
+                    <h3 className="setup-draft-section__title">Tournament theme</h3>
+                    <p className="setup-draft-section__copy">
+                      Card deck season badge colors on player profiles. Leave blank to use profile defaults.
+                    </p>
+                  </div>
+                  {hasDeckBadgeTheme(deckTheme) ? (
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      onClick={() => setSetup((prev) => ({ ...prev, seasonCardDeckTheme: { badgeBackground: "", badgeText: "" } }))}
+                    >
+                      Reset colors
+                    </button>
+                  ) : null}
+                </div>
+                <div className="setup-draft-season-theme__grid">
+                  <label className="setup-draft-field setup-draft-season-theme__field">
+                    <span className="setup-draft-field__label">Badge background</span>
+                    <div className="setup-draft-season-theme__color-row">
+                      <input
+                        type="color"
+                        className="setup-draft-season-theme__swatch"
+                        value={deckTheme.badgeBackground || "#1e3a2f"}
+                        onChange={(event) => updateDeckThemeColor("badgeBackground", event.target.value)}
+                        aria-label="Badge background color"
+                      />
+                      <input
+                        type="text"
+                        className="setup-draft-field__input setup-draft-season-theme__hex"
+                        value={deckTheme.badgeBackground}
+                        placeholder="#1e3a2f"
+                        onChange={(event) => updateDeckThemeColor("badgeBackground", event.target.value)}
+                      />
+                    </div>
+                  </label>
+                  <label className="setup-draft-field setup-draft-season-theme__field">
+                    <span className="setup-draft-field__label">Badge text</span>
+                    <div className="setup-draft-season-theme__color-row">
+                      <input
+                        type="color"
+                        className="setup-draft-season-theme__swatch"
+                        value={deckTheme.badgeText || "#f8fafc"}
+                        onChange={(event) => updateDeckThemeColor("badgeText", event.target.value)}
+                        aria-label="Badge text color"
+                      />
+                      <input
+                        type="text"
+                        className="setup-draft-field__input setup-draft-season-theme__hex"
+                        value={deckTheme.badgeText}
+                        placeholder="#f8fafc"
+                        onChange={(event) => updateDeckThemeColor("badgeText", event.target.value)}
+                      />
+                    </div>
+                  </label>
+                </div>
+                <div className="setup-draft-season-theme__preview">
+                  <span className="setup-draft-section__copy">Card deck badge preview</span>
+                  <span
+                    className={`card-deck__season-badge card-deck__season-badge--custom${hasDeckBadgeTheme(deckTheme) ? " card-deck__season-badge--themed" : ""}`}
+                    style={deckBadgePreviewStyle}
+                  >
+                    {previewBadge || "S2"}
+                  </span>
                 </div>
               </div>
             </section>
