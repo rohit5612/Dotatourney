@@ -450,13 +450,20 @@ router.get("/auth/google/callback", async (req, res, next) => {
     if (!code) return redirectWithError(res, "Missing authorization code");
 
     const profile = await exchangeGoogleCode(code, `${apiBase()}/api/player/auth/google/callback`);
-    const account = await upsertPlayerFromOAuth({
+    const { account, isNewAccount } = await upsertPlayerFromOAuth({
       email: profile.email,
       googleSub: profile.googleSub,
       displayName: profile.displayName,
       emailVerified: profile.emailVerified,
     });
     await recordAccountLink(account.id, "google", profile.googleSub);
+    if (isNewAccount) {
+      try {
+        await maybeSendPlayerWelcomeEmail(account, { oauthSignup: true });
+      } catch (emailErr) {
+        logError("email", "welcome mail failed", emailErr, { playerId: account.id, email: account.email });
+      }
+    }
     const session = await createPlayerSession(account.id);
     logAction("auth", "player.oauth.google", {
       playerId: account.id,

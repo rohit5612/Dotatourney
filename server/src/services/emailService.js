@@ -892,14 +892,16 @@ export async function sendSponsorPaymentConfirmedEmail({
 }
 
 /**
- * Send welcome email once when account has password + verified email.
+ * Send welcome email once when account is ready (password verified or OAuth signup).
  * @param {object} account row from player_accounts
+ * @param {{ oauthSignup?: boolean }} [options]
  */
-export async function maybeSendPlayerWelcomeEmail(account) {
+export async function maybeSendPlayerWelcomeEmail(account, { oauthSignup = false } = {}) {
   if (!account?.email || String(account.email).includes("@migrated.")) return false;
   if (account.welcome_email_sent_at) return false;
-  if (!account.password_hash) return false;
-  if (!account.email_verified_at) return false;
+  if (!oauthSignup && !account.password_hash) return false;
+  if (oauthSignup && !account.email_verified_at) return false;
+  if (!oauthSignup && !account.email_verified_at) return false;
 
   const displayName =
     account.display_name || account.steam_persona || String(account.email).split("@")[0] || "Player";

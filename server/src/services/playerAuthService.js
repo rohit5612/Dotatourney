@@ -515,7 +515,7 @@ export async function upsertPlayerFromOAuth({
     }
     if (displayName && !account.display_name) patch.displayName = displayName;
     if (Object.keys(patch).length) account = await updatePlayerAccount(account.id, patch);
-    return account;
+    return { account, isNewAccount: false };
   }
 
   if (!normalized) {
@@ -541,7 +541,7 @@ export async function upsertPlayerFromOAuth({
       discordAvatarUrl,
     });
     await client.query("COMMIT");
-    return account;
+    return { account, isNewAccount: true };
   } catch (e) {
     await client.query("ROLLBACK");
     throw e;
