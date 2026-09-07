@@ -1257,6 +1257,26 @@ export async function upsertCardAsset(
   playerAccountId,
   { tier, assetUrl, tagline, manifestJson, seasonId, tournamentId, status },
 ) {
+  let resolvedSeasonId = seasonId || null;
+  let resolvedTournamentId = tournamentId || null;
+
+  if (!resolvedSeasonId && resolvedTournamentId) {
+    const { rows } = await pool.query(
+      `SELECT id FROM seasons WHERE tournament_id = $1 ORDER BY number DESC LIMIT 1`,
+      [resolvedTournamentId],
+    );
+    resolvedSeasonId = rows[0]?.id || null;
+  }
+  if (!resolvedTournamentId && resolvedSeasonId) {
+    const { rows } = await pool.query(`SELECT tournament_id FROM seasons WHERE id = $1`, [resolvedSeasonId]);
+    resolvedTournamentId = rows[0]?.tournament_id || null;
+  }
+  if (!resolvedSeasonId) {
+    const err = new Error("seasonId or tournamentId is required to upsert a card asset");
+    err.status = 400;
+    throw err;
+  }
+
   const id = randomUUID();
   const nextStatus = status || "pending";
   const manifestPayload =
@@ -1265,12 +1285,11 @@ export async function upsertCardAsset(
     `INSERT INTO player_card_assets (
        id, player_account_id, tier, asset_url, tagline, manifest_json, season_id, tournament_id, status
      ) VALUES ($1, $2, $3, $4, $5, COALESCE($6::jsonb, '{}'::jsonb), $7, $8, $9)
-     ON CONFLICT (player_account_id, tier)
+     ON CONFLICT (player_account_id, tier, season_id) WHERE season_id IS NOT NULL
      DO UPDATE SET
        asset_url = COALESCE(NULLIF(EXCLUDED.asset_url, ''), player_card_assets.asset_url),
        tagline = COALESCE(NULLIF(EXCLUDED.tagline, ''), player_card_assets.tagline),
        manifest_json = CASE WHEN EXCLUDED.manifest_json <> '{}'::jsonb THEN EXCLUDED.manifest_json ELSE player_card_assets.manifest_json END,
-       season_id = COALESCE(EXCLUDED.season_id, player_card_assets.season_id),
        tournament_id = COALESCE(EXCLUDED.tournament_id, player_card_assets.tournament_id),
        status = CASE WHEN $9 = 'approved' THEN 'approved' ELSE player_card_assets.status END,
        approved_at = CASE WHEN $9 = 'approved' THEN NOW() ELSE player_card_assets.approved_at END,
@@ -1283,8 +1302,8 @@ export async function upsertCardAsset(
       assetUrl || "",
       tagline || "",
       manifestPayload,
-      seasonId || null,
-      tournamentId || null,
+      resolvedSeasonId,
+      resolvedTournamentId,
       nextStatus,
     ],
   );
@@ -1293,11 +1312,6 @@ export async function upsertCardAsset(
 
 export async function ensurePendingCardAsset(playerAccountId, { tier, tournamentId }) {
   if (!tier || tier === "default") return null;
-  const existing = await pool.query(
-    `SELECT id FROM player_card_assets WHERE player_account_id = $1 AND tier = $2`,
-    [playerAccountId, tier],
-  );
-  if (existing.rows[0]) return existing.rows[0];
 
   let seasonId = null;
   if (tournamentId) {
@@ -1307,6 +1321,14 @@ export async function ensurePendingCardAsset(playerAccountId, { tier, tournament
     );
     seasonId = season.rows[0]?.id || null;
   }
+  if (!seasonId) return null;
+
+  const existing = await pool.query(
+    `SELECT id FROM player_card_assets
+     WHERE player_account_id = $1 AND tier = $2 AND season_id = $3`,
+    [playerAccountId, tier, seasonId],
+  );
+  if (existing.rows[0]) return existing.rows[0];
 
   return upsertCardAsset(playerAccountId, {
     tier,

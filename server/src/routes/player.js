@@ -47,6 +47,7 @@ import {
   simulateManualPayment,
   createSubstituteSignup,
   upsertCardAsset,
+  findTournamentBySlugOrId,
   CARD_TIERS,
 } from "../services/paymentService.js";
 import {
@@ -684,10 +685,12 @@ router.post("/tournaments/:slug/checkout/confirm", requirePlayer, async (req, re
     if (body.assetUrl || body.tagline) {
       const tier = body.cardTier === "default" ? "gold" : body.cardTier;
       if (tier === "gold" || tier === "holo") {
+        const tournament = await findTournamentBySlugOrId(req.params.slug);
         await upsertCardAsset(req.playerAccount.id, {
           tier,
           assetUrl: body.assetUrl || "",
           tagline: body.tagline || "",
+          tournamentId: tournament?.id || null,
         });
       }
     }

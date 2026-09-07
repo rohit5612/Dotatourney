@@ -5,6 +5,18 @@ import { parseTournamentDeckTheme } from "../utils/tournamentDeckTheme.js";
 import { demoAccessCardTier, isDemoAccessAccount } from "../utils/demoAccessAccount.js";
 
 const PREMIUM_TIERS = new Set(["player", "gold", "holo"]);
+const TIER_RANK = { holo: 0, gold: 1, player: 2, default: 3 };
+
+function normalizeTier(tier) {
+  const value = String(tier || "default").trim().toLowerCase();
+  return PREMIUM_TIERS.has(value) || value === "default" ? value : "default";
+}
+
+function pickHighestTier(tiers) {
+  const ranked = tiers.map(normalizeTier).filter(Boolean);
+  if (!ranked.length) return "default";
+  return ranked.sort((a, b) => (TIER_RANK[a] ?? 3) - (TIER_RANK[b] ?? 3))[0];
+}
 
 function seasonBadgeFromSeason(season, tournament) {
   if (tournament?.season_card_badge) return String(tournament.season_card_badge).trim();
@@ -95,13 +107,42 @@ async function findTournament(tournamentId) {
   return rows[0] || null;
 }
 
+async function findSeasonScopedCardAsset(accountId, { tournamentId = null, seasonId = null } = {}) {
+  if (!tournamentId && !seasonId) return null;
+
+  const { rows } = await pool.query(
+    `SELECT *
+     FROM player_card_assets
+     WHERE player_account_id = $1
+       AND (
+         ($2::uuid IS NOT NULL AND tournament_id = $2)
+         OR ($3::uuid IS NOT NULL AND season_id = $3)
+       )
+       AND status IN ('approved', 'pending')
+     ORDER BY
+       CASE COALESCE(NULLIF(TRIM(tier), ''), 'default')
+         WHEN 'holo' THEN 0
+         WHEN 'gold' THEN 1
+         WHEN 'player' THEN 2
+         ELSE 3
+       END,
+       CASE WHEN status = 'approved' THEN 0 ELSE 1 END,
+       updated_at DESC
+     LIMIT 1`,
+    [accountId, tournamentId || null, seasonId || null],
+  );
+  return rows[0] || null;
+}
+
 async function findCardAsset(accountId, tier, { tournamentId = null, seasonId = null } = {}) {
   if (!tier || tier === "default") return null;
+  if (!tournamentId && !seasonId) return null;
 
   if (tournamentId) {
     const scoped = await pool.query(
       `SELECT * FROM player_card_assets
        WHERE player_account_id = $1 AND tier = $2 AND tournament_id = $3
+       ORDER BY updated_at DESC
        LIMIT 1`,
       [accountId, tier, tournamentId],
     );
@@ -112,20 +153,14 @@ async function findCardAsset(accountId, tier, { tournamentId = null, seasonId = 
     const scoped = await pool.query(
       `SELECT * FROM player_card_assets
        WHERE player_account_id = $1 AND tier = $2 AND season_id = $3
+       ORDER BY updated_at DESC
        LIMIT 1`,
       [accountId, tier, seasonId],
     );
     if (scoped.rows[0]) return scoped.rows[0];
   }
 
-  const { rows } = await pool.query(
-    `SELECT * FROM player_card_assets
-     WHERE player_account_id = $1 AND tier = $2
-     ORDER BY updated_at DESC
-     LIMIT 1`,
-    [accountId, tier],
-  );
-  return rows[0] || null;
+  return null;
 }
 
 function parseRoles(registration, account) {
@@ -334,21 +369,18 @@ export async function buildCardManifest(accountRow, options = {}) {
   const registrationTier = registration?.card_tier || options.cardTier || "default";
   const purchasedTier =
     (isDemoAccessAccount(account) ? demoAccessCardTier(account) : null) || registrationTier;
-  const adminOverride = String(account.card_tier_override || "").trim() || null;
   const freezeSnapshot = Boolean(options.freezeSnapshot);
-  const effectiveTier = freezeSnapshot
-    ? options.cardTier || purchasedTier || "default"
-    : adminOverride || purchasedTier || "default";
   const asset =
     options.assetOverride !== undefined
       ? options.assetOverride
-      : PREMIUM_TIERS.has(effectiveTier)
-        ? await findCardAsset(account.id, effectiveTier, {
-            tournamentId,
-            seasonId: season?.id || null,
-          })
-        : null;
+      : await findSeasonScopedCardAsset(account.id, {
+          tournamentId,
+          seasonId: season?.id || null,
+        });
   const assetApproved = isApprovedCardAsset(asset);
+  const effectiveTier = freezeSnapshot
+    ? options.cardTier || purchasedTier || "default"
+    : pickHighestTier([purchasedTier, assetApproved ? asset?.tier : null]);
   const cardPending = PREMIUM_TIERS.has(effectiveTier) && !assetApproved;
   const usesPremiumTemplate = PREMIUM_TIERS.has(effectiveTier);
 
@@ -371,7 +403,7 @@ export async function buildCardManifest(accountRow, options = {}) {
   const manifest = {
     tier: effectiveTier,
     purchasedTier,
-    tierOverride: freezeSnapshot ? null : adminOverride,
+    tierOverride: null,
     renderTier,
     template: usesPremiumTemplate
       ? parseManifestJson(asset?.manifest_json)?.template || effectiveTier
@@ -450,7 +482,9 @@ export async function buildCardManifestByBpcId(bpcId, options = {}) {
 export async function listCardAssetsForAccount(accountId) {
   const { rows } = await pool.query(
     `SELECT id, tier, asset_url, tagline, status, manifest_json, season_id, tournament_id, created_at, updated_at, approved_at
-     FROM player_card_assets WHERE player_account_id = $1 ORDER BY tier`,
+     FROM player_card_assets
+     WHERE player_account_id = $1
+     ORDER BY updated_at DESC, tier`,
     [accountId],
   );
   return rows.map((row) => ({

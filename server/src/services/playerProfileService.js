@@ -198,7 +198,7 @@ export async function getCommunityDirectory({ search = "", tier = "", limit = 48
   if (activeTournamentId) params.push(activeTournamentId);
   const lateral = activeSeasonRegistrationLateral(activeTournamentId, 1);
   const lateralJoin = lateral.sql;
-  const effectiveTierExpr = `COALESCE(NULLIF(TRIM(pa.card_tier_override), ''), best_card.card_tier, 'default')`;
+  const effectiveTierExpr = `COALESCE(NULLIF(TRIM(best_card.card_tier), ''), 'default')`;
 
   let where = `WHERE pa.email_verified_at IS NOT NULL
     AND pa.steam_id IS NOT NULL
@@ -270,7 +270,7 @@ export async function listCommunityPlayersForExport({ steam32Id = null } = {}) {
   if (activeTournamentId) params.push(activeTournamentId);
   const lateral = activeSeasonRegistrationLateral(activeTournamentId, 1);
   const lateralJoin = lateral.sql;
-  const effectiveTierExpr = `COALESCE(NULLIF(TRIM(pa.card_tier_override), ''), best_card.card_tier, 'default')`;
+  const effectiveTierExpr = `COALESCE(NULLIF(TRIM(best_card.card_tier), ''), 'default')`;
 
   let where = `WHERE pa.email_verified_at IS NOT NULL
     AND pa.steam_id IS NOT NULL

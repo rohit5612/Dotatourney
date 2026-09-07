@@ -262,6 +262,14 @@ async function resolveAdminCardSeasonContext(accountId, body) {
     tournamentId = rows[0]?.id || null;
   }
 
+  if (!tournamentId && !seasonId) {
+    const { rows } = await pool.query(
+      `SELECT id, tournament_id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1`,
+    );
+    seasonId = rows[0]?.id || null;
+    tournamentId = rows[0]?.tournament_id || null;
+  }
+
   if (!tournamentId) {
     const { rows } = await pool.query(
       `SELECT tournament_id
@@ -274,20 +282,6 @@ async function resolveAdminCardSeasonContext(accountId, body) {
          created_at DESC
        LIMIT 1`,
       [accountId],
-    );
-    tournamentId = rows[0]?.tournament_id || null;
-  }
-
-  if (!tournamentId) {
-    const { rows } = await pool.query(
-      `SELECT tournament_id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1`,
-    );
-    tournamentId = rows[0]?.tournament_id || null;
-  }
-
-  if (!tournamentId) {
-    const { rows } = await pool.query(
-      `SELECT tournament_id FROM seasons WHERE status = 'concluded' ORDER BY number DESC LIMIT 1`,
     );
     tournamentId = rows[0]?.tournament_id || null;
   }
@@ -315,6 +309,11 @@ export async function uploadPlayerCardAdmin(accountId, body, adminUserId) {
   }
 
   const { seasonId, tournamentId } = await resolveAdminCardSeasonContext(accountId, body);
+  if (!seasonId && !tournamentId) {
+    const err = new Error("Could not resolve an active season for this card upload");
+    err.status = 400;
+    throw err;
+  }
 
   const { upsertCardAsset } = await import("./paymentService.js");
   const asset = await upsertCardAsset(accountId, {
@@ -327,18 +326,6 @@ export async function uploadPlayerCardAdmin(accountId, body, adminUserId) {
     status: body.approve === false ? "pending" : "approved",
   });
 
-  // Backfill season/tournament scope on existing rows when admin re-uploads.
-  if (asset && (tournamentId || seasonId)) {
-    await pool.query(
-      `UPDATE player_card_assets
-       SET tournament_id = COALESCE(tournament_id, $2),
-           season_id = COALESCE(season_id, $3),
-           updated_at = NOW()
-       WHERE id = $1`,
-      [asset.id, tournamentId, seasonId],
-    );
-  }
-
   if (body.approve !== false && asset) {
     await pool.query(
       `UPDATE player_card_assets SET approved_at = NOW(), approved_by = $2 WHERE id = $1`,
@@ -346,16 +333,13 @@ export async function uploadPlayerCardAdmin(accountId, body, adminUserId) {
     );
   }
 
-  const applyProfileTier = body.applyProfileTier !== false;
-  if (applyProfileTier) {
-    await pool.query(
-      `UPDATE player_accounts SET card_tier_override = $2, updated_at = NOW() WHERE id = $1`,
-      [accountId, tier],
-    );
-    account.card_tier_override = tier;
+  let seasonRow = null;
+  if (seasonId) {
+    const { rows } = await pool.query(`SELECT * FROM seasons WHERE id = $1`, [seasonId]);
+    seasonRow = rows[0] || null;
   }
 
-  const card = await buildCardManifest(account, { tournamentId });
+  const card = await buildCardManifest(account, { tournamentId, season: seasonRow });
   const cardAssets = await listCardAssetsForAccount(accountId);
   const { syncPlayerCardSnapshotsAfterAdminChange } = await import("./cardSnapshotService.js");
   const snapshotSync = await syncPlayerCardSnapshotsAfterAdminChange(accountId, { tournamentId }).catch(() => []);
@@ -366,14 +350,30 @@ export async function removePlayerCardAdmin(accountId) {
   const account = await findAccountById(accountId);
   if (!account) return null;
 
-  await pool.query(`DELETE FROM player_card_assets WHERE player_account_id = $1`, [accountId]);
-  await pool.query(
-    `UPDATE player_accounts SET card_tier_override = NULL, updated_at = NOW() WHERE id = $1`,
-    [accountId],
-  );
-  account.card_tier_override = null;
+  const activeSeason = await getActiveSeasonContext();
+  if (activeSeason?.seasonId) {
+    await pool.query(`DELETE FROM player_card_assets WHERE player_account_id = $1 AND season_id = $2`, [
+      accountId,
+      activeSeason.seasonId,
+    ]);
+  } else if (activeSeason?.tournamentId) {
+    await pool.query(`DELETE FROM player_card_assets WHERE player_account_id = $1 AND tournament_id = $2`, [
+      accountId,
+      activeSeason.tournamentId,
+    ]);
+  }
 
-  const card = await buildCardManifest(account);
+  const activeSeason = await getActiveSeasonContext();
+  let seasonRow = null;
+  if (activeSeason?.seasonId) {
+    const { rows } = await pool.query(`SELECT * FROM seasons WHERE id = $1`, [activeSeason.seasonId]);
+    seasonRow = rows[0] || null;
+  }
+
+  const card = await buildCardManifest(account, {
+    tournamentId: activeSeason?.tournamentId || null,
+    season: seasonRow,
+  });
   const cardAssets = await listCardAssetsForAccount(accountId);
   const { syncPlayerCardSnapshotsAfterAdminChange } = await import("./cardSnapshotService.js");
   const snapshotSync = await syncPlayerCardSnapshotsAfterAdminChange(accountId).catch(() => []);

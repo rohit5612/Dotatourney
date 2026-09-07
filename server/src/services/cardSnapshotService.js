@@ -20,14 +20,10 @@ function pickHighestTier(tiers) {
 }
 
 /**
- * Resolve vault tier from purchase, admin override, and season-scoped uploaded assets.
+ * Resolve vault tier from season registration and season-scoped uploaded assets only.
  */
 export function resolveSeasonSnapshotTier(account, registration, asset) {
-  return pickHighestTier([
-    registration?.card_tier,
-    account?.card_tier_override,
-    asset?.tier,
-  ]);
+  return pickHighestTier([registration?.card_tier, asset?.tier]);
 }
 
 function isSnapshotWorthyAsset(asset) {
@@ -102,32 +98,21 @@ const CARD_ASSET_ORDER_SQL = `CASE COALESCE(NULLIF(TRIM(tier), ''), 'default')
        updated_at DESC`;
 
 async function findBestSeasonCardAsset(accountId, { tournamentId, seasonId } = {}) {
-  if (tournamentId || seasonId) {
-    const { rows } = await pool.query(
-      `SELECT *
-       FROM player_card_assets
-       WHERE player_account_id = $1
-         AND (
-           ($2::uuid IS NOT NULL AND tournament_id = $2)
-           OR ($3::uuid IS NOT NULL AND season_id = $3)
-         )
-         AND status IN ('approved', 'pending')
-       ORDER BY ${CARD_ASSET_ORDER_SQL}`,
-      [accountId, tournamentId || null, seasonId || null],
-    );
-    const scoped = rows.find(isSnapshotWorthyAsset);
-    if (scoped) return scoped;
-  }
+  if (!tournamentId && !seasonId) return null;
 
-  const { rows: fallbackRows } = await pool.query(
+  const { rows } = await pool.query(
     `SELECT *
      FROM player_card_assets
      WHERE player_account_id = $1
+       AND (
+         ($2::uuid IS NOT NULL AND tournament_id = $2)
+         OR ($3::uuid IS NOT NULL AND season_id = $3)
+       )
        AND status IN ('approved', 'pending')
      ORDER BY ${CARD_ASSET_ORDER_SQL}`,
-    [accountId],
+    [accountId, tournamentId || null, seasonId || null],
   );
-  return fallbackRows.find(isSnapshotWorthyAsset) || null;
+  return rows.find(isSnapshotWorthyAsset) || null;
 }
 
 async function listSeasonSnapshotAccountIds(tournamentId, seasonId) {
@@ -182,16 +167,7 @@ async function findSeasonCardAsset(accountId, tier, { tournamentId, seasonId } =
     if (rows[0]) return rows[0];
   }
 
-  const { rows } = await pool.query(
-    `SELECT * FROM player_card_assets
-     WHERE player_account_id = $1 AND tier = $2
-     ORDER BY
-       CASE WHEN tournament_id = $3 THEN 0 WHEN season_id = $4 THEN 1 ELSE 2 END,
-       updated_at DESC
-     LIMIT 1`,
-    [accountId, tier, tournamentId || null, seasonId || null],
-  );
-  return rows[0] || null;
+  return null;
 }
 
 async function loadSeasonRegistration(playerAccountId, tournamentId) {
@@ -216,13 +192,10 @@ export async function buildFrozenSeasonCardManifest(account, registration, seaso
   const bestSeasonAsset = await findBestSeasonCardAsset(account.id, { tournamentId, seasonId });
   const snapshotTier = resolveSeasonSnapshotTier(account, registration, bestSeasonAsset);
   const asset =
-    (bestSeasonAsset && normalizeTier(bestSeasonAsset.tier) === snapshotTier
-      ? bestSeasonAsset
-      : null) ||
+    (bestSeasonAsset && normalizeTier(bestSeasonAsset.tier) === snapshotTier ? bestSeasonAsset : null) ||
     (PREMIUM_TIERS.has(snapshotTier)
       ? await findSeasonCardAsset(account.id, snapshotTier, { tournamentId, seasonId })
-      : null) ||
-    bestSeasonAsset;
+      : null);
 
   const registrationForManifest = {
     ...(registration || {}),
@@ -336,51 +309,14 @@ export async function syncPlayerActiveSeasonCardSnapshot(playerAccountId, { tour
 }
 
 /**
- * Refresh vault/active snapshots after admin card upload or removal.
- * Re-snapshots concluded seasons the player participated in (or was scoped to).
+ * Refresh the active-season snapshot after admin card upload or removal.
+ * Concluded-season vault snapshots stay frozen and are not rebuilt here.
  */
 export async function syncPlayerCardSnapshotsAfterAdminChange(playerAccountId, { tournamentId = null } = {}) {
   if (!playerAccountId) return [];
 
-  const synced = [];
-  const { rows: concludedSeasons } = await pool.query(
-    `SELECT s.*
-     FROM seasons s
-     WHERE s.status = 'concluded'
-       AND (
-         EXISTS (
-           SELECT 1 FROM player_registrations pr
-           WHERE pr.player_account_id = $1
-             AND pr.tournament_id = s.tournament_id
-             AND pr.archived_at IS NULL
-         )
-         OR EXISTS (
-           SELECT 1 FROM player_card_assets pca
-           WHERE pca.player_account_id = $1
-             AND (pca.tournament_id = s.tournament_id OR pca.season_id = s.id)
-         )
-         OR ($2::uuid IS NOT NULL AND s.tournament_id = $2)
-       )
-     ORDER BY s.number DESC`,
-    [playerAccountId, tournamentId || null],
-  );
-
-  for (const season of concludedSeasons) {
-    const tournament = await findTournament(season.tournament_id);
-    const saved = await snapshotPlayerForSeason(playerAccountId, {
-      tournamentId: season.tournament_id,
-      season,
-      tournament,
-    });
-    if (saved) {
-      synced.push({ seasonId: season.id, tournamentId: season.tournament_id, status: "concluded" });
-    }
-  }
-
   const active = await syncPlayerActiveSeasonCardSnapshot(playerAccountId, { tournamentId });
-  if (active) synced.push(active);
-
-  return synced;
+  return active ? [active] : [];
 }
 
 /**

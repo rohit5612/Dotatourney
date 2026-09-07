@@ -3,12 +3,20 @@ import { describe, it } from "node:test";
 import { markManifestAsCollection, resolveSeasonSnapshotTier } from "./cardSnapshotService.js";
 
 describe("cardSnapshotService", () => {
-  it("resolves snapshot tier from registration, admin override, and uploaded asset", () => {
+  it("resolves snapshot tier from registration and season-scoped uploaded asset", () => {
     assert.equal(
       resolveSeasonSnapshotTier(
         { card_tier_override: "gold" },
         { card_tier: "default" },
         { tier: "player" },
+      ),
+      "player",
+    );
+    assert.equal(
+      resolveSeasonSnapshotTier(
+        { card_tier_override: "holo" },
+        { card_tier: "gold" },
+        null,
       ),
       "gold",
     );
