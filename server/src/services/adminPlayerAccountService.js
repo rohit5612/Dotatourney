@@ -176,9 +176,14 @@ export async function listPlayerAccountsAdmin({
   );
   const { rows: countRows } = await pool.query(
     `SELECT COUNT(*)::int AS total
-     FROM player_accounts pa
-     ${bestRegJoin}
-     WHERE ${where.join(" AND ")}`,
+     FROM (
+       SELECT pa.id,
+              (${cardPurchasedExpr}) AS card_purchased,
+              (${cardIssuedExpr}) AS card_issued
+       FROM player_accounts pa
+       ${bestRegJoin}
+       WHERE ${where.join(" AND ")}
+     ) scoped_accounts`,
     params.slice(0, -2),
   );
   return {
