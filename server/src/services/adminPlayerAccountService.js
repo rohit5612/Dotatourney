@@ -12,29 +12,74 @@ const CARD_TIER_RANK_SQL = `CASE COALESCE(NULLIF(TRIM(pr.card_tier), ''), 'defau
   ELSE 3
 END`;
 
-const BEST_REGISTRATION_JOIN = `LEFT JOIN LATERAL (
-  SELECT pr.card_tier
-  FROM player_registrations pr
-  WHERE pr.player_account_id = pa.id AND pr.archived_at IS NULL
-  ORDER BY ${CARD_TIER_RANK_SQL}, pr.created_at DESC
-  LIMIT 1
-) best_reg ON TRUE`;
+async function getActiveSeasonContext() {
+  const { rows } = await pool.query(
+    `SELECT id, tournament_id, name, number
+     FROM seasons
+     WHERE status = 'active'
+     ORDER BY number DESC
+     LIMIT 1`,
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    seasonId: row.id,
+    tournamentId: row.tournament_id,
+    seasonName: row.name || `Season ${row.number}`,
+    seasonNumber: row.number,
+  };
+}
 
-const PURCHASED_TIER_EXPR = `COALESCE(NULLIF(TRIM(best_reg.card_tier), ''), 'default')`;
-const CARD_PURCHASED_EXPR = `${PURCHASED_TIER_EXPR} IN ('player', 'gold', 'holo')`;
-const CARD_ISSUED_EXPR = `EXISTS (
-  SELECT 1 FROM player_card_assets pca
-  WHERE pca.player_account_id = pa.id
-    AND pca.tier = ${PURCHASED_TIER_EXPR}
-    AND pca.status = 'approved'
-    AND (
-      NULLIF(TRIM(pca.asset_url), '') IS NOT NULL
-      OR (
-        pca.manifest_json->>'version' IS NOT NULL
-        AND pca.manifest_json->>'template' IS NOT NULL
+function buildActiveSeasonCardStatusSql(activeSeason, tournamentParamIndex, seasonParamIndex) {
+  const activeTournamentId = activeSeason?.tournamentId || null;
+  const activeSeasonId = activeSeason?.seasonId || null;
+
+  const bestRegJoin = activeTournamentId
+    ? `LEFT JOIN LATERAL (
+      SELECT pr.card_tier
+      FROM player_registrations pr
+      WHERE pr.player_account_id = pa.id
+        AND pr.tournament_id = $${tournamentParamIndex}
+        AND pr.archived_at IS NULL
+      ORDER BY ${CARD_TIER_RANK_SQL}, pr.created_at DESC
+      LIMIT 1
+    ) best_reg ON TRUE`
+    : `LEFT JOIN LATERAL (
+      SELECT NULL::text AS card_tier
+    ) best_reg ON TRUE`;
+
+  const purchasedTierExpr = `COALESCE(NULLIF(TRIM(best_reg.card_tier), ''), 'default')`;
+  const cardPurchasedExpr = `${purchasedTierExpr} IN ('player', 'gold', 'holo')`;
+
+  let cardAssetSeasonScope = "FALSE";
+  if (activeSeasonId && activeTournamentId) {
+    cardAssetSeasonScope = `(pca.season_id = $${seasonParamIndex} OR (pca.season_id IS NULL AND pca.tournament_id = $${tournamentParamIndex}))`;
+  } else if (activeTournamentId) {
+    cardAssetSeasonScope = `pca.tournament_id = $${tournamentParamIndex}`;
+  }
+
+  const cardIssuedExpr = `EXISTS (
+    SELECT 1 FROM player_card_assets pca
+    WHERE pca.player_account_id = pa.id
+      AND pca.tier = ${purchasedTierExpr}
+      AND pca.status = 'approved'
+      AND ${cardAssetSeasonScope}
+      AND (
+        NULLIF(TRIM(pca.asset_url), '') IS NOT NULL
+        OR (
+          pca.manifest_json->>'version' IS NOT NULL
+          AND pca.manifest_json->>'template' IS NOT NULL
+        )
       )
-    )
-)`;
+  )`;
+
+  return {
+    bestRegJoin,
+    purchasedTierExpr,
+    cardPurchasedExpr,
+    cardIssuedExpr,
+  };
+}
 
 function mapAdminListCardStatus(row) {
   let cardPurchased = Boolean(row.card_purchased);
@@ -84,7 +129,25 @@ export async function listPlayerAccountsAdmin({
   limit = 50,
   offset = 0,
 } = {}) {
+  const activeSeason = await getActiveSeasonContext();
   const params = [];
+  let tournamentParamIndex = null;
+  let seasonParamIndex = null;
+  if (activeSeason?.tournamentId) {
+    params.push(activeSeason.tournamentId);
+    tournamentParamIndex = params.length;
+  }
+  if (activeSeason?.seasonId) {
+    params.push(activeSeason.seasonId);
+    seasonParamIndex = params.length;
+  }
+
+  const { bestRegJoin, purchasedTierExpr, cardPurchasedExpr, cardIssuedExpr } = buildActiveSeasonCardStatusSql(
+    activeSeason,
+    tournamentParamIndex,
+    seasonParamIndex,
+  );
+
   const where = ["1=1"];
   if (search.trim()) {
     params.push(`%${search.trim().toLowerCase()}%`);
@@ -92,21 +155,21 @@ export async function listPlayerAccountsAdmin({
   }
   if (verified === "true") where.push("email_verified_at IS NOT NULL");
   if (verified === "false") where.push("email_verified_at IS NULL");
-  if (cardStatus === "not_purchased") where.push(`NOT (${CARD_PURCHASED_EXPR})`);
-  if (cardStatus === "purchased") where.push(`(${CARD_PURCHASED_EXPR})`);
-  if (cardStatus === "pending_issue") where.push(`(${CARD_PURCHASED_EXPR}) AND NOT (${CARD_ISSUED_EXPR})`);
-  if (cardStatus === "issued") where.push(`(${CARD_PURCHASED_EXPR}) AND (${CARD_ISSUED_EXPR})`);
+  if (cardStatus === "not_purchased") where.push(`NOT (${cardPurchasedExpr})`);
+  if (cardStatus === "purchased") where.push(`(${cardPurchasedExpr})`);
+  if (cardStatus === "pending_issue") where.push(`(${cardPurchasedExpr}) AND NOT (${cardIssuedExpr})`);
+  if (cardStatus === "issued") where.push(`(${cardPurchasedExpr}) AND (${cardIssuedExpr})`);
   params.push(Math.min(Number(limit) || 50, 200));
   params.push(Math.max(Number(offset) || 0, 0));
   const { rows } = await pool.query(
     `SELECT pa.*,
             (SELECT COUNT(*)::int FROM player_registrations pr
              WHERE pr.player_account_id = pa.id AND pr.archived_at IS NULL) AS registration_count,
-            ${PURCHASED_TIER_EXPR} AS purchased_tier,
-            (${CARD_PURCHASED_EXPR}) AS card_purchased,
-            (${CARD_ISSUED_EXPR}) AS card_issued
+            ${purchasedTierExpr} AS purchased_tier,
+            (${cardPurchasedExpr}) AS card_purchased,
+            (${cardIssuedExpr}) AS card_issued
      FROM player_accounts pa
-     ${BEST_REGISTRATION_JOIN}
+     ${bestRegJoin}
      WHERE ${where.join(" AND ")}
      ORDER BY pa.created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params,
@@ -114,7 +177,7 @@ export async function listPlayerAccountsAdmin({
   const { rows: countRows } = await pool.query(
     `SELECT COUNT(*)::int AS total
      FROM player_accounts pa
-     ${BEST_REGISTRATION_JOIN}
+     ${bestRegJoin}
      WHERE ${where.join(" AND ")}`,
     params.slice(0, -2),
   );
@@ -127,6 +190,14 @@ export async function listPlayerAccountsAdmin({
       ...mapAdminListCardStatus(row),
     })),
     total: countRows[0]?.total || 0,
+    cardStatusSeason: activeSeason
+      ? {
+          seasonId: activeSeason.seasonId,
+          seasonName: activeSeason.seasonName,
+          seasonNumber: activeSeason.seasonNumber,
+          tournamentId: activeSeason.tournamentId,
+        }
+      : null,
   };
 }
 

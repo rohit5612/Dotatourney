@@ -665,6 +665,7 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [cardStatusFilter, setCardStatusFilter] = useState("");
+  const [cardStatusSeason, setCardStatusSeason] = useState(null);
   const [accounts, setAccounts] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -732,6 +733,7 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
       });
       setAccounts(data.accounts || []);
       setTotal(data.total || 0);
+      setCardStatusSeason(data.cardStatusSeason || null);
     } catch (error) {
       setMessage?.(error.message);
     } finally {
@@ -1046,7 +1048,10 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
           </label>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          Card status shows purchased / issued. Example: ✓/✓ = bought and card uploaded.{" "}
+          Card status shows purchased / issued for the active season
+          {cardStatusSeason?.seasonName ? ` (${cardStatusSeason.seasonName})` : ""}. Example: ✓/✓ = bought and card
+          uploaded.{" "}
+          {!cardStatusSeason && !loadingList ? "No active season — all accounts show as not purchased. " : ""}
           {loadingList
             ? "Loading…"
             : `Showing ${total ? pageStart + 1 : 0}-${pageEnd} of ${total} account${total === 1 ? "" : "s"}.`}
