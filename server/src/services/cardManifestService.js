@@ -108,16 +108,24 @@ async function findTournament(tournamentId) {
 }
 
 async function findSeasonScopedCardAsset(accountId, { tournamentId = null, seasonId = null } = {}) {
-  if (!tournamentId && !seasonId) return null;
+  if (!seasonId && !tournamentId) return null;
+
+  const conditions = ["player_account_id = $1"];
+  const params = [accountId];
+
+  if (seasonId) {
+    params.push(seasonId);
+    conditions.push(`season_id = $${params.length}`);
+  }
+  if (tournamentId) {
+    params.push(tournamentId);
+    conditions.push(`tournament_id = $${params.length}`);
+  }
 
   const { rows } = await pool.query(
     `SELECT *
      FROM player_card_assets
-     WHERE player_account_id = $1
-       AND (
-         ($2::uuid IS NOT NULL AND tournament_id = $2)
-         OR ($3::uuid IS NOT NULL AND season_id = $3)
-       )
+     WHERE ${conditions.join(" AND ")}
        AND status IN ('approved', 'pending')
      ORDER BY
        CASE COALESCE(NULLIF(TRIM(tier), ''), 'default')
@@ -129,9 +137,16 @@ async function findSeasonScopedCardAsset(accountId, { tournamentId = null, seaso
        CASE WHEN status = 'approved' THEN 0 ELSE 1 END,
        updated_at DESC
      LIMIT 1`,
-    [accountId, tournamentId || null, seasonId || null],
+    params,
   );
   return rows[0] || null;
+}
+
+function assetMatchesSeasonScope(asset, { seasonId = null, tournamentId = null } = {}) {
+  if (!asset) return false;
+  if (seasonId && asset.season_id !== seasonId) return false;
+  if (tournamentId && asset.tournament_id !== tournamentId) return false;
+  return true;
 }
 
 async function findCardAsset(accountId, tier, { tournamentId = null, seasonId = null } = {}) {
@@ -370,17 +385,16 @@ export async function buildCardManifest(accountRow, options = {}) {
   const purchasedTier =
     (isDemoAccessAccount(account) ? demoAccessCardTier(account) : null) || registrationTier;
   const freezeSnapshot = Boolean(options.freezeSnapshot);
+  const seasonScope = { tournamentId, seasonId: season?.id || null };
   const asset =
     options.assetOverride !== undefined
       ? options.assetOverride
-      : await findSeasonScopedCardAsset(account.id, {
-          tournamentId,
-          seasonId: season?.id || null,
-        });
-  const assetApproved = isApprovedCardAsset(asset);
+      : await findSeasonScopedCardAsset(account.id, seasonScope);
+  const scopedAsset = assetMatchesSeasonScope(asset, seasonScope) ? asset : null;
+  const assetApproved = isApprovedCardAsset(scopedAsset);
   const effectiveTier = freezeSnapshot
     ? options.cardTier || purchasedTier || "default"
-    : pickHighestTier([purchasedTier, assetApproved ? asset?.tier : null]);
+    : pickHighestTier([purchasedTier, assetApproved ? scopedAsset?.tier : null]);
   const cardPending = PREMIUM_TIERS.has(effectiveTier) && !assetApproved;
   const usesPremiumTemplate = PREMIUM_TIERS.has(effectiveTier);
 
@@ -390,12 +404,12 @@ export async function buildCardManifest(accountRow, options = {}) {
   const seasonValidity = seasonValidityFromContext({
     season,
     tournament,
-    asset,
+    asset: scopedAsset,
     collectionOnly: Boolean(options.collectionOnly || options.historicalContext),
     graceDisplay,
   });
   const cardPayload = assetApproved
-    ? buildCardPayload(asset, account, registration, roles, { freeze: freezeSnapshot })
+    ? buildCardPayload(scopedAsset, account, registration, roles, { freeze: freezeSnapshot })
     : usesPremiumTemplate
       ? buildTemplateCardPayload(effectiveTier, account, registration, roles)
       : null;
@@ -406,7 +420,7 @@ export async function buildCardManifest(accountRow, options = {}) {
     tierOverride: null,
     renderTier,
     template: usesPremiumTemplate
-      ? parseManifestJson(asset?.manifest_json)?.template || effectiveTier
+      ? parseManifestJson(scopedAsset?.manifest_json)?.template || effectiveTier
       : "default",
     bpcId: account.bpc_id,
     displayName: account.display_name || account.steam_persona || account.slug,
@@ -426,10 +440,10 @@ export async function buildCardManifest(accountRow, options = {}) {
         : {},
     steamAvatarUrl: account.steam_avatar_url || "",
     steamAvatar: resolveAccountPortraitUrl(account),
-    customImage: assetApproved ? asset.asset_url || null : null,
-    tagline: assetApproved ? asset.tagline || null : null,
+    customImage: assetApproved ? scopedAsset.asset_url || null : null,
+    tagline: assetApproved ? scopedAsset.tagline || null : null,
     frameTheme: season?.theme_key || "emerald",
-    assetStatus: asset?.status || (PREMIUM_TIERS.has(effectiveTier) ? "pending" : null),
+    assetStatus: scopedAsset?.status || (PREMIUM_TIERS.has(effectiveTier) ? "pending" : null),
     cardPending,
     cardPayload,
   };
@@ -438,7 +452,7 @@ export async function buildCardManifest(accountRow, options = {}) {
 
   if (freezeSnapshot) {
     manifest.cardPending = false;
-    return freezeManifestVisuals(manifest, { account, asset, tournament, season });
+    return freezeManifestVisuals(manifest, { account, asset: scopedAsset, tournament, season });
   }
 
   return manifest;
@@ -464,6 +478,7 @@ export async function buildPublicDisplayCardManifest(accountRow, options = {}) {
     season: options.season || displayCtx.season,
     tournamentId: options.tournamentId || displayCtx.season?.tournament_id || null,
     graceDisplay: options.graceDisplay ?? displayCtx.graceDisplay,
+    publicLiveDisplay: options.publicLiveDisplay ?? !displayCtx.graceDisplay,
   });
 }
 

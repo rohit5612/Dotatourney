@@ -53,7 +53,7 @@ function buildActiveSeasonCardStatusSql(activeSeason, tournamentParamIndex, seas
 
   let cardAssetSeasonScope = "FALSE";
   if (activeSeasonId && activeTournamentId) {
-    cardAssetSeasonScope = `(pca.season_id = $${seasonParamIndex} OR (pca.season_id IS NULL AND pca.tournament_id = $${tournamentParamIndex}))`;
+    cardAssetSeasonScope = `pca.season_id = $${seasonParamIndex} AND pca.tournament_id = $${tournamentParamIndex}`;
   } else if (activeTournamentId) {
     cardAssetSeasonScope = `pca.tournament_id = $${tournamentParamIndex}`;
   }

@@ -8,7 +8,7 @@ import {
   getCoinBalance,
 } from "./playerAccountRepository.js";
 import { buildPublicDisplayCardManifest } from "./cardManifestService.js";
-import { getDisplaySeasonTournamentId } from "./paymentService.js";
+import { getActiveSeasonTournamentId, getDisplaySeasonTournamentId } from "./paymentService.js";
 import { getOrCreateCommerceConfig, publicCommerceConfig } from "./commerceConfigRepository.js";
 import { getPlayerMatchAppearances, getPlayerMatchSchedule } from "./matchSubstitutionService.js";
 import { findActivePlayerTeamOnTournament } from "./rosterMembershipService.js";
@@ -193,7 +193,7 @@ function activeSeasonRegistrationLateral(activeTournamentId, paramIndex) {
 }
 
 export async function getCommunityDirectory({ search = "", tier = "", limit = 48, offset = 0 } = {}) {
-  const activeTournamentId = await getDisplaySeasonTournamentId();
+  const activeTournamentId = (await getActiveSeasonTournamentId()) || (await getDisplaySeasonTournamentId());
   const params = [];
   if (activeTournamentId) params.push(activeTournamentId);
   const lateral = activeSeasonRegistrationLateral(activeTournamentId, 1);
@@ -245,6 +245,8 @@ export async function getCommunityDirectory({ search = "", tier = "", limit = 48
         card_tier: registrationTier,
         tournament_id: activeTournamentId,
       },
+      tournamentId: activeTournamentId,
+      publicLiveDisplay: true,
     });
     const recognitions = recognitionIndex.get(String(account.id)) || [];
     players.push({
@@ -265,7 +267,7 @@ const STEAM_ID64_BASE = 76561197960265728n;
 
 /** All community-directory players for overlay asset export (no pagination). */
 export async function listCommunityPlayersForExport({ steam32Id = null } = {}) {
-  const activeTournamentId = await getDisplaySeasonTournamentId();
+  const activeTournamentId = (await getActiveSeasonTournamentId()) || (await getDisplaySeasonTournamentId());
   const params = [];
   if (activeTournamentId) params.push(activeTournamentId);
   const lateral = activeSeasonRegistrationLateral(activeTournamentId, 1);
@@ -300,6 +302,8 @@ export async function listCommunityPlayersForExport({ steam32Id = null } = {}) {
         card_tier: registrationTier,
         tournament_id: activeTournamentId,
       },
+      tournamentId: activeTournamentId,
+      publicLiveDisplay: true,
     });
     const steam32 = steam64ToSteam32(account.steam_id);
     if (steam32 == null) continue;

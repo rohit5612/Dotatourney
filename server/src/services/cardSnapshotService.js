@@ -98,19 +98,22 @@ const CARD_ASSET_ORDER_SQL = `CASE COALESCE(NULLIF(TRIM(tier), ''), 'default')
        updated_at DESC`;
 
 async function findBestSeasonCardAsset(accountId, { tournamentId, seasonId } = {}) {
-  if (!tournamentId && !seasonId) return null;
+  if (!seasonId) return null;
+
+  const conditions = ["player_account_id = $1", "season_id = $2"];
+  const params = [accountId, seasonId];
+  if (tournamentId) {
+    params.push(tournamentId);
+    conditions.push(`tournament_id = $${params.length}`);
+  }
 
   const { rows } = await pool.query(
     `SELECT *
      FROM player_card_assets
-     WHERE player_account_id = $1
-       AND (
-         ($2::uuid IS NOT NULL AND tournament_id = $2)
-         OR ($3::uuid IS NOT NULL AND season_id = $3)
-       )
+     WHERE ${conditions.join(" AND ")}
        AND status IN ('approved', 'pending')
      ORDER BY ${CARD_ASSET_ORDER_SQL}`,
-    [accountId, tournamentId || null, seasonId || null],
+    params,
   );
   return rows.find(isSnapshotWorthyAsset) || null;
 }
@@ -145,29 +148,22 @@ async function listSeasonSnapshotAccountIds(tournamentId, seasonId) {
 }
 
 async function findSeasonCardAsset(accountId, tier, { tournamentId, seasonId } = {}) {
-  if (!tier || tier === "default") return null;
+  if (!tier || tier === "default" || !seasonId) return null;
 
+  const conditions = ["player_account_id = $1", "tier = $2", "season_id = $3"];
+  const params = [accountId, tier, seasonId];
   if (tournamentId) {
-    const { rows } = await pool.query(
-      `SELECT * FROM player_card_assets
-       WHERE player_account_id = $1 AND tier = $2 AND tournament_id = $3
-       ORDER BY updated_at DESC LIMIT 1`,
-      [accountId, tier, tournamentId],
-    );
-    if (rows[0]) return rows[0];
+    params.push(tournamentId);
+    conditions.push(`tournament_id = $${params.length}`);
   }
 
-  if (seasonId) {
-    const { rows } = await pool.query(
-      `SELECT * FROM player_card_assets
-       WHERE player_account_id = $1 AND tier = $2 AND season_id = $3
-       ORDER BY updated_at DESC LIMIT 1`,
-      [accountId, tier, seasonId],
-    );
-    if (rows[0]) return rows[0];
-  }
-
-  return null;
+  const { rows } = await pool.query(
+    `SELECT * FROM player_card_assets
+     WHERE ${conditions.join(" AND ")}
+     ORDER BY updated_at DESC LIMIT 1`,
+    params,
+  );
+  return rows[0] || null;
 }
 
 async function loadSeasonRegistration(playerAccountId, tournamentId) {
