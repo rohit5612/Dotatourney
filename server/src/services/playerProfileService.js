@@ -246,7 +246,7 @@ export async function getCommunityDirectory({ search = "", tier = "", limit = 48
         tournament_id: activeTournamentId,
       },
       tournamentId: activeTournamentId,
-      publicLiveDisplay: true,
+      directoryDisplay: true,
     });
     const recognitions = recognitionIndex.get(String(account.id)) || [];
     players.push({
@@ -255,7 +255,7 @@ export async function getCommunityDirectory({ search = "", tier = "", limit = 48
       displayName: account.display_name || account.slug,
       steam32Id: steam64ToSteam32(account.steam_id),
       avatarUrl: account.avatar_url || account.steam_avatar_url || "",
-      cardTier: card?.tier || registrationTier,
+      cardTier: registrationTier,
       card,
       badges: recognitions.map(({ label, kind }) => ({ label, kind })),
     });
@@ -303,7 +303,7 @@ export async function listCommunityPlayersForExport({ steam32Id = null } = {}) {
         tournament_id: activeTournamentId,
       },
       tournamentId: activeTournamentId,
-      publicLiveDisplay: true,
+      directoryDisplay: true,
     });
     const steam32 = steam64ToSteam32(account.steam_id);
     if (steam32 == null) continue;
@@ -313,7 +313,7 @@ export async function listCommunityPlayersForExport({ steam32Id = null } = {}) {
       bpcId: account.bpc_id,
       displayName: account.display_name || account.slug,
       steam32Id: steam32,
-      tier: card?.renderTier || card?.tier || registrationTier,
+      tier: registrationTier,
       card,
     });
   }

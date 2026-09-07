@@ -385,16 +385,23 @@ export async function buildCardManifest(accountRow, options = {}) {
   const purchasedTier =
     (isDemoAccessAccount(account) ? demoAccessCardTier(account) : null) || registrationTier;
   const freezeSnapshot = Boolean(options.freezeSnapshot);
+  const directoryDisplay = Boolean(options.directoryDisplay);
   const seasonScope = { tournamentId, seasonId: season?.id || null };
   const asset =
     options.assetOverride !== undefined
       ? options.assetOverride
-      : await findSeasonScopedCardAsset(account.id, seasonScope);
+      : directoryDisplay || PREMIUM_TIERS.has(purchasedTier)
+        ? await findSeasonScopedCardAsset(account.id, seasonScope)
+        : null;
   const scopedAsset = assetMatchesSeasonScope(asset, seasonScope) ? asset : null;
-  const assetApproved = isApprovedCardAsset(scopedAsset);
+  const displayAsset =
+    directoryDisplay && !PREMIUM_TIERS.has(purchasedTier) ? null : scopedAsset;
+  const assetApproved = isApprovedCardAsset(displayAsset);
   const effectiveTier = freezeSnapshot
     ? options.cardTier || purchasedTier || "default"
-    : pickHighestTier([purchasedTier, assetApproved ? scopedAsset?.tier : null]);
+    : directoryDisplay
+      ? purchasedTier || "default"
+      : pickHighestTier([purchasedTier, assetApproved ? displayAsset?.tier : null]);
   const cardPending = PREMIUM_TIERS.has(effectiveTier) && !assetApproved;
   const usesPremiumTemplate = PREMIUM_TIERS.has(effectiveTier);
 
@@ -404,12 +411,12 @@ export async function buildCardManifest(accountRow, options = {}) {
   const seasonValidity = seasonValidityFromContext({
     season,
     tournament,
-    asset: scopedAsset,
+    asset: displayAsset,
     collectionOnly: Boolean(options.collectionOnly || options.historicalContext),
     graceDisplay,
   });
   const cardPayload = assetApproved
-    ? buildCardPayload(scopedAsset, account, registration, roles, { freeze: freezeSnapshot })
+    ? buildCardPayload(displayAsset, account, registration, roles, { freeze: freezeSnapshot })
     : usesPremiumTemplate
       ? buildTemplateCardPayload(effectiveTier, account, registration, roles)
       : null;
@@ -420,7 +427,7 @@ export async function buildCardManifest(accountRow, options = {}) {
     tierOverride: null,
     renderTier,
     template: usesPremiumTemplate
-      ? parseManifestJson(scopedAsset?.manifest_json)?.template || effectiveTier
+      ? parseManifestJson(displayAsset?.manifest_json)?.template || effectiveTier
       : "default",
     bpcId: account.bpc_id,
     displayName: account.display_name || account.steam_persona || account.slug,
@@ -440,10 +447,10 @@ export async function buildCardManifest(accountRow, options = {}) {
         : {},
     steamAvatarUrl: account.steam_avatar_url || "",
     steamAvatar: resolveAccountPortraitUrl(account),
-    customImage: assetApproved ? scopedAsset.asset_url || null : null,
-    tagline: assetApproved ? scopedAsset.tagline || null : null,
+    customImage: assetApproved ? displayAsset.asset_url || null : null,
+    tagline: assetApproved ? displayAsset.tagline || null : null,
     frameTheme: season?.theme_key || "emerald",
-    assetStatus: scopedAsset?.status || (PREMIUM_TIERS.has(effectiveTier) ? "pending" : null),
+    assetStatus: displayAsset?.status || (PREMIUM_TIERS.has(effectiveTier) ? "pending" : null),
     cardPending,
     cardPayload,
   };
@@ -452,7 +459,7 @@ export async function buildCardManifest(accountRow, options = {}) {
 
   if (freezeSnapshot) {
     manifest.cardPending = false;
-    return freezeManifestVisuals(manifest, { account, asset: scopedAsset, tournament, season });
+    return freezeManifestVisuals(manifest, { account, asset: displayAsset, tournament, season });
   }
 
   return manifest;
@@ -478,7 +485,6 @@ export async function buildPublicDisplayCardManifest(accountRow, options = {}) {
     season: options.season || displayCtx.season,
     tournamentId: options.tournamentId || displayCtx.season?.tournament_id || null,
     graceDisplay: options.graceDisplay ?? displayCtx.graceDisplay,
-    publicLiveDisplay: options.publicLiveDisplay ?? !displayCtx.graceDisplay,
   });
 }
 

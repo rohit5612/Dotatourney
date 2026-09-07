@@ -333,6 +333,17 @@ export async function uploadPlayerCardAdmin(accountId, body, adminUserId) {
     );
   }
 
+  if (body.approve !== false && tournamentId) {
+    await pool.query(
+      `UPDATE player_registrations
+       SET card_tier = $3, updated_at = NOW()
+       WHERE player_account_id = $1
+         AND tournament_id = $2
+         AND archived_at IS NULL`,
+      [accountId, tournamentId, tier],
+    );
+  }
+
   let seasonRow = null;
   if (seasonId) {
     const { rows } = await pool.query(`SELECT * FROM seasons WHERE id = $1`, [seasonId]);
