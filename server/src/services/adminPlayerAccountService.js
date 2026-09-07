@@ -363,7 +363,6 @@ export async function removePlayerCardAdmin(accountId) {
     ]);
   }
 
-  const activeSeason = await getActiveSeasonContext();
   let seasonRow = null;
   if (activeSeason?.seasonId) {
     const { rows } = await pool.query(`SELECT * FROM seasons WHERE id = $1`, [activeSeason.seasonId]);
