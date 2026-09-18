@@ -341,6 +341,11 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
+  createManualRegistration: (tournamentId, payload) =>
+    request(`/tournaments/${tournamentId}/registrations/manual`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   archiveRegistration: (id, registrationId, reason) =>
     request(`/tournaments/${id}/registrations/${registrationId}/archive`, {
       method: "PATCH",

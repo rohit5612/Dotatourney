@@ -68,7 +68,7 @@ export function PlayerCrmPage({ tournamentId, registrations, refreshRegistration
           <RegistrationCrmPage
             tournamentId={tournamentId}
             registrations={registrations}
-            refreshRegistrations={refreshRegistrations}
+            refreshRegistrations={(id) => refreshRegistrations(id ?? tournamentId)}
             canWrite={access.canUpdate("playerCrm.registrations")}
             canDelete={access.canDelete("playerCrm.registrations")}
           />

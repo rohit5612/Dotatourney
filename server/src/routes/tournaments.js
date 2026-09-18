@@ -40,7 +40,8 @@ import { sendPlayerRegistrationDecisionEmail } from "../services/emailService.js
 import { notifyRegistrationDecision } from "../services/playerNotificationService.js";
 import { buildGroupedStandings, buildStandings } from "../services/standingsEngine.js";
 import { buildGroupedStandingsWithSeeding } from "../services/groupStandingsOverrides.js";
-import { requireAdmin, requirePermission } from "../services/authService.js";
+import { requireAdmin, requirePermission, requireSuperadmin } from "../services/authService.js";
+import { createManualAdminRegistration } from "../services/manualAdminRegistrationService.js";
 import { syncCrmRegistrationsToGoogleSheet } from "../services/googleSheetsSync.js";
 import { invalidatePublicCache } from "../services/publicCache.js";
 import { writeAuditLog } from "../services/auditLogService.js";
@@ -1260,6 +1261,53 @@ router.patch("/:id/matches/:matchId", async (req, res, next) => {
 router.get("/:id/registrations", async (req, res, next) => {
   try {
     res.json({ registrations: await listPlayerRegistrations(req.params.id, { excludeSubstitutes: true }) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/:id/registrations/manual", requireSuperadmin, async (req, res, next) => {
+  try {
+    const payload = z
+      .object({
+        seasonId: z.string().uuid().optional(),
+        playerAccountId: z.string().uuid(),
+        cardTier: z.enum(["default", "player", "gold", "holo"]).optional().default("default"),
+        amountRupees: z.coerce.number().min(0).max(5_000_000),
+        offlinePaymentAccount: z.string().trim().min(2).max(200),
+        superadminPassword: z.string().min(1).max(200),
+      })
+      .parse(req.body);
+
+    const result = await createManualAdminRegistration({
+      tournamentId: req.params.id,
+      seasonId: payload.seasonId,
+      playerAccountId: payload.playerAccountId,
+      cardTier: payload.cardTier,
+      amountRupees: payload.amountRupees,
+      offlinePaymentAccount: payload.offlinePaymentAccount,
+      superadminPassword: payload.superadminPassword,
+      adminUser: req.adminUser,
+    });
+
+    await writeAuditLog({
+      adminUserId: req.adminUser.id,
+      action: "registration.manual_create",
+      entityType: "player_registration",
+      entityId: result.registration?.id,
+      payload: {
+        tournamentId: req.params.id,
+        playerAccountId: payload.playerAccountId,
+        cardTier: payload.cardTier,
+        amountRupees: payload.amountRupees,
+      },
+    });
+
+    res.status(201).json({
+      registrationId: result.registration?.id,
+      tournamentId: result.tournamentId,
+      orderId: result.orderId,
+    });
   } catch (error) {
     next(error);
   }

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
 import { AdminGlassPanel } from "../admin/components/AdminGlassPanel.jsx";
+import { useAdminAccess } from "../admin/context/AdminAccessContext.jsx";
+import { ManualRegistrationModal } from "../admin/registrations/ManualRegistrationModal.jsx";
 import {
   buildCrmSheetSyncConfirmMessage,
   getGoogleSheetPrefs,
@@ -38,6 +40,8 @@ function isDraftDirty(registration, draft) {
 }
 
 export function RegistrationCrmPage({ tournamentId, registrations, refreshRegistrations, canWrite = true, canDelete = canWrite }) {
+  const access = useAdminAccess();
+  const [manualRegOpen, setManualRegOpen] = useState(false);
   const [roleFilter, setRoleFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("pending");
   const [paymentFilter, setPaymentFilter] = useState("");
@@ -257,6 +261,15 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
             </p>
           </div>
           <div className="flex min-w-0 flex-col items-stretch gap-2 sm:items-end">
+            {access.isSuperadmin ? (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm shrink-0"
+                onClick={() => setManualRegOpen(true)}
+              >
+                Manual registration
+              </button>
+            ) : null}
             <button
               type="button"
               className="btn btn-outline btn-sm shrink-0"
@@ -580,6 +593,21 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
           </div>
         </div>
       ) : null}
+
+      <ManualRegistrationModal
+        open={manualRegOpen}
+        onClose={() => setManualRegOpen(false)}
+        defaultTournamentId={tournamentId}
+        onSuccess={async (result) => {
+          const targetId = result?.tournamentId || tournamentId;
+          await refreshRegistrations(targetId);
+          setMessage(
+            targetId === tournamentId
+              ? "Player registered manually — confirmation email sent. Approve when ready."
+              : "Player registered for another season’s tournament — switch the tournament selector to review the entry.",
+          );
+        }}
+      />
     </div>
   );
 }

@@ -625,6 +625,7 @@ function receiptTableHtml({
   paymentRef,
   orderId,
   paidAt,
+  offlinePaymentAccount,
 }) {
   const bundleItem = (lineItems || [])[0];
   const bundleName = bundleLabel || bundleItem?.label || bundleItem?.bundleLabel || "Registration bundle";
@@ -664,7 +665,7 @@ function receiptTableHtml({
         <td style="padding:8px 0;color:#e9a84a;font-size:15px;font-weight:600;text-align:right;">₹${paidRupee}</td>
       </tr>
       ${tierLabel ? `<tr><td colspan="2" style="padding:8px 0 0;color:#71717a;font-size:13px;">Bundle: <strong style="color:#a1a1aa;">${escapeHtml(tierLabel)}</strong></td></tr>` : ""}
-      <tr><td colspan="2" style="padding:8px 0 0;color:#71717a;font-size:12px;">Payment ref: ${escapeHtml(paymentRef || "—")}<br />Order: ${escapeHtml(orderId || "—")}<br />Paid: ${escapeHtml(paidAt || "")}</td></tr>
+      <tr><td colspan="2" style="padding:8px 0 0;color:#71717a;font-size:12px;">Payment ref: ${escapeHtml(paymentRef || "—")}<br />${offlinePaymentAccount ? `Paid to: ${escapeHtml(offlinePaymentAccount)}<br />` : ""}Order: ${escapeHtml(orderId || "—")}<br />Paid: ${escapeHtml(paidAt || "")}</td></tr>
     </table>
     <p style="margin:12px 0 0;font-size:12px;color:#71717a;">This is a payment receipt, not a tax invoice.</p>
   `;
@@ -786,6 +787,73 @@ export async function sendPaidRegistrationEmail({
   const html = baseEmailWrapper({
     title: "Payment received",
     preheader: `Payment received for ${tour}. Pending admin approval.`,
+    innerHtml,
+    audience: "player",
+  });
+  await sendMail({ to, subject, text, html });
+}
+
+/**
+ * Manual superadmin registration — registration received copy plus payment receipt for offline amount.
+ */
+export async function sendManualAdminRegistrationEmail({
+  to,
+  name,
+  tournamentName,
+  publicCode,
+  lineItems,
+  subtotal,
+  totalPaise,
+  cardTier,
+  bundleLabel,
+  offlinePaymentAccount,
+  orderId,
+  paidAt,
+}) {
+  const tour = tournamentName || DEFAULT_TOURNAMENT_NAME;
+  const code = publicCode || "";
+  const tierLabel =
+    bundleLabel || (cardTier && cardTier !== "default" ? String(cardTier) : "Default registration");
+  const paidRupee = (Number(totalPaise || 0) / 100).toFixed(2);
+  const subtotalRupee = Number(subtotal || 0);
+  const subject = `Registration received — ${tour}`;
+  const text = [
+    `Hi ${name || "there"},`,
+    ``,
+    `We received your registration for ${tour} (ID ${code}).`,
+    `Card tier: ${tierLabel}`,
+    `Amount recorded: ₹${Number(paidRupee).toLocaleString("en-IN")}`,
+    offlinePaymentAccount ? `Payment reference: ${offlinePaymentAccount}` : "",
+    `Your registration is under review. You will receive another email when it is approved or rejected.`,
+    ``,
+    `— ${tour}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const receiptHtml = receiptTableHtml({
+    lineItems,
+    subtotal: subtotalRupee,
+    coinDiscount: 0,
+    coinsApplied: 0,
+    totalPaise,
+    cardTier,
+    bundleLabel: tierLabel,
+    paymentRef: offlinePaymentAccount,
+    orderId,
+    paidAt,
+    offlinePaymentAccount,
+  });
+  const innerHtml = `
+    <p style="margin:0;font-size:15px;color:#d4d4d8;">Hi <strong style="color:#fff;">${escapeHtml(name || "there")}</strong>,</p>
+    <p style="margin:16px 0 0;font-size:14px;color:#a1a1aa;">We received your registration for <strong style="color:#fff;">${escapeHtml(tour)}</strong>. Registration <strong style="color:#fff;">${escapeHtml(code)}</strong> is under review.</p>
+    <p style="margin:12px 0 0;font-size:14px;color:#a1a1aa;">Card tier: <strong style="color:#fff;">${escapeHtml(tierLabel)}</strong></p>
+    <p style="margin:12px 0 0;font-size:14px;color:#71717a;">You will receive another email when your registration is approved or rejected.</p>
+    <p style="margin:20px 0 0;font-size:13px;letter-spacing:0.12em;text-transform:uppercase;color:#71717a;">Payment receipt</p>
+    ${receiptHtml}
+  `;
+  const html = baseEmailWrapper({
+    title: "Registration received",
+    preheader: `Registration ${code} received — pending admin approval.`,
     innerHtml,
     audience: "player",
   });

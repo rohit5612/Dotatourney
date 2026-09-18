@@ -99,7 +99,7 @@ function parsePreferredRoles(value) {
   return [];
 }
 
-function registrationTextFields(account) {
+export function registrationTextFields(account) {
   const displayName = String(
     account.display_name || account.steam_persona || account.email?.split("@")[0] || "",
   ).trim();

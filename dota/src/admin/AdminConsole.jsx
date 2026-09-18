@@ -1293,7 +1293,7 @@ export function AdminConsole() {
             <PlayerCrmPage
               tournamentId={tournamentId}
               registrations={registrations}
-              refreshRegistrations={() => refreshRegistrations(tournamentId)}
+              refreshRegistrations={refreshRegistrations}
               setMessage={setMessage}
             />
           </Suspense>
