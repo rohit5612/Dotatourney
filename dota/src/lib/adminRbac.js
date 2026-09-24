@@ -19,6 +19,7 @@ export const ADMIN_RBAC_SECTIONS = [
   { id: "announcements", label: "News", page: "announcements" },
   { id: "honors", label: "Honors", page: "honors" },
   { id: "seasons", label: "Seasons", page: "seasons" },
+  { id: "siteVersion", label: "Site version", page: "siteVersion" },
   {
     id: "bracketSchedule",
     label: "Bracket / Schedule",

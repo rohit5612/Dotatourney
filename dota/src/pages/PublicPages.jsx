@@ -185,6 +185,8 @@ const images = {
   seasonsBg: "/images/seasons.jpg",
   /** `/community` — Player directory background */
   communityBg: "/images/community.png",
+  /** `/whats-new` — What's New page background */
+  whatsNewBg: "/images/whatsnew.jpg",
   /** `/sponsors` — Sponsors page background */
   sponsorsBg: "/images/sponsors.png",
   /** Landing page — “Registration to victory” journey cards band */
@@ -379,7 +381,9 @@ export function PageContentShell({ path: _pathProp, children, registerClosedCent
                 ? images.seasonsBg
                 : path === "/sponsors"
                   ? images.sponsorsBg
-                  : path === "/community" || path === "/whats-new" || path === "/player"
+                  : path === "/whats-new"
+                    ? images.whatsNewBg
+                    : path === "/community" || path === "/player"
                     ? images.communityBg
                     : isLeagueHub
                       ? images.leagueBg
@@ -399,7 +403,9 @@ export function PageContentShell({ path: _pathProp, children, registerClosedCent
                 ? "bg-gradient-to-b from-background/68 via-background/52 to-background/62"
                 : path === "/sponsors"
                   ? "bg-gradient-to-b from-background/32 via-background/18 to-background/24"
-                  : path === "/community" || path === "/whats-new" || path === "/player"
+                  : path === "/whats-new"
+                    ? "bg-gradient-to-b from-background/42 via-background/30 to-background/36"
+                    : path === "/community" || path === "/player"
                     ? "bg-gradient-to-b from-background/32 via-background/18 to-background/24"
                     : isLeagueHub
                       ? "bg-gradient-to-b from-background/72 via-background/58 to-background/78"

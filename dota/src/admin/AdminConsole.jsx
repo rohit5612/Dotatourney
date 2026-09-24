@@ -22,7 +22,7 @@ import {
   TOURNAMENT_BRAND,
 } from "../utils/tournamentNaming.js";
 
-const adminPages = ["setup", "playerCrm", "teams", "cards", "announcements", "honors", "seasons", "bracketSchedule", "standings", "users"];
+const adminPages = ["setup", "playerCrm", "teams", "cards", "announcements", "honors", "seasons", "siteVersion", "bracketSchedule", "standings", "users"];
 
 import { filterAdminPages, adminCanReadResource } from "../lib/adminRbac.js";
 import { AdminAccessProvider, useAdminAccess } from "./context/AdminAccessContext.jsx";
@@ -45,6 +45,9 @@ const StandingsPage = lazy(() => import("./standings/StandingsPage.jsx").then((m
 const TeamsPage = lazy(() => import("./teams/TeamsPage.jsx").then((m) => ({ default: m.TeamsPage })));
 const CardsCommercePage = lazy(() =>
   import("./cards/CardsCommercePage.jsx").then((m) => ({ default: m.CardsCommercePage })),
+);
+const SiteVersionAdminPage = lazy(() =>
+  import("./siteVersion/SiteVersionAdminPage.jsx").then((m) => ({ default: m.SiteVersionAdminPage })),
 );
 
 function AdminViewOnlyBanner({ pageId }) {
@@ -1282,7 +1285,7 @@ export function AdminConsole() {
     );
   }
 
-  const showTournamentBanner = !["setup", "playerCrm", "users", "seasons"].includes(activePage);
+  const showTournamentBanner = !["setup", "playerCrm", "users", "seasons", "siteVersion"].includes(activePage);
 
   return (
     <AdminShell darkMode={darkMode}>
@@ -1433,6 +1436,12 @@ export function AdminConsole() {
               honorsPreview={state?.honors}
               approvedRoster={approvedRoster}
             />
+          </Suspense>
+        )}
+
+        {activePage === "siteVersion" && (
+          <Suspense fallback={<PageLoadingSpinner label="Loading site version…" />}>
+            <SiteVersionAdminPage />
           </Suspense>
         )}
 

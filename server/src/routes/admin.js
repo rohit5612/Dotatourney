@@ -35,7 +35,14 @@ import playerAccountsRouter from "./admin/playerAccounts.js";
 import seasonsRouter from "./admin/seasons.js";
 import leagueTeamsRouter from "./admin/leagueTeams.js";
 import { orgRosterSchema } from "../services/seasonContentSchema.js";
-import { updateOrgRoster } from "../services/siteContentService.js";
+import {
+  getVersionHistory,
+  getWebsiteVersion,
+  updateOrgRoster,
+  updateVersionHistory,
+  updateWebsiteVersion,
+} from "../services/siteContentService.js";
+import { versionHistorySchema, websiteVersionSchema } from "../services/websiteVersionSchema.js";
 import { invalidatePublicCache } from "../services/publicCache.js";
 import { listFormatPresets, resolveFormatPreset } from "../services/formatPresets.js";
 import {
@@ -70,6 +77,61 @@ router.put("/site-content/org-roster", requireAdmin, requirePermission("seasons.
     return next(error);
   }
 });
+
+router.get("/site-content/version", requireAdmin, requirePermission("siteVersion.read"), async (_req, res, next) => {
+  try {
+    const [websiteVersion, versionHistory] = await Promise.all([getWebsiteVersion(), getVersionHistory()]);
+    return res.json({ websiteVersion, versionHistory });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.put(
+  "/site-content/website-version",
+  requireAdmin,
+  requirePermission("siteVersion.update"),
+  async (req, res, next) => {
+    try {
+      const payload = websiteVersionSchema.parse(req.body);
+      const websiteVersion = await updateWebsiteVersion(payload);
+      invalidatePublicCache();
+      await writeAuditLog({
+        adminUserId: req.adminUser.id,
+        action: "site_content.website_version.update",
+        entityType: "site_content",
+        entityId: "website_version",
+        payload: websiteVersion,
+      });
+      return res.json({ websiteVersion });
+    } catch (error) {
+      return next(error);
+    }
+  },
+);
+
+router.put(
+  "/site-content/version-history",
+  requireAdmin,
+  requirePermission("siteVersion.update"),
+  async (req, res, next) => {
+    try {
+      const payload = versionHistorySchema.parse(req.body);
+      const versionHistory = await updateVersionHistory(payload);
+      invalidatePublicCache();
+      await writeAuditLog({
+        adminUserId: req.adminUser.id,
+        action: "site_content.version_history.update",
+        entityType: "site_content",
+        entityId: "version_history",
+        payload: { entryCount: versionHistory.entries.length },
+      });
+      return res.json({ versionHistory });
+    } catch (error) {
+      return next(error);
+    }
+  },
+);
 
 const credentialsSchema = z.object({
   email: z.string().email(),

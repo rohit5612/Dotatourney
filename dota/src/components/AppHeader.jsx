@@ -10,6 +10,7 @@ const PAGE_LABELS = {
   announcements: "News",
   honors: "Honors",
   seasons: "Seasons",
+  siteVersion: "Site version",
   bracketSchedule: "Bracket",
   standings: "Standings",
   users: "User mgmt",

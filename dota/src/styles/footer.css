@@ -255,6 +255,19 @@
   gap: 0.5rem 0.85rem;
 }
 
+.app-footer__version-link {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--muted-foreground) 78%, transparent);
+  text-decoration: none;
+  transition: color 150ms ease;
+}
+
+.app-footer__version-link:hover {
+  color: var(--muted-foreground);
+}
+
 .app-footer__staff-link {
   color: color-mix(in srgb, var(--muted-foreground) 92%, var(--foreground));
   text-decoration: underline;

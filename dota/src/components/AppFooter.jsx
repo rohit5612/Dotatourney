@@ -1,11 +1,15 @@
 import { Link, useNavigate } from "react-router-dom";
 import { PUBLIC_CONTACT_EMAIL } from "../constants/legal.js";
 import { useSiteNavLinks } from "../hooks/useSiteNavLinks.js";
+import { useSiteContent } from "../hooks/useSiteContent.js";
+import { formatWebsiteVersion, normalizeWebsiteVersion } from "../utils/websiteVersionSchema.js";
 import { ValveDisclaimer } from "./ValveDisclaimer.jsx";
 
 export function AppFooter({ navigate, mode = "public", className = "" }) {
   const routerNavigate = useNavigate();
   const publicNavLinks = useSiteNavLinks();
+  const { websiteVersion } = useSiteContent();
+  const versionLabel = formatWebsiteVersion(normalizeWebsiteVersion(websiteVersion));
   const quickLinks =
     mode === "admin"
       ? [
@@ -123,6 +127,13 @@ export function AppFooter({ navigate, mode = "public", className = "" }) {
             &copy; {new Date().getFullYear()} Bharat Pro Circuit League (BPC League). All rights reserved.
           </span>
           <div className="app-footer__bar-utilities">
+            <Link
+              to="/whats-new"
+              className="app-footer__version-link"
+              title="What's new"
+            >
+              v{versionLabel}
+            </Link>
             {mode === "public" ? (
               <Link to="/admin" className="app-footer__staff-link">
                 Staff portal

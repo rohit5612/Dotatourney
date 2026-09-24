@@ -77,6 +77,17 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(payload),
     }),
+  getAdminSiteVersionContent: () => request("/admin/site-content/version"),
+  updateAdminWebsiteVersion: (payload) =>
+    request("/admin/site-content/website-version", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  updateAdminVersionHistory: (payload) =>
+    request("/admin/site-content/version-history", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
   updateAdminSeasonCardBg: (id, cardBg) =>
     request(`/admin/seasons/${encodeURIComponent(id)}`, {
       method: "PATCH",
