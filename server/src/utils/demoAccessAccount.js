@@ -1,6 +1,6 @@
 import { updatePlayerAccount } from "../services/playerAccountRepository.js";
 
-const DEMO_EMAIL_RE = /^demo\.access0?([1-9])@bpcl\.test$/i;
+const DEMO_EMAIL_RE = /^demo\.access(0[1-9]|[1-9][0-9])@bpcl\.test$/i;
 const DEMO_PLAYER_CARD_SLOTS = new Set([1, 2]);
 
 const DEMO_ROLE_SETS = [
@@ -24,7 +24,7 @@ export function demoAccessSlot(accountOrEmail) {
     .trim()
     .toLowerCase()
     .match(DEMO_EMAIL_RE);
-  return match ? Number(match[1]) : null;
+  return match ? Number.parseInt(match[1], 10) : null;
 }
 
 /** Demo slots 1–2 render the player/basic card tier for QA. */

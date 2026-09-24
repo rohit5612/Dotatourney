@@ -19,11 +19,27 @@ export function peekCache(key) {
       memory.set(key, { value: parsed.value, expiresAt: parsed.expiresAt });
       return parsed.value;
     }
-    sessionStorage.removeItem(storageKey(key));
   } catch {
     // Private mode / quota — memory-only is fine.
   }
   return undefined;
+}
+
+/** Last cached payload even when TTL expired (for offline / failed refresh). */
+export function peekStaleCache(key) {
+  const mem = memory.get(key);
+  if (mem?.value !== undefined) return mem.value;
+
+  try {
+    const raw = sessionStorage.getItem(storageKey(key));
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw);
+    if (parsed?.value === undefined) return undefined;
+    memory.set(key, { value: parsed.value, expiresAt: parsed.expiresAt ?? 0 });
+    return parsed.value;
+  } catch {
+    return undefined;
+  }
 }
 
 function writeCache(key, value, ttlMs, persist) {
@@ -41,20 +57,37 @@ function writeCache(key, value, ttlMs, persist) {
  * Cached GET with stale-while-revalidate: returns cached data immediately when present,
  * then refreshes in the background.
  */
-export function cachedGet(key, fetcher, { ttlMs = 20_000, persist = true, revalidate = true } = {}) {
+export function cachedGet(key, fetcher, {
+  ttlMs = 20_000,
+  persist = true,
+  revalidate = true,
+  /** When true, wait for refresh so callers (e.g. React hooks) get DB-fresh data. */
+  awaitRevalidate = false,
+} = {}) {
   const cached = peekCache(key);
   if (cached !== undefined) {
     if (revalidate) {
-      void fetcher()
-        .then((fresh) => writeCache(key, fresh, ttlMs, persist))
-        .catch(() => {});
+      const refresh = fetcher()
+        .then((fresh) => {
+          writeCache(key, fresh, ttlMs, persist);
+          return fresh;
+        })
+        .catch(() => cached);
+      if (awaitRevalidate) return refresh;
+      void refresh;
     }
     return Promise.resolve(cached);
   }
-  return fetcher().then((value) => {
-    writeCache(key, value, ttlMs, persist);
-    return value;
-  });
+  return fetcher()
+    .then((value) => {
+      writeCache(key, value, ttlMs, persist);
+      return value;
+    })
+    .catch((err) => {
+      const stale = peekStaleCache(key);
+      if (stale !== undefined) return stale;
+      throw err;
+    });
 }
 
 export function clearCache(key) {

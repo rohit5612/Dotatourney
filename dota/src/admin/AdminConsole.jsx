@@ -94,6 +94,7 @@ export function AdminConsole() {
     paymentUpiId: "",
     seasonCardBg: "",
     seasonCardBadge: "",
+    dotaLeagueId: "",
     seasonCardDeckTheme: { badgeBackground: "", badgeText: "" },
     registrationCodeSeq: 0,
     registrationsOpen: false,
@@ -115,6 +116,8 @@ export function AdminConsole() {
   const [tournamentList, setTournamentList] = useState([]);
   const [adminUser, setAdminUser] = useState(null);
   const [newCaptain, setNewCaptain] = useState({ captain: "", team: "" });
+  const [leagueTeams, setLeagueTeams] = useState([]);
+  const [leagueTeamBusy, setLeagueTeamBusy] = useState(false);
   const [newPlayer, setNewPlayer] = useState({ name: "", role: "Carry" });
   const [darkMode, setDarkMode] = useState(getInitialDarkMode);
   const [message, setMessage] = useState("");
@@ -208,6 +211,13 @@ export function AdminConsole() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminUser, path]);
 
+  useEffect(() => {
+    if (adminUser && activePage === "teams") {
+      refreshLeagueTeams();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminUser, activePage]);
+
   async function loadTournaments() {
     const payload = await api.getTournaments();
     setTournamentList(payload.tournaments || []);
@@ -287,6 +297,10 @@ export function AdminConsole() {
         paymentUpiId: payload.tournament.payment_upi_id ?? prev.paymentUpiId ?? "",
         seasonCardBg: payload.tournament.season_card_bg ?? prev.seasonCardBg ?? "",
         seasonCardBadge: payload.tournament.season_card_badge ?? prev.seasonCardBadge ?? "",
+        dotaLeagueId:
+          payload.tournament.dota_league_id != null && payload.tournament.dota_league_id !== ""
+            ? String(payload.tournament.dota_league_id)
+            : prev.dotaLeagueId ?? "",
         seasonCardDeckTheme: {
           badgeBackground:
             payload.tournament.season_card_deck_theme?.badgeBackground ??
@@ -449,6 +463,12 @@ export function AdminConsole() {
       merged.registrationCap = null;
     } else {
       merged.registrationCap = Number(merged.registrationCap);
+    }
+    if (merged.dotaLeagueId === "" || merged.dotaLeagueId == null) {
+      merged.dotaLeagueId = null;
+    } else {
+      const leagueNum = Number(String(merged.dotaLeagueId).trim());
+      merged.dotaLeagueId = Number.isFinite(leagueNum) && leagueNum > 0 ? leagueNum : null;
     }
     return merged;
   }
@@ -663,24 +683,64 @@ export function AdminConsole() {
     }
   }
 
+  function buildDraftTeamFromLeague(leagueTeam, overrides = {}) {
+    const name = overrides.name || leagueTeam.name || "";
+    return {
+      id: createId(),
+      name,
+      captain: "",
+      abbr:
+        overrides.abbr ||
+        leagueTeam.abbr ||
+        name
+          .split(" ")
+          .map((word) => word[0] || "")
+          .join("")
+          .slice(0, 3)
+          .toUpperCase(),
+      seed: teamDraft.length + 1,
+      logoUrl: overrides.logoUrl || leagueTeam.logoUrl || "",
+      accentColor: overrides.accentColor || leagueTeam.accentColor || "",
+      leagueTeamId: leagueTeam.id,
+    };
+  }
+
   function addCaptain() {
     if (!newCaptain.team.trim()) return;
-    const team = {
-      id: createId(),
-      name: newCaptain.team.trim() || `${newCaptain.captain.trim()}'s Team`,
-      captain: "",
-      abbr: (newCaptain.team || newCaptain.captain)
-        .split(" ")
-        .map((word) => word[0] || "")
-        .join("")
-        .slice(0, 3)
-        .toUpperCase(),
-      seed: teamDraft.length + 1,
-      logoUrl: "",
-      accentColor: "",
-    };
-    setTeamDraft((prev) => [...prev, team]);
+    setTeamDraft((prev) => [...prev, buildDraftTeamFromLeague({ name: newCaptain.team.trim() }, { name: newCaptain.team.trim() })]);
     setNewCaptain({ captain: "", team: "" });
+  }
+
+  function addTeamFromLeague(leagueTeam) {
+    if (!leagueTeam?.id) return;
+    setTeamDraft((prev) => [...prev, buildDraftTeamFromLeague(leagueTeam)]);
+  }
+
+  async function refreshLeagueTeams() {
+    if (!getAuthToken()) return;
+    try {
+      const payload = await api.getAdminLeagueTeams();
+      setLeagueTeams(payload.teams || []);
+    } catch {
+      setLeagueTeams([]);
+    }
+  }
+
+  async function createLeagueTeamAndAdd(form) {
+    setLeagueTeamBusy(true);
+    try {
+      const payload = await api.createAdminLeagueTeam(form);
+      const team = payload.team;
+      if (team) {
+        setLeagueTeams((prev) => [...prev, team]);
+        addTeamFromLeague(team);
+        setMessage(`Created franchise ${team.name} and added to roster draft.`);
+      }
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setLeagueTeamBusy(false);
+    }
   }
 
   function addPoolPlayer() {
@@ -1003,11 +1063,16 @@ export function AdminConsole() {
       const accentBySourceId = new Map(
         (tournamentPayload.teams || []).map((team) => [team.id, team.accentColor || team.accent_color || ""]),
       );
+      const leagueTeamBySourceId = new Map(
+        (tournamentPayload.teams || []).map((team) => [team.id, team.leagueTeamId || team.league_team_id || null]),
+      );
       setTeamDraft(
         (roster.teams || []).map((team) => ({
           ...team,
           logoUrl: team.logoUrl || team.logo_url || logoBySourceId.get(team.sourceTeamId) || "",
           accentColor: team.accentColor || team.accent_color || accentBySourceId.get(team.sourceTeamId) || "",
+          leagueTeamId:
+            team.leagueTeamId || team.league_team_id || leagueTeamBySourceId.get(team.sourceTeamId) || null,
         })),
       );
       setPoolDraft(
@@ -1316,6 +1381,10 @@ export function AdminConsole() {
             newPlayer={newPlayer}
             setNewPlayer={setNewPlayer}
             addCaptain={addCaptain}
+            leagueTeams={leagueTeams}
+            addTeamFromLeague={addTeamFromLeague}
+            createLeagueTeamAndAdd={createLeagueTeamAndAdd}
+            leagueTeamBusy={leagueTeamBusy}
             addPoolPlayer={addPoolPlayer}
             assignPlayer={assignPlayer}
             autoAssign={autoAssign}

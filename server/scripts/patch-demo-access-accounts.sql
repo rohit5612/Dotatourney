@@ -1,4 +1,4 @@
--- Patch the five demo.access*@bpcl.test accounts (run after reset-and-seed-season1.sql).
+-- Patch the eight demo.access*@bpcl.test accounts (run after reset-and-seed-season1.sql).
 -- Password unchanged: BpclTest123!
 
 BEGIN;
@@ -11,7 +11,10 @@ WITH demo_rows AS (
       (2, '["Mid"]'::jsonb, 4350),
       (3, '["Offlane"]'::jsonb, 4500),
       (4, '["Soft support"]'::jsonb, 4650),
-      (5, '["Hard support"]'::jsonb, 4800)
+      (5, '["Hard support"]'::jsonb, 4800),
+      (6, '["Carry"]'::jsonb, 4950),
+      (7, '["Mid"]'::jsonb, 5100),
+      (8, '["Offlane"]'::jsonb, 5250)
   ) AS t(n, roles, mmr)
 )
 UPDATE player_accounts pa

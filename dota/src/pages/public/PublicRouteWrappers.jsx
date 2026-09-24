@@ -22,6 +22,12 @@ import {
 const PublicTeamsPage = lazy(() =>
   import("../../components/teams/PublicTeamsPage.jsx").then((module) => ({ default: module.PublicTeamsPage })),
 );
+const LeagueTeamsPage = lazy(() =>
+  import("../league/LeagueTeamsPage.jsx").then((module) => ({ default: module.LeagueTeamsPage })),
+);
+const LeagueTeamDetailPage = lazy(() =>
+  import("../league/LeagueTeamDetailPage.jsx").then((module) => ({ default: module.LeagueTeamDetailPage })),
+);
 
 import {
   LandingPage,
@@ -80,6 +86,26 @@ export function PublicTeamsRoute() {
         </Suspense>
       </PageContentShell>
     </PublicEventGate>
+  );
+}
+
+export function PublicLeagueRoute() {
+  return (
+    <PageContentShell path="/league">
+      <Suspense fallback={<PageLoadingSpinner label="Loading The League…" compact />}>
+        <LeagueTeamsPage />
+      </Suspense>
+    </PageContentShell>
+  );
+}
+
+export function PublicLeagueTeamRoute() {
+  return (
+    <PageContentShell path="/league">
+      <Suspense fallback={<PageLoadingSpinner label="Loading franchise…" compact />}>
+        <LeagueTeamDetailPage />
+      </Suspense>
+    </PageContentShell>
   );
 }
 

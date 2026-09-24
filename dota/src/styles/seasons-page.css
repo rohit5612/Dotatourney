@@ -179,6 +179,294 @@
   gap: 0.9rem;
 }
 
+/* Embedded on player profile — match history season dropdowns */
+.seasons-page--match-history {
+  min-height: 0;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.seasons-page--match-history .match-history__seasons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.match-history-season.season-card {
+  display: flex;
+  flex-direction: column;
+  min-height: unset;
+  min-width: 0;
+  padding: 0;
+  gap: 0;
+  width: 100%;
+  max-width: 100%;
+  text-decoration: none;
+  color: inherit;
+  cursor: default;
+}
+
+.match-history-season.season-card:hover {
+  transform: none;
+}
+
+.match-history-season--open.season-card {
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--season-glass-border));
+  box-shadow:
+    var(--season-glass-shadow),
+    0 0 0 1px color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.match-history-season__trigger {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1.1fr) auto;
+  align-items: center;
+  gap: clamp(0.75rem, 2vw, 1.25rem);
+  width: 100%;
+  min-height: clamp(5.75rem, 13vw, 7.25rem);
+  padding: clamp(1rem, 2.5vw, 1.25rem) clamp(1rem, 2.5vw, 1.35rem);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+  transition: background 160ms ease;
+}
+
+.match-history-season__trigger:hover {
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+}
+
+.match-history-season__trigger:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 70%, transparent);
+  outline-offset: -2px;
+}
+
+.match-history-season__trigger .season-card__title {
+  font-size: clamp(1.1rem, 2.4vw, 1.4rem);
+}
+
+.match-history-season__chevron {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  color: color-mix(in srgb, var(--foreground) 55%, var(--muted-foreground));
+  transition: transform 220ms ease, color 160ms ease;
+}
+
+.match-history-season--has-bg .match-history-season__chevron,
+.season-card--has-bg .match-history-season__chevron {
+  color: rgba(248, 250, 252, 0.85);
+}
+
+.match-history-season--open .match-history-season__chevron {
+  transform: rotate(180deg);
+  color: var(--primary);
+}
+
+.season-card--has-bg.match-history-season--open .match-history-season__chevron {
+  color: var(--accent);
+}
+
+.match-history-season__panel {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  border-top: 1px solid color-mix(in srgb, var(--season-glass-border-soft) 88%, transparent);
+  background: color-mix(in srgb, var(--background) 35%, transparent);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+}
+
+.season-card--has-bg .match-history-season__panel {
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.28) 0%,
+    rgba(0, 0, 0, 0.42) 100%
+  );
+  border-top-color: rgba(255, 255, 255, 0.12);
+}
+
+.match-history-season__panel-bar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.5rem 7.5% 0;
+  box-sizing: border-box;
+}
+
+.match-history-season__season-link {
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  text-decoration: none;
+  color: var(--primary);
+}
+
+.season-card--has-bg .match-history-season__season-link {
+  color: var(--accent);
+}
+
+.match-history-season__season-link:hover {
+  text-decoration: underline;
+}
+
+.match-history-season__loading {
+  padding: 1.25rem 1rem 1.5rem;
+}
+
+.match-history-season__feed {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.55rem;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  /* 7.5% inset → match cards span 85% of the season block */
+  padding: 0.65rem 7.5% 0.85rem;
+}
+
+.seasons-page--match-history .match-history-season__feed .profile-feed__match-post {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  margin-inline: 0;
+  box-sizing: border-box;
+}
+
+.seasons-page--match-history .match-history-season__feed .profile-feed__scoreboard {
+  width: 100%;
+  max-width: none;
+}
+
+.match-history-season__more {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding-top: 0.35rem;
+}
+
+.match-history-season__more-btn {
+  min-height: 2rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--season-glass-border-soft);
+  background: color-mix(in srgb, var(--background) 55%, transparent);
+  font-size: 0.75rem;
+  font-weight: 650;
+  color: color-mix(in srgb, var(--foreground) 82%, var(--muted-foreground));
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+
+.match-history-season__more-btn:hover {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--season-glass-border-soft));
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+@media (max-width: 720px) {
+  .match-history-season__trigger {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    min-height: unset;
+  }
+
+  .match-history-season__trigger .season-card__stats {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.65rem 1rem;
+  }
+
+  .match-history-season__stat--hide-sm {
+    display: none;
+  }
+
+  .match-history-season__panel-bar {
+    padding: 0.45rem 0.65rem 0;
+    justify-content: flex-start;
+  }
+
+  .seasons-page--match-history .match-history-season__feed {
+    padding: 0.5rem 0.65rem 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .seasons-page--match-history .match-history-season__feed .profile-feed__match-post {
+    padding: 0.7rem 0.6rem;
+  }
+
+  .seasons-page--match-history .profile-feed__scoreboard {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    row-gap: 0.42rem;
+    column-gap: 0;
+  }
+
+  .seasons-page--match-history .profile-feed__scoreboard-mid {
+    display: none;
+  }
+
+  .seasons-page--match-history .profile-feed__side,
+  .seasons-page--match-history .profile-feed__side--away {
+    flex-direction: row;
+    justify-content: flex-start;
+    text-align: left;
+    gap: 0.45rem;
+    width: 100%;
+  }
+
+  .seasons-page--match-history .profile-feed__team-logo {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .seasons-page--match-history .profile-feed__side-name {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.78rem;
+    line-height: 1.2;
+  }
+
+  .seasons-page--match-history .profile-feed__side-score {
+    margin-left: auto;
+    padding-left: 0.35rem;
+    font-size: 0.92rem;
+  }
+
+  .seasons-page--match-history .profile-feed__side--winner .profile-feed__side-score {
+    font-size: 1rem;
+  }
+
+  .seasons-page--match-history .profile-feed__match-head {
+    margin-bottom: 0.55rem;
+  }
+
+  .seasons-page--match-history .profile-feed__match-head-meta {
+    flex-wrap: wrap;
+    gap: 0.25rem 0.4rem;
+  }
+}
+
 .seasons-hub__loading {
   padding: 1rem 1.15rem;
   color: var(--muted-foreground);

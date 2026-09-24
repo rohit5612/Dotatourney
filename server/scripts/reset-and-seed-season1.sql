@@ -7,15 +7,15 @@
 --   2. Creates Season 1 (published + active) with current sponsor config
 --   3. Seeds 77 approved, paid registrants (player_accounts + registrations)
 --      — email, Steam, and Discord pre-linked (registration-ready)
---   4. Creates 5 login-only demo accounts (NOT registered) for manual testing
+--   4. Creates 8 login-only demo accounts (NOT registered) for manual testing
 --      — linkage bypassed; Steam/Discord + profile prefilled for registration flow
 --   5. Preserves any player_accounts that already have email + Steam + Discord
 --
 -- Run (from server/):
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/reset-and-seed-season1.sql
 --
--- Demo logins (password for all five): BpclTest123!
---   demo.access01@bpcl.test … demo.access05@bpcl.test
+-- Demo logins (password for all eight): BpclTest123!
+--   demo.access01@bpcl.test … demo.access08@bpcl.test
 --
 -- =============================================================================
 
@@ -373,7 +373,7 @@ SELECT
 FROM seed_rows sr;
 
 -- ---------------------------------------------------------------------------
--- 6. Five demo accounts for you (login only — NOT registered)
+-- 6. Eight demo accounts for you (login only — NOT registered)
 --    Password for all: BpclTest123!
 --    Linkage + profile are prefilled; server also auto-fills on first login.
 -- ---------------------------------------------------------------------------
@@ -385,7 +385,10 @@ WITH demo_rows AS (
       (2, 'f00000d1-0000-4000-8000-000000000002'::uuid, 'Demo Access 2', 'demo-access-02', '["Mid"]'::jsonb, 4350),
       (3, 'f00000d1-0000-4000-8000-000000000003'::uuid, 'Demo Access 3', 'demo-access-03', '["Offlane"]'::jsonb, 4500),
       (4, 'f00000d1-0000-4000-8000-000000000004'::uuid, 'Demo Access 4', 'demo-access-04', '["Soft support"]'::jsonb, 4650),
-      (5, 'f00000d1-0000-4000-8000-000000000005'::uuid, 'Demo Access 5', 'demo-access-05', '["Hard support"]'::jsonb, 4800)
+      (5, 'f00000d1-0000-4000-8000-000000000005'::uuid, 'Demo Access 5', 'demo-access-05', '["Hard support"]'::jsonb, 4800),
+      (6, 'f00000d1-0000-4000-8000-000000000006'::uuid, 'Demo Access 6', 'demo-access-06', '["Carry"]'::jsonb, 4950),
+      (7, 'f00000d1-0000-4000-8000-000000000007'::uuid, 'Demo Access 7', 'demo-access-07', '["Mid"]'::jsonb, 5100),
+      (8, 'f00000d1-0000-4000-8000-000000000008'::uuid, 'Demo Access 8', 'demo-access-08', '["Offlane"]'::jsonb, 5250)
   ) AS t(n, id, display_name, slug, roles, mmr)
 ),
 demo_hashes AS (
@@ -396,7 +399,10 @@ demo_hashes AS (
       (2, '5a92e982b30a4b6d0c865da3496d846d:246b1285d3f2ea9c3eeccb7e6e8a3a65175a203602519385ad5819cbd8ec278d8e84b3749bd4093a751d401bdf9750ad7b3e784cda54c3686b85d1439287a889'),
       (3, 'd840ddf59d3b88b8446239322f45df27:a71298d6fedb7ba7485da20aa0276500cee904854d71fe08aa697c5974687fb705fd551b80764205b33093a3ffe0e7a6dcaef035c6a284b57d141cb6b18bcc44'),
       (4, '3abba39ccd7835255ec3f019b3ceeb32:62b627d2a5d3432ef2869de37690cd7d499608f17e5a54bf6d6a95193e0b2333c24d40221855f4552b15cedf154148c56fc0b978ed279904ba9de195f554cd69'),
-      (5, 'b7a9319b797f1d83b38158855895a114:53dce361162403f559d0b70a8b59f85bae7b1296f058a7f32e390f774ff4e63c43e70103a5ef57a11af08e9b9dae3f4115470cd3b2c075e47a306f56510de8dc')
+      (5, 'b7a9319b797f1d83b38158855895a114:53dce361162403f559d0b70a8b59f85bae7b1296f058a7f32e390f774ff4e63c43e70103a5ef57a11af08e9b9dae3f4115470cd3b2c075e47a306f56510de8dc'),
+      (6, 'd8a836cedc03ee6d25342a5a237c1a2e:c2bed2dcfcaef0c592da159c6b358488bedc04fdce3fc5b803f7b2fb6cfae617187c59b75839beff8e8a03d5cb40ed9cb7084ec6a56f5866c0d0d2ab765da14a'),
+      (7, '5d79913e4740c700b143aa1506893069:655e5c6ba939c9d6b1a656b5e04c300a2de3c528cd043369f63faac594d05312a4760869847b61912493b02eaedb0058e7fd2aac4ed456c968cc923c5c352f8e'),
+      (8, '88c038787e2bccb5598e099d96fa9940:66ed32c957eb7b0221940ad3380cebfddd70a3e1e8aa018af31ebce4f014df8dce951682e96115774537841d173c3d4ae439957517ca0aad49bf2b6322c75271')
   ) AS h(n, password_hash)
 )
 INSERT INTO player_accounts (

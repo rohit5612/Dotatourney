@@ -1,14 +1,11 @@
 /**
- * Upsert five demo access accounts for QA/login testing.
+ * Upsert eight demo access accounts for QA/login + tournament registration testing.
  *
  * Emails:
- *   demo.access01@bpcl.test ... demo.access05@bpcl.test
+ *   demo.access01@bpcl.test ... demo.access08@bpcl.test
+ * Password (all): BpclTest123!
  *
- * Guarantees linkage/profile prerequisites:
- * - email verified
- * - steam linked
- * - discord linked
- * - profile completed
+ * Prefills DB linkage + profile; login also runs ensureDemoAccessAccountReady (demo bypass).
  *
  * Usage (from server/):
  *   node scripts/seed-demo-access-accounts.js
@@ -26,6 +23,7 @@ import {
 dotenv.config();
 
 const PASSWORD = "BpclTest123!";
+const DEMO_COUNT = 8;
 const ROLES = ["Carry", "Mid", "Offlane", "Soft support", "Hard support"];
 
 function demoProfile(index) {
@@ -35,7 +33,7 @@ function demoProfile(index) {
     displayName: `Demo Access ${n}`,
     slugHint: `demo-access-${String(n).padStart(2, "0")}`,
     mmr: 4200 + index * 150,
-    preferredRoles: [ROLES[index] || "Carry"],
+    preferredRoles: [ROLES[index % ROLES.length]],
     steamId: `7656119899${String(n).padStart(7, "0")}`,
     steamPersona: `DemoSteam_${n}`,
     steamProfile: `https://steamcommunity.com/id/demo-access-${String(n).padStart(2, "0")}`,
@@ -72,7 +70,7 @@ async function ensureDemoAccount(client, profile, passwordHash) {
   const updated = await updatePlayerAccount(
     existing.id,
     {
-      passwordHash: existing.password_hash || passwordHash,
+      passwordHash,
       emailVerifiedAt: existing.email_verified_at || new Date().toISOString(),
       steamId: existing.steam_id || profile.steamId,
       steamPersona: existing.steam_persona || profile.steamPersona,
@@ -99,7 +97,7 @@ async function main() {
   try {
     await client.query("BEGIN");
     const results = [];
-    for (let i = 0; i < 5; i += 1) {
+    for (let i = 0; i < DEMO_COUNT; i += 1) {
       results.push(await ensureDemoAccount(client, demoProfile(i), passwordHash));
     }
     await client.query("COMMIT");

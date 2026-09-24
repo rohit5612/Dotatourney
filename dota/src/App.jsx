@@ -25,7 +25,10 @@ import {
   PublicSeasonDetailRoute,
   PublicTermsRoute,
   PublicTeamsRoute,
+  PublicLeagueRoute,
+  PublicLeagueTeamRoute,
 } from "./pages/public/PublicRouteWrappers.jsx";
+import { ANNOUNCEMENTS_PUBLIC } from "./constants/publicNav.js";
 
 const PlayerLoginPage = lazy(() =>
   import("./pages/PlayerAuthPages.jsx").then((m) => ({ default: m.PlayerLoginPage })),
@@ -198,6 +201,8 @@ export default function App() {
           <Route path="tournament" element={<Navigate to="/" replace />} />
           <Route path="schedule" element={<PublicScheduleRoute />} />
           <Route path="teams" element={<PublicTeamsRoute />} />
+          <Route path="league" element={<PublicLeagueRoute />} />
+          <Route path="league/:slug" element={<PublicLeagueTeamRoute />} />
           <Route path="register" element={<PublicRegisterRedirect />} />
           <Route path="register-legacy" element={<PublicRegisterRoute />} />
           <Route path="rules" element={<PublicRulesRoute />} />
@@ -210,7 +215,10 @@ export default function App() {
           <Route path="about" element={<PublicAboutRoute />} />
           <Route path="seasons" element={<PublicSeasonsRoute />} />
           <Route path="seasons/:slug" element={<PublicSeasonDetailRoute />} />
-          <Route path="announcements" element={<PublicAnnouncementsRoute />} />
+          <Route
+            path="announcements"
+            element={ANNOUNCEMENTS_PUBLIC ? <PublicAnnouncementsRoute /> : <Navigate to="/" replace />}
+          />
           <Route path="community" element={<PublicCommunityRoute />} />
           <Route path="whats-new" element={<PublicWhatsNewRoute />} />
           <Route path="player/:slug" element={<PublicPlayerProfileRoute />} />

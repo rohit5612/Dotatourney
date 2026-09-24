@@ -7,6 +7,7 @@ import { SiteNavbar } from "../components/navigation/SiteNavbar.jsx";
 import { PageLoadingSpinner } from "../components/PageLoadingSpinner";
 import { PublicTournamentProvider } from "../context/PublicTournamentContext.jsx";
 import { usePublicTheme } from "../hooks/usePublicTheme.js";
+import { ANNOUNCEMENTS_PUBLIC } from "../constants/publicNav.js";
 import { startHomeAssetsPreload } from "../utils/preloadHomeAssets.js";
 import "../styles/publicPagesStyles.js";
 
@@ -17,7 +18,7 @@ const PUBLIC_ROUTE_CHUNK_PRELOADS = [
   () => import("../pages/public/SeasonsHubPage.jsx"),
   () => import("../pages/public/SeasonDetailPage.jsx"),
   () => import("../pages/public/CommunityPage.jsx"),
-  () => import("../pages/public/AnnouncementsPublicPage.jsx"),
+  ...(ANNOUNCEMENTS_PUBLIC ? [() => import("../pages/public/AnnouncementsPublicPage.jsx")] : []),
   () => import("../pages/public/PublicPlayerProfilePage.jsx"),
   () => import("../pages/public/MatchPublicPage.jsx"),
 ];

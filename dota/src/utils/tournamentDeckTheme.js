@@ -48,3 +48,20 @@ export function deckBadgeInlineStyle(theme) {
   }
   return style;
 }
+
+/** CSS custom properties for animated profile honor badges (season deck theme). */
+export function honorBadgeThemeProperties(theme) {
+  const parsed = parseTournamentDeckTheme(theme);
+  if (!hasDeckBadgeTheme(parsed)) return undefined;
+  const style = {};
+  if (parsed.badgeBackground) {
+    style["--honor-theme-bg"] = parsed.badgeBackground;
+    style["--honor-theme-border"] = parsed.badgeBackground;
+    style["--honor-theme-glow"] = parsed.badgeBackground;
+  }
+  if (parsed.badgeText) {
+    style["--honor-theme-text"] = parsed.badgeText;
+    style["--honor-theme-accent"] = parsed.badgeText;
+  }
+  return style;
+}

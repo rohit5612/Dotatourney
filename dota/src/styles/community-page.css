@@ -241,7 +241,6 @@ a.community-page__stat:hover {
   border-color: color-mix(in srgb, var(--primary) 40%, var(--community-glass-border-soft));
   color: var(--primary);
 }
-
 /* Directory panel */
 .community-page__directory {
   min-height: clamp(28rem, 62vh, 44rem);
@@ -860,3 +859,4 @@ a.community-page__stat:hover {
     transition: none;
   }
 }
+

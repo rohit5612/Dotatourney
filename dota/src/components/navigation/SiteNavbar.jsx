@@ -59,6 +59,10 @@ function isHeroNavPath(path) {
   return HERO_NAV_PATHS.has(path);
 }
 
+function isLeagueFranchiseDetailPath(path) {
+  return path.startsWith("/league/") && path.length > "/league/".length;
+}
+
 function useSiteNavbarOffset(headerRef) {
   useEffect(() => {
     const el = headerRef.current;
@@ -130,7 +134,7 @@ export function SiteNavbar() {
   const loggedIn = isLoggedIn && Boolean(account);
   const authPending = isLoggedIn && authLoading && !account;
   const navLinks = useSiteNavLinks();
-  const heroNav = isHeroNavPath(path);
+  const heroNav = isHeroNavPath(path) || isLeagueFranchiseDetailPath(path);
 
   const mobileMenu =
     mobileMenuOpen &&

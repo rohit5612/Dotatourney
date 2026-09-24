@@ -1,21 +1,26 @@
 import { useEffect, useState } from "react";
-import { peekCache } from "../lib/requestCache.js";
+import { peekCache, peekStaleCache } from "../lib/requestCache.js";
+
+function readCachedData(cacheKey) {
+  return peekCache(cacheKey) ?? peekStaleCache(cacheKey);
+}
 
 /**
  * Fetch public API data with session/memory cache — instant paint when cached.
+ * Keeps the last good payload when refresh fails (stale-while-error).
  *
  * @template T
  * @param {string} cacheKey
  * @param {() => Promise<T>} fetcher
  */
 export function usePublicCachedQuery(cacheKey, fetcher) {
-  const [data, setData] = useState(() => peekCache(cacheKey));
-  const [loading, setLoading] = useState(() => peekCache(cacheKey) === undefined);
+  const [data, setData] = useState(() => readCachedData(cacheKey));
+  const [loading, setLoading] = useState(() => readCachedData(cacheKey) === undefined);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let active = true;
-    const cached = peekCache(cacheKey);
+    const cached = readCachedData(cacheKey);
     setData(cached);
     setLoading(cached === undefined);
     setError("");
@@ -23,12 +28,29 @@ export function usePublicCachedQuery(cacheKey, fetcher) {
     fetcher()
       .then((value) => {
         if (!active) return;
-        setData(value);
+        if (value !== undefined && value !== null) {
+          setData(value);
+          setError("");
+          return;
+        }
+        setData((prev) => prev ?? cached);
       })
       .catch((err) => {
         if (!active) return;
-        setError(err.message || "Request failed");
-        setData(undefined);
+        const fallback = readCachedData(cacheKey);
+        if (fallback !== undefined) {
+          setData(fallback);
+          setError("");
+          return;
+        }
+        setData((prev) => {
+          if (prev !== undefined && prev !== null) {
+            setError("");
+            return prev;
+          }
+          setError(err.message || "Request failed");
+          return prev;
+        });
       })
       .finally(() => {
         if (active) setLoading(false);

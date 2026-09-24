@@ -440,6 +440,25 @@ export function TournamentDraftModal({
                 <p className="setup-draft-section__copy setup-draft-season-card__badge-hint">
                   Up to 4 characters shown on the card. Leave blank to derive from the season name.
                 </p>
+                <label className="setup-draft-field setup-draft-season-card__badge-field">
+                  <span className="setup-draft-field__label">Dota league ID</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className="setup-draft-field__input"
+                    value={setup.dotaLeagueId || ""}
+                    placeholder="Valve in-house league ID (amateur)"
+                    onChange={(event) =>
+                      setSetup((prev) => ({
+                        ...prev,
+                        dotaLeagueId: event.target.value.replace(/[^\d]/g, ""),
+                      }))
+                    }
+                  />
+                </label>
+                <p className="setup-draft-section__copy setup-draft-season-card__badge-hint">
+                  Used for league match stats on player profiles (OpenDota). Sync from admin after match days.
+                </p>
                 <div
                   className="setup-draft-season-card__preview"
                   style={

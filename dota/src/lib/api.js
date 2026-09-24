@@ -1,4 +1,5 @@
-import { cachedGet, clearCache } from "./requestCache.js";
+import { cachedGet, clearCache, peekCache, peekStaleCache } from "./requestCache.js";
+import { mergePublicPlayerDotaStats } from "../utils/mergePublicPlayerDotaStats.js";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 const TOKEN_KEY = "bpcl-admin-token";
@@ -157,6 +158,24 @@ export const api = {
       persist: true,
     });
   },
+  getPublicPlayerDotaStats: (slug) => {
+    const key = `public:player:${String(slug || "").trim().toLowerCase()}:dota`;
+    const fetchDotaStats = async () => {
+      const fresh = await request(`/public/players/${encodeURIComponent(slug)}/dota-stats`);
+      const stale = peekCache(key) ?? peekStaleCache(key);
+      return mergePublicPlayerDotaStats(stale, fresh);
+    };
+    return cachedGet(key, fetchDotaStats, {
+      ttlMs: 7 * 24 * 60 * 60 * 1000,
+      persist: true,
+      awaitRevalidate: true,
+    });
+  },
+  syncTournamentOpenDota: (tournamentId, body = {}) =>
+    request(`/tournaments/${encodeURIComponent(tournamentId)}/opendota/sync`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   getPublicCardByBpcId: (bpcId) => {
     const normalized = String(bpcId || "").trim();
     const key = `public:card:bpc:${normalized.toUpperCase()}`;
@@ -432,6 +451,19 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   getTeamHistory: (tournamentId, teamId) => request(`/tournaments/${tournamentId}/teams/${teamId}/history`),
+  getLeagueTeams: () => cachedGet("league:teams:list", () => request("/public/league/teams")),
+  getLeagueTeam: (slug) => cachedGet(`league:team:${slug}`, () => request(`/public/league/teams/${encodeURIComponent(slug)}`)),
+  getAdminLeagueTeams: () => request("/admin/league-teams"),
+  createAdminLeagueTeam: (payload) =>
+    request("/admin/league-teams", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateAdminLeagueTeam: (id, payload) =>
+    request(`/admin/league-teams/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
   updateAdminPermissions: (userId, permissions) =>
     request(`/admin/users/${userId}/permissions`, {
       method: "PATCH",

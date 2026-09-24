@@ -280,6 +280,13 @@ export function buildTeamsForPublicDisplay(approvedRoster) {
   });
 }
 
+/** Roster players for one snapshot team (membership + elimination freeze). Used by League detail and public teams. */
+export function buildSeasonTeamRosterForDisplay(approvedRoster, snapshotTeamId) {
+  if (!approvedRoster?.teams?.length || !snapshotTeamId) return null;
+  const displayTeams = buildTeamsForPublicDisplay(approvedRoster);
+  return displayTeams.find((team) => team.id === snapshotTeamId) || null;
+}
+
 /** Overlay snapshot team metadata with active roster players (by team name). */
 export function mergeSnapshotTeamsWithRoster(snapshotTeams, rosterTeams) {
   if (!rosterTeams?.length) return snapshotTeams || [];

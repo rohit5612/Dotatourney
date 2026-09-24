@@ -1,3 +1,4 @@
+/** Profile change log for the active season's approved roster only (not league franchise history). */
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api.js";
 import { AdminGlassPanel } from "../components/AdminGlassPanel.jsx";

@@ -42,6 +42,7 @@ import { resolvePublicTeamLogo } from "../utils/teamLogoUrl.js";
 import { getClientIp, logAction, logError } from "../utils/serverLogger.js";
 import { getOrCreateCommerceConfig, publicCommerceConfig } from "../services/commerceConfigRepository.js";
 import { getPublicPlayerProfile, getCommunityDirectory } from "../services/playerProfileService.js";
+import { getPublicPlayerDotaStats } from "../services/opendotaPublicService.js";
 import {
   isSeasonPubliclyVisible,
   listPublicSeasons,
@@ -52,6 +53,7 @@ import {
   getLandingSponsorsConfig,
 } from "../services/seasonService.js";
 import { getPublicSiteContent } from "../services/siteContentService.js";
+import { getLeagueTeamBySlug, listLeagueTeamsPublic } from "../services/leagueTeamService.js";
 import {
   buildCardManifestByBpcId,
   buildCardManifestBySlug,
@@ -567,6 +569,23 @@ router.get("/players/:slug", async (req, res, next) => {
   }
 });
 
+router.get("/players/:slug/dota-stats", async (req, res, next) => {
+  try {
+    const slug = String(req.params.slug || "").trim().toLowerCase();
+    return await cachedPublicJson(res, `player:${slug}:dota`, async () => {
+      const payload = await getPublicPlayerDotaStats(slug);
+      if (!payload) {
+        const err = new Error("Player not found");
+        err.status = 404;
+        throw err;
+      }
+      return payload;
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.get("/cards/:bpcId.png", async (req, res, next) => {
   try {
     const bpcId = normalizeBpcIdParam(req.params.bpcId);
@@ -670,6 +689,34 @@ router.get("/match/:id", async (req, res, next) => {
 router.get("/site-content", async (_req, res, next) => {
   try {
     return await cachedPublicJson(res, "site-content", async () => getPublicSiteContent());
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/league/teams", async (_req, res, next) => {
+  try {
+    return await cachedPublicJson(res, "league:teams", async () => {
+      const teams = await listLeagueTeamsPublic();
+      return { teams };
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/league/teams/:slug", async (req, res, next) => {
+  try {
+    const slug = String(req.params.slug || "").trim().toLowerCase();
+    return await cachedPublicJson(res, `league:team:${slug}`, async () => {
+      const team = await getLeagueTeamBySlug(slug);
+      if (!team) {
+        const err = new Error("Team not found");
+        err.status = 404;
+        throw err;
+      }
+      return { team };
+    });
   } catch (error) {
     return next(error);
   }

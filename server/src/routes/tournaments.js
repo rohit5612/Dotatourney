@@ -48,6 +48,11 @@ import { writeAuditLog } from "../services/auditLogService.js";
 import { logAction, logError } from "../utils/serverLogger.js";
 import { listTeamProfileHistory, listPlayerTeamStints } from "../services/teamHistoryService.js";
 import {
+  syncSeasonTeamEntriesFromApprovedRoster,
+  syncSeasonTeamHonorsOnComplete,
+  syncWorkingSeasonTeamEntries,
+} from "../services/leagueTeamService.js";
+import {
   listSubstitutePool,
   listSubstitutionRequests,
   moveRegistrationToSubstitutePool,
@@ -151,6 +156,7 @@ const tournamentSchema = z.object({
   googleSheetTabName: z.string().optional().default(""),
   seasonCardBg: z.string().max(2_500_000).optional().default(""),
   seasonCardBadge: z.string().max(16).optional().default(""),
+  dotaLeagueId: z.union([z.number().int().positive(), z.null()]).optional(),
   seasonCardDeckTheme: z
     .object({
       badgeBackground: z.string().max(16).optional().default(""),
@@ -364,6 +370,26 @@ router.post("/:id/complete", requirePermission("setup.update"), async (req, res,
   }
 });
 
+router.post("/:id/opendota/sync", requirePermission("setup.update"), async (req, res, next) => {
+  try {
+    const body = z
+      .object({
+        linkMatches: z.boolean().optional().default(true),
+      })
+      .parse(req.body || {});
+    const { syncLeagueIndexFromRoster, linkTournamentMatches } = await import("../services/opendotaSyncService.js");
+    const indexResult = await syncLeagueIndexFromRoster(req.params.id);
+    let linkResult = { linked: 0 };
+    if (body.linkMatches && indexResult.ok) {
+      linkResult = await linkTournamentMatches(req.params.id);
+    }
+    invalidatePublicCache();
+    return res.json({ index: indexResult, link: linkResult });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.get("/:id/substitutes", async (req, res, next) => {
   try {
     const query = z
@@ -570,6 +596,7 @@ router.post("/:id/teams", async (req, res, next) => {
             seed: z.number().nullable().optional(),
             logoUrl: z.string().optional().default(""),
             accentColor: z.string().optional().default(""),
+            leagueTeamId: z.string().uuid().nullable().optional(),
           }),
         ),
         players: z.array(
@@ -615,6 +642,8 @@ router.post("/:id/teams", async (req, res, next) => {
       }));
 
     await replaceTeamsAndPlayers(req.params.id, teams, players, teamPlayers);
+    await syncWorkingSeasonTeamEntries(req.params.id, teams);
+    invalidatePublicCache();
 
     let approvedRoster = null;
     if (payload.syncApprovedRosterId) {
@@ -744,6 +773,8 @@ router.post("/:id/rosters/:rosterId/approve", async (req, res, next) => {
     }
 
     const approvedRoster = await approveRosterSnapshot(req.params.id, req.params.rosterId, req.adminUser.id);
+    await syncSeasonTeamEntriesFromApprovedRoster(req.params.id, req.params.rosterId);
+    invalidatePublicCache();
     return res.json({ approvedRoster, rosters: await listRosterSnapshots(req.params.id) });
   } catch (error) {
     return next(error);
@@ -1207,6 +1238,7 @@ router.patch("/:id/matches/:matchId", async (req, res, next) => {
           (v) => (typeof v === "string" && /^\d+$/.test(v.trim()) ? Number(v.trim()) : v),
           z.number().int().min(0).nullable().optional(),
         ),
+        dotaMatchIds: z.array(z.number().int().positive()).optional(),
       })
       .parse(req.body);
     const snapshot = await getTournament(req.params.id);
@@ -1219,6 +1251,11 @@ router.patch("/:id/matches/:matchId", async (req, res, next) => {
     if ("team1Score" in payload) nextMeta.team1Score = payload.team1Score;
     if ("team2Score" in payload) nextMeta.team2Score = payload.team2Score;
     if ("score" in payload) nextMeta.score = payload.score;
+    if ("dotaMatchIds" in payload) {
+      nextMeta.dotaMatchIds = payload.dotaMatchIds;
+      nextMeta.dotaLinkSource = "admin";
+      nextMeta.dotaLinkedAt = new Date().toISOString();
+    }
 
     const nextStatus =
       "status" in payload ? payload.status : payload.winner ? "finished" : match.status;

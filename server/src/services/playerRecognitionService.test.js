@@ -40,7 +40,10 @@ describe("playerRecognitionService", () => {
         seasonNumber: 2,
         seasonSlug: "season-2",
         seasonName: "Bharat Pro Circuit League Season 2",
+        teamName: "Phantom",
+        teamLogoUrl: "",
         detail: "Tournament MVP · Bharat Pro Circuit League Season 2",
+        deckBadgeTheme: { badgeBackground: "", badgeText: "" },
       },
       {
         id: "S2-champion",
@@ -50,7 +53,9 @@ describe("playerRecognitionService", () => {
         seasonSlug: "season-2",
         seasonName: "Bharat Pro Circuit League Season 2",
         teamName: "Phantom",
+        teamLogoUrl: "",
         detail: "Bharat Pro Circuit League Season 2 · Phantom",
+        deckBadgeTheme: { badgeBackground: "", badgeText: "" },
       },
     ]);
     assert.deepEqual(index.get("account-ally"), [
@@ -62,7 +67,9 @@ describe("playerRecognitionService", () => {
         seasonSlug: "season-2",
         seasonName: "Bharat Pro Circuit League Season 2",
         teamName: "Phantom",
+        teamLogoUrl: "",
         detail: "Bharat Pro Circuit League Season 2 · Phantom",
+        deckBadgeTheme: { badgeBackground: "", badgeText: "" },
       },
     ]);
   });

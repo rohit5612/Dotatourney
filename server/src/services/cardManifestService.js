@@ -523,6 +523,35 @@ export async function listCardAssetsForAccount(accountId) {
   }));
 }
 
+/** Card manifest for a player in a specific season (League franchise pages, vault-aware). */
+export async function buildSeasonPlayerCardManifest(playerAccountId, { seasonId, tournamentId, seasonStatus } = {}) {
+  if (!playerAccountId) return null;
+
+  const { rows: accountRows } = await pool.query(`SELECT * FROM player_accounts WHERE id = $1`, [playerAccountId]);
+  const account = accountRows[0];
+  if (!account) return null;
+
+  let season = null;
+  if (seasonId) {
+    const { rows } = await pool.query(`SELECT * FROM seasons WHERE id = $1`, [seasonId]);
+    season = rows[0] || null;
+  }
+
+  const concluded = seasonStatus === "concluded" || season?.status === "concluded";
+  if (seasonId) {
+    const frozen = await findFrozenSnapshotManifest(playerAccountId, seasonId);
+    if (frozen) return frozen;
+  }
+
+  return buildCardManifest(account, {
+    tournamentId: tournamentId || season?.tournament_id || null,
+    season,
+    collectionOnly: concluded,
+    freezeSnapshot: concluded,
+    historicalContext: concluded,
+  });
+}
+
 export async function buildMatchRosterCards(matchId) {
   const { rows: matchRows } = await pool.query(`SELECT * FROM matches WHERE id = $1`, [matchId]);
   const match = matchRows[0];

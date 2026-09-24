@@ -189,6 +189,8 @@ const images = {
   sponsorsBg: "/images/sponsors.png",
   /** Landing page — “Registration to victory” journey cards band */
   journeySectionBg: "/images/cards.jpg",
+  /** `/league` — franchise hub background */
+  leagueBg: "/images/league.jpg",
 };
 
 function formatDate(value) {
@@ -309,6 +311,7 @@ function CookieConsentBanner({ navigate }) {
 
 function resolvePageShellPath(pathname) {
   if (pathname.startsWith("/seasons/")) return "/seasons";
+  if (pathname.startsWith("/league/")) return "/league";
   if (pathname.startsWith("/player/")) return "/player";
   if (pathname.startsWith("/match/")) return "/match";
   return pathname;
@@ -323,6 +326,9 @@ export function PageContentShell({ path: _pathProp, children, registerClosedCent
   const isWhatsNewPage = path === "/whats-new";
   const isSponsorsPage = path === "/sponsors";
   const isPlayerProfilePage = path === "/player";
+  const isLeagueHub = pathname === "/league" || pathname === "/league/";
+  const isLeagueDetail = pathname.startsWith("/league/") && pathname.length > "/league/".length;
+  const isLeaguePage = isLeagueHub || isLeagueDetail;
   const isFullBleedBg =
     path === "/schedule" ||
     path === "/teams" ||
@@ -333,7 +339,8 @@ export function PageContentShell({ path: _pathProp, children, registerClosedCent
     isCommunityPage ||
     isWhatsNewPage ||
     isSponsorsPage ||
-    isPlayerProfilePage;
+    isPlayerProfilePage ||
+    isLeaguePage;
   const isLegalPage =
     path === "/privacy" ||
     path === "/cookies" ||
@@ -343,7 +350,11 @@ export function PageContentShell({ path: _pathProp, children, registerClosedCent
     path === "/about";
   const contentClass =
     path === "/teams"
-      ? "mx-auto max-w-7xl space-y-7 px-4 pb-12 pt-28 md:space-y-8"
+      ? "relative z-10 !space-y-0 !px-0 pb-10 pt-0 min-h-[100dvh]"
+      : isLeagueDetail
+        ? "relative z-10 !space-y-0 !px-0 pb-14 pt-0 min-h-[100dvh] md:pb-16"
+        : isLeagueHub
+          ? "relative z-10 !space-y-0 !px-0 pb-14 pt-0 min-h-[100dvh] md:pb-16"
         : path === "/schedule" || path === "/announcements" || path === "/rules"
         ? "relative z-10 !space-y-0 !px-0 pb-10 pt-0"
         : isLegalPage
@@ -370,7 +381,9 @@ export function PageContentShell({ path: _pathProp, children, registerClosedCent
                   ? images.sponsorsBg
                   : path === "/community" || path === "/whats-new" || path === "/player"
                     ? images.communityBg
-                    : null;
+                    : isLeagueHub
+                      ? images.leagueBg
+                      : null;
   const fullBleedGradientClass =
     path === "/schedule"
       ? "bg-gradient-to-b from-background/42 via-background/34 to-background/40"
@@ -388,19 +401,21 @@ export function PageContentShell({ path: _pathProp, children, registerClosedCent
                   ? "bg-gradient-to-b from-background/32 via-background/18 to-background/24"
                   : path === "/community" || path === "/whats-new" || path === "/player"
                     ? "bg-gradient-to-b from-background/32 via-background/18 to-background/24"
-                    : "bg-gradient-to-br from-background/87 via-background/78 to-background/80";
+                    : isLeagueHub
+                      ? "bg-gradient-to-b from-background/72 via-background/58 to-background/78"
+                      : "bg-gradient-to-br from-background/87 via-background/78 to-background/80";
 
   const sectionClassName = registerClosedCentered
     ? "relative z-10 flex min-h-0 flex-1 flex-col px-4 pt-24 sm:pt-28"
     : path === "/"
       ? "space-y-20"
-      : path === "/teams"
+      : path === "/teams" || isLeaguePage
         ? `${contentClass} relative z-10 !space-y-0`
         : `${contentClass} relative z-10`;
 
   return (
     <div
-      className={`relative text-foreground ${isFullBleedBg ? "" : "bg-background"} ${isSeasonsPage || isCommunityPage || isSponsorsPage || isPlayerProfilePage ? "min-h-[100dvh]" : ""} ${registerClosedCentered ? "flex min-h-[60vh] flex-col" : ""}`}
+      className={`relative text-foreground ${isCommunityPage ? "bg-[#05040a]" : isLeagueDetail || !isFullBleedBg ? "bg-background" : ""} ${isLeagueDetail ? "league-detail-route" : ""} ${isSeasonsPage || isCommunityPage || isSponsorsPage || isPlayerProfilePage || isLeaguePage ? "min-h-[100dvh]" : ""} ${registerClosedCentered ? "flex min-h-[60vh] flex-col" : ""}`}
     >
       {isFullBleedBg && fullBleedImage ? (
         <div className="pointer-events-none fixed inset-0 z-0" aria-hidden="true">
@@ -411,6 +426,13 @@ export function PageContentShell({ path: _pathProp, children, registerClosedCent
               <div className="absolute inset-0 bg-[radial-gradient(ellipse_90%_55%_at_50%_-5%,rgba(94,234,212,0.14),transparent_58%)]" />
               <div className="absolute inset-0 bg-[radial-gradient(ellipse_55%_45%_at_100%_85%,rgba(233,168,74,0.11),transparent_52%)]" />
               <div className="absolute inset-0 bg-[radial-gradient(ellipse_40%_35%_at_0%_60%,rgba(129,140,248,0.08),transparent_50%)]" />
+            </>
+          ) : null}
+          {isLeagueHub ? (
+            <>
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_12%_20%,rgba(134,239,172,0.2),transparent_55%)]" />
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_55%_45%_at_88%_35%,rgba(250,204,21,0.14),transparent_52%)]" />
+              <div className="absolute inset-0 bg-[linear-gradient(105deg,rgba(6,12,8,0.55)_0%,transparent_42%,rgba(8,14,10,0.35)_100%)]" />
             </>
           ) : null}
         </div>

@@ -50,13 +50,37 @@ function loserOf(match) {
   return match.winner === match.team1 ? match.team2 : match.team1;
 }
 
-function badgeFromDepth(depth, alive) {
+function isPlayInCrossMatch(match) {
+  const stageKey = match?.stageKey || "";
+  if (stageKey !== "blast-playin") return false;
+  const meta = match?.meta && typeof match.meta === "object" ? match.meta : {};
+  const rule = meta.seriesRuleKey || meta.series_rule_key || "";
+  const presentation = meta.presentationSeriesRuleKey || meta.presentation_series_rule_key || "";
+  return rule === "blast-playin-cross" || presentation === "blast-playin-cross";
+}
+
+function badgeFromDepth(depth, alive, match) {
   if (depth <= 10) return null;
+  if (isPlayInCrossMatch(match)) {
+    return { kind: alive ? "in_play_in_cross" : "play_in_cross", label: "Play in crossover" };
+  }
   if (depth >= 90) return alive ? { kind: "in_final", label: "Grand Final" } : null;
-  if (depth >= 80) return alive ? { kind: "in_semifinals", label: "Semifinals" } : { kind: "semifinalist", label: "Semifinalist" };
-  if (depth >= 70) return alive ? { kind: "in_quarterfinals", label: "Quarterfinals" } : { kind: "quarterfinalist", label: "Quarterfinalist" };
-  if (depth >= 50) return alive ? { kind: "in_play_in", label: "Play-In" } : { kind: "play_in", label: "Play-In" };
-  if (depth >= 30) return alive ? { kind: "in_last_chance", label: "Last Chance" } : { kind: "last_chance", label: "Last Chance" };
+  if (depth >= 80) {
+    return alive
+      ? { kind: "in_semifinals", label: "Semifinals" }
+      : { kind: "semifinalist", label: "Semi finalist" };
+  }
+  if (depth >= 70) {
+    return alive
+      ? { kind: "in_quarterfinals", label: "Quarterfinals" }
+      : { kind: "quarterfinalist", label: "Quarter finalist" };
+  }
+  if (depth >= 50) {
+    return alive ? { kind: "in_play_in", label: "Play in" } : { kind: "play_in", label: "Play in" };
+  }
+  if (depth >= 30) {
+    return alive ? { kind: "in_last_chance", label: "Last chance" } : { kind: "last_chance", label: "Last chance" };
+  }
   return null;
 }
 
@@ -83,13 +107,13 @@ export function buildBlastPlacementTeams(matches) {
 
   for (const sf of rounds.length >= 2 ? playoffMatches(matches, rounds[rounds.length - 2]) : []) {
     if (!isFinished(sf)) continue;
-    push(3, "3rd Place", loserOf(sf));
+    push(3, "Semi finalist", loserOf(sf));
   }
 
   let placement = 5;
   for (const qf of rounds.length >= 1 ? playoffMatches(matches, rounds[0]) : []) {
     if (!isFinished(qf)) continue;
-    push(placement, "Top 8", loserOf(qf));
+    push(placement, "Quarter finalist", loserOf(qf));
     placement += 1;
   }
 
@@ -114,28 +138,36 @@ export function deriveTeamBracketBadge(teamName, matches) {
   // Badge reflects the last non-group series — everyone plays groups, so depth <= 10 is ignored.
   let aliveDepth = 0;
   let lastExitDepth = 0;
+  let aliveMatch = null;
+  let lastExitMatch = null;
 
   for (const match of involved) {
     const depth = matchDepth(match, matches);
     if (depth <= 10) continue;
 
     if (!isFinished(match)) {
-      aliveDepth = Math.max(aliveDepth, depth);
+      if (depth >= aliveDepth) {
+        aliveDepth = depth;
+        aliveMatch = match;
+      }
       continue;
     }
 
     if (match.winner && match.winner !== name) {
-      lastExitDepth = Math.max(lastExitDepth, depth);
+      if (depth >= lastExitDepth) {
+        lastExitDepth = depth;
+        lastExitMatch = match;
+      }
     }
   }
 
   if (aliveDepth > 0) {
-    const badge = badgeFromDepth(aliveDepth, true);
+    const badge = badgeFromDepth(aliveDepth, true, aliveMatch);
     return badge ? { ...badge, depth: aliveDepth, alive: true } : null;
   }
 
   if (lastExitDepth > 0) {
-    const badge = badgeFromDepth(lastExitDepth, false);
+    const badge = badgeFromDepth(lastExitDepth, false, lastExitMatch);
     return badge ? { ...badge, depth: lastExitDepth, alive: false } : null;
   }
 
@@ -227,6 +259,19 @@ export function normalizeTournamentHonors(raw) {
   };
 }
 
+function parseMatchMeta(raw) {
+  if (raw == null) return {};
+  if (typeof raw === "object") return raw;
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
 export function normalizeMatchForHonors(row) {
   if (!row) return row;
   return {
@@ -238,6 +283,7 @@ export function normalizeMatchForHonors(row) {
     team2: row.team2,
     winner: row.winner,
     status: row.status,
+    meta: parseMatchMeta(row.meta),
   };
 }
 
@@ -251,6 +297,7 @@ export function buildPublicHonorsPayload(matches, format, tournamentHonors) {
 
   return {
     ...derived,
+    format: String(format || "").trim().toLowerCase() || null,
     displayPodiumCount,
     maxPodiumPlacements: maxPodium,
     podiumTeams,

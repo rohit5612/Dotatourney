@@ -33,6 +33,7 @@ import {
 import { writeAuditLog, listAuditLog } from "../services/auditLogService.js";
 import playerAccountsRouter from "./admin/playerAccounts.js";
 import seasonsRouter from "./admin/seasons.js";
+import leagueTeamsRouter from "./admin/leagueTeams.js";
 import { orgRosterSchema } from "../services/seasonContentSchema.js";
 import { updateOrgRoster } from "../services/siteContentService.js";
 import { invalidatePublicCache } from "../services/publicCache.js";
@@ -50,6 +51,7 @@ const router = express.Router();
 
 router.use("/player-accounts", playerAccountsRouter);
 router.use("/seasons", seasonsRouter);
+router.use("/league-teams", leagueTeamsRouter);
 
 router.put("/site-content/org-roster", requireAdmin, requirePermission("seasons.update"), async (req, res, next) => {
   try {

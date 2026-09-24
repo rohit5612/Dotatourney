@@ -9,6 +9,7 @@ import { CardUpgradeSuccessModal } from "../../components/player/CardUpgradeSucc
 import { DashboardActionIcon } from "../../components/player/DashboardActionIcon.jsx";
 import { MatchesSchedulePanel } from "../../components/player/MatchesSchedulePanel.jsx";
 import { PlayerSetupChecklist } from "../../components/player/onboarding/PlayerSetupChecklist.jsx";
+import { ProfileHonorBadge } from "../../components/honors/ProfileHonorBadge.jsx";
 import { TeamCard } from "../../components/teams/TeamCard.jsx";
 import { playerApi } from "../../lib/playerApi";
 import { buildPlayerDashboardTeamCard, teamLogoForName } from "./dashboardTeamCard.js";
@@ -131,14 +132,9 @@ export function PlayerOverviewPage() {
               {memberSince ? <span className="player-dash__hero-chip">Member since {memberSince}</span> : null}
             </div>
             {recognitions.length ? (
-              <div className="player-dash__hero-recognitions">
+              <div className="player-profile__hero-recognitions player-dash__hero-recognitions">
                 {recognitions.map((item) => (
-                  <span
-                    key={item.id}
-                    className={`player-dash__recognition player-dash__recognition--${item.kind || "custom"}`}
-                  >
-                    {item.label}
-                  </span>
+                  <ProfileHonorBadge key={item.id} item={item} />
                 ))}
               </div>
             ) : null}

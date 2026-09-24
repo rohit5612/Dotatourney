@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { HiOutlineArrowLeft, HiOutlineStar, HiOutlineTrophy } from "react-icons/hi2";
+import { HiOutlineArrowLeft, HiOutlineMapPin, HiOutlineTrophy, HiOutlineUserGroup } from "react-icons/hi2";
 import { CardDeck } from "../../components/cards/CardDeck.jsx";
 import { CardTierBadge } from "../../components/cards/CardTierBadge.jsx";
+import { ProfileHonorBadge } from "../../components/honors/ProfileHonorBadge.jsx";
 import { PlayerProfileCard } from "../../components/cards/PlayerProfileCard.jsx";
 import { HoloProfileViewportFx } from "../../components/player/HoloProfileViewportFx.jsx";
 import { PlayerRoleIcons } from "../../components/PlayerRoleIcons.jsx";
@@ -12,140 +13,58 @@ import { SITE_BRAND_SHORT } from "../../constants/siteMeta.js";
 import { api } from "../../lib/api";
 import { playerApi } from "../../lib/playerApi";
 import { usePublicCachedQuery } from "../../hooks/usePublicCachedQuery.js";
-import { useShowMoreList } from "../../hooks/useShowMoreList.js";
 import { teamLogoForName } from "../player/dashboardTeamCard.js";
-import { getMatchDisplayScores } from "../../utils/schedule.js";
 import {
-  premiumAboutClass,
-  premiumCardGlowClass,
   premiumHeroBandClass,
   premiumLayoutClass,
   premiumShineTextClass,
   premiumTierPanelClass,
 } from "../../utils/cardTierEffects.js";
-import { resolveAccountAvatarUrl } from "../../utils/resolvePlayerAvatar.js";
 import { resolveProfileBack } from "../../utils/profileBackNav.js";
+import { rankMedalImageUrl } from "../../utils/dotaAssets.js";
+import { mmrFromRankTier } from "../../utils/dotaRankMmr.js";
+import {
+  DotaGlobalStatsHeroStrip,
+  DotaLeagueStatsPanel,
+} from "../../components/player-profile/feed/DotaStatsDigest.jsx";
+import { MatchActivityFeed } from "../../components/player-profile/feed/MatchActivityFeed.jsx";
 import "../../components/cards/CardTierStyles.css";
 import "../../styles/card-tier-effects.css";
 import "../../styles/card-tier-effects-holo.css";
+import "../../styles/seasons-page.css";
 
 function formatDate(value) {
   if (!value) return "";
   return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-function recognitionBadgeClass(kind) {
-  if (kind === "champion") return "player-profile__honor-badge player-profile__honor-badge--champion";
-  if (kind === "mvp") return "player-profile__honor-badge player-profile__honor-badge--mvp";
-  return "player-profile__honor-badge player-profile__honor-badge--custom";
+function formatRibbonMmr(mmr) {
+  if (mmr == null || mmr === "") return null;
+  const n = Number(mmr);
+  if (!Number.isFinite(n)) return String(mmr);
+  return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
-function ProfileHonorBadge({ item }) {
-  const labelParts = String(item.label || "").split("•");
-  const seasonTag = labelParts[0]?.trim() || "";
-  const honorTitle = labelParts.slice(1).join("•").trim() || item.kind || "Honor";
-  const kind = item.kind || "custom";
-  const MarkIcon = kind === "champion" ? HiOutlineTrophy : HiOutlineStar;
-
+function HeroDigestRibbonItem({ icon: Icon, label, value, children }) {
+  const content = children ?? value;
+  if (content == null || content === "") return null;
+  const isRich = typeof content !== "string" && typeof content !== "number";
   return (
-    <article className={recognitionBadgeClass(kind)}>
-      <span className="player-profile__honor-badge-mark" aria-hidden="true">
-        <MarkIcon />
-      </span>
-      <div className="player-profile__honor-badge-content">
-        <div className="player-profile__honor-badge-top">
-          {seasonTag ? <span className="player-profile__honor-badge-season">{seasonTag}</span> : null}
-          <span className="player-profile__honor-badge-title">{honorTitle}</span>
-        </div>
-        {item.detail ? <p className="player-profile__honor-badge-sub">{item.detail}</p> : null}
+    <div className="hero-digest__ribbon-item">
+      {Icon ? (
+        <span className="hero-digest__ribbon-icon" aria-hidden="true">
+          <Icon />
+        </span>
+      ) : null}
+      <div className="hero-digest__ribbon-copy">
+        <span className="hero-digest__ribbon-k">{label}</span>
+        <span
+          className={`hero-digest__ribbon-v${isRich ? " hero-digest__ribbon-v--rich" : ""}`}
+        >
+          {content}
+        </span>
       </div>
-    </article>
-  );
-}
-
-function StatBlock({ label, value }) {
-  if (value == null || value === "") return null;
-  return (
-    <div className="player-profile__stat">
-      <span className="player-profile__stat-label">{label}</span>
-      <span className="player-profile__stat-value">{value}</span>
     </div>
-  );
-}
-
-function resolveMatchScores(row) {
-  const normalizedScore =
-    typeof row.score === "string" ? row.score.replace(/\s*[–—]\s*/g, "-").trim() : "";
-  return getMatchDisplayScores({
-    team1: row.team1,
-    team2: row.team2,
-    team1Score: row.team1Score,
-    team2Score: row.team2Score,
-    winner: row.winner,
-    meta: {
-      score: normalizedScore,
-      team1Score: row.team1Score,
-      team2Score: row.team2Score,
-    },
-  });
-}
-
-function MatchScoreToast({ row }) {
-  const scores = resolveMatchScores(row);
-
-  if (!scores.ready) {
-    return (
-      <span className="player-profile__match-score-toast player-profile__match-score-toast--pending" aria-label="Score pending">
-        <span className="player-profile__match-score-toast-vs">vs</span>
-      </span>
-    );
-  }
-
-  const team1Won = Boolean(scores.winner && row.team1 && scores.winner.toLowerCase() === row.team1.toLowerCase());
-  const team2Won = Boolean(scores.winner && row.team2 && scores.winner.toLowerCase() === row.team2.toLowerCase());
-  const playerOnTeam1 = Boolean(row.teamName && row.team1 && row.teamName.toLowerCase() === row.team1.toLowerCase());
-  const playerOnTeam2 = Boolean(row.teamName && row.team2 && row.teamName.toLowerCase() === row.team2.toLowerCase());
-
-  const toastTone =
-    row.won === true
-      ? "player-profile__match-score-toast--win"
-      : row.won === false
-        ? "player-profile__match-score-toast--loss"
-        : "";
-
-  return (
-    <span
-      className={`player-profile__match-score-toast${toastTone ? ` ${toastTone}` : ""}`}
-      aria-label={`Score ${scores.team1} to ${scores.team2}`}
-    >
-      <span className="player-profile__match-score-toast-body">
-        <span
-          className={[
-            "player-profile__match-score-toast-num",
-            team1Won ? "player-profile__match-score-toast-num--winner" : "",
-            playerOnTeam1 ? "player-profile__match-score-toast-num--player" : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-        >
-          {scores.team1}
-        </span>
-        <span className="player-profile__match-score-toast-sep" aria-hidden>
-          –
-        </span>
-        <span
-          className={[
-            "player-profile__match-score-toast-num",
-            team2Won ? "player-profile__match-score-toast-num--winner" : "",
-            playerOnTeam2 ? "player-profile__match-score-toast-num--player" : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-        >
-          {scores.team2}
-        </span>
-      </span>
-    </span>
   );
 }
 
@@ -181,26 +100,6 @@ function groupStintsBySeason(teamHistory) {
   return [...groups.values()].sort((a, b) => (b.seasonNumber ?? 0) - (a.seasonNumber ?? 0));
 }
 
-function groupMatchesBySeason(matches) {
-  const groups = new Map();
-  for (const row of matches || []) {
-    const key = row.seasonSlug || String(row.seasonNumber ?? row.tournamentSlug ?? row.tournamentName ?? "");
-    if (!groups.has(key)) {
-      groups.set(key, {
-        key,
-        seasonNumber: row.seasonNumber,
-        seasonSlug: row.seasonSlug,
-        seasonStatus: row.seasonStatus,
-        seasonCardBadge: row.seasonCardBadge,
-        seasonLabel: row.seasonNumber ? `Season ${row.seasonNumber}` : row.tournamentName,
-        matches: [],
-      });
-    }
-    groups.get(key).matches.push(row);
-  }
-  return [...groups.values()].sort((a, b) => (b.seasonNumber ?? 0) - (a.seasonNumber ?? 0));
-}
-
 function TeammateChip({ mate, isSelf, linkState }) {
   const content = (
     <>
@@ -224,38 +123,6 @@ function TeammateChip({ mate, isSelf, linkState }) {
   return <div className={`player-profile__teammate-chip${isSelf ? " player-profile__teammate-chip--self" : ""}`}>{content}</div>;
 }
 
-function MatchHistoryRow({ row }) {
-  const metaLine = [row.stageLabel, row.startAt ? formatDate(row.startAt) : ""].filter(Boolean).join(" · ");
-  const team1Logo = teamLogoForName(row.team1);
-  const team2Logo = teamLogoForName(row.team2);
-  const playerOnTeam1 = row.teamName && row.team1 && row.teamName.toLowerCase() === row.team1.toLowerCase();
-  const playerOnTeam2 = row.teamName && row.team2 && row.teamName.toLowerCase() === row.team2.toLowerCase();
-
-  return (
-    <li className="player-profile__match-row">
-      <div className="player-profile__match-main">
-        <div className={`player-profile__match-side${playerOnTeam1 ? " player-profile__match-side--player" : ""}`}>
-          <TeamLogoImg src={team1Logo} alt="" width={40} height={40} className="player-profile__match-logo" />
-          <span className="player-profile__match-team">{row.team1}</span>
-        </div>
-        <MatchScoreToast row={row} />
-        <div className={`player-profile__match-side player-profile__match-side--away${playerOnTeam2 ? " player-profile__match-side--player" : ""}`}>
-          <TeamLogoImg src={team2Logo} alt="" width={40} height={40} className="player-profile__match-logo" />
-          <span className="player-profile__match-team">{row.team2}</span>
-        </div>
-      </div>
-      <div className="player-profile__match-foot">
-        <p className="player-profile__match-meta">{metaLine}</p>
-        <div className="player-profile__match-tags">
-          {row.won === true ? <span className="player-profile__match-tag player-profile__match-tag--win">W</span> : null}
-          {row.won === false ? <span className="player-profile__match-tag player-profile__match-tag--loss">L</span> : null}
-          {row.playedAsSub ? <span className="player-profile__match-tag">Sub</span> : null}
-        </div>
-      </div>
-    </li>
-  );
-}
-
 export function PublicPlayerProfilePage() {
   const { slug } = useParams();
   const location = useLocation();
@@ -263,6 +130,9 @@ export function PublicPlayerProfilePage() {
   const cacheKey = `public:player:${String(slug || "").trim().toLowerCase()}`;
   const fetchProfile = useMemo(() => () => api.getPublicPlayer(slug), [slug]);
   const { data: profile, loading, error } = usePublicCachedQuery(cacheKey, fetchProfile);
+  const dotaCacheKey = `public:player:${String(slug || "").trim().toLowerCase()}:dota`;
+  const fetchDotaStats = useMemo(() => () => api.getPublicPlayerDotaStats(slug), [slug]);
+  const { data: dotaStats } = usePublicCachedQuery(dotaCacheKey, fetchDotaStats);
   const [cardDeck, setCardDeck] = useState(null);
   const [cardDeckLoading, setCardDeckLoading] = useState(true);
 
@@ -282,37 +152,39 @@ export function PublicPlayerProfilePage() {
   const layoutFxClass = premiumLayoutClass(cardTier);
   const profilePanelClass = (extra = "") =>
     premiumTierPanelClass(cardTier, `community-glass player-profile__panel ${extra}`.trim());
-  const profileHeroPanelClass = premiumTierPanelClass(
-    cardTier,
-    "community-glass community-glass--liquid player-profile__panel player-profile__panel--hero",
-  );
   const heroBandClass = premiumHeroBandClass(cardTier);
-  const aboutFxClass = premiumAboutClass(cardTier);
   const holoCaptionShineClass = cardTier === "holo" ? premiumShineTextClass(cardTier) : "";
   const heroTitleShineClass =
     cardTier === "gold" ? premiumShineTextClass(cardTier, "hero") : holoCaptionShineClass;
   const bpcIdShineClass = holoCaptionShineClass;
   const memberSince = formatDate(account?.createdAt);
   const roles = account?.preferredRoles?.length ? account.preferredRoles.join(", ") : null;
-  const avatarUrl = resolveAccountAvatarUrl(account);
   const recognitions = profile?.recognitions || [];
   const currentTeam = profile?.currentTeam;
   const aboutTeamLogoUrl =
     teamLogoForName(currentTeam?.team?.name) || currentTeam?.team?.logoUrl?.trim() || "";
+  const heroTeamLogoStyle = aboutTeamLogoUrl
+    ? { "--hero-team-logo": `url("${aboutTeamLogoUrl}")` }
+    : undefined;
+  const dotaMmr =
+    dotaStats?.global?.rankMmr ?? mmrFromRankTier(dotaStats?.global?.rankTier) ?? null;
+  const heroDigestRankMedalUrl = useMemo(() => {
+    if (dotaStats?.global?.rankTier == null) return null;
+    return (
+      rankMedalImageUrl(dotaStats.global.rankTier, {
+        leaderboardRank: dotaStats.global.leaderboardRank,
+      }) || null
+    );
+  }, [dotaStats?.global?.rankTier, dotaStats?.global?.leaderboardRank]);
   const stintGroups = useMemo(() => groupStintsBySeason(profile?.teamHistory), [profile?.teamHistory]);
-  const {
-    visible: visibleMatchHistory,
-    hasMore: hasMoreMatchHistory,
-    canCollapse: canCollapseMatchHistory,
-    showMore: showMoreMatchHistory,
-    showLess: showLessMatchHistory,
-  } = useShowMoreList(profile?.matchHistory, {
-    resetKey: `${slug}:${profile?.matchHistory?.length ?? 0}`,
-  });
-  const visibleMatchSeasonGroups = useMemo(
-    () => groupMatchesBySeason(visibleMatchHistory),
-    [visibleMatchHistory],
-  );
+  const dotaMatchById = useMemo(() => {
+    const byId = new Map();
+    for (const row of dotaStats?.matchHistory || []) {
+      byId.set(String(row.matchId), row);
+    }
+    return byId;
+  }, [dotaStats?.matchHistory]);
+  const profileMatchHistory = profile?.matchHistory || [];
 
   const rosterMembers = useMemo(() => {
     if (!currentTeam?.team) return [];
@@ -338,18 +210,22 @@ export function PublicPlayerProfilePage() {
     <div className={`player-profile-layout community-page-layout${layoutFxClass ? ` ${layoutFxClass}` : ""}`}>
       {cardTier === "holo" ? <HoloProfileViewportFx /> : null}
       <section
-        className={`community-page__hero-band player-profile__hero-band${heroBandClass ? ` ${heroBandClass}` : ""}`}
+        className={`community-page__hero-band player-profile__hero-band player-profile__hero-band--wire${heroBandClass ? ` ${heroBandClass}` : ""}`}
         aria-labelledby="player-profile-title"
+        style={heroTeamLogoStyle}
       >
         <div className="community-page__hero-overlay" aria-hidden="true" />
+        {aboutTeamLogoUrl ? (
+          <div className="player-profile__hero-team-orb" aria-hidden="true" />
+        ) : null}
         <div className="community-page__hero-inner player-profile__hero-inner">
           <Link to={profileBack.to} className="player-profile__back">
             <HiOutlineArrowLeft aria-hidden="true" />
             {profileBack.label}
           </Link>
-          {loading ? (
+          {loading && !profile ? (
             <PageLoadingSpinner label="Loading player profile…" compact />
-          ) : error ? (
+          ) : error && !profile ? (
             <>
               <p className="community-page__eyebrow">{SITE_BRAND_SHORT}</p>
               <h1 id="player-profile-title" className="community-page__hero-title">
@@ -358,55 +234,96 @@ export function PublicPlayerProfilePage() {
               <p className="community-page__hero-lead">{error}</p>
             </>
           ) : (
-            <>
-              <p className="community-page__eyebrow">{SITE_BRAND_SHORT}</p>
-              <div className="player-profile__hero-head">
-                {avatarUrl ? (
-                  <img src={avatarUrl} alt="" className="player-profile__hero-avatar" />
-                ) : (
-                  <div className="player-profile__hero-avatar player-profile__hero-avatar--fallback" aria-hidden="true">
-                    {(account?.displayName || "?")[0]}
+            <div className="player-profile__hero-wire">
+              <div className="player-profile__hero-card-slot player-profile__card-wrap">
+                {card ? <PlayerProfileCard manifest={card} cardTier={cardTier} /> : null}
+              </div>
+
+              <div className="player-profile__hero-identity">
+                <h1
+                  id="player-profile-title"
+                  className={`player-profile__hero-name community-page__hero-title${heroTitleShineClass ? ` ${heroTitleShineClass}` : ""}`}
+                >
+                  {account?.displayName || account?.slug}
+                </h1>
+                <div className="player-profile__hero-meta">
+                  <span
+                    className={`player-profile__bpc-id${cardTier === "holo" ? " player-profile__bpc-id--holo" : ""}`}
+                  >
+                    {bpcIdShineClass ? (
+                      <span className={bpcIdShineClass}>{account?.bpcId}</span>
+                    ) : (
+                      account?.bpcId
+                    )}
+                  </span>
+                  <CardTierBadge tier={cardTier} />
+                  {memberSince ? <span className="player-profile__member-since">Since {memberSince}</span> : null}
+                </div>
+                {recognitions.length ? (
+                  <div className="player-profile__hero-recognitions" aria-label="Season honors">
+                    {recognitions.map((item) => (
+                      <ProfileHonorBadge key={item.id} item={item} />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <article
+                className={profilePanelClass(
+                  `community-glass--liquid player-profile__panel player-profile__hero-digest${heroDigestRankMedalUrl ? " player-profile__hero-digest--rank" : ""}`,
+                )}
+              >
+                {heroDigestRankMedalUrl ? (
+                  <div className="hero-digest__rank-medal" aria-hidden="true">
+                    <img src={heroDigestRankMedalUrl} alt="" decoding="async" />
+                  </div>
+                ) : null}
+                <div className="hero-digest__intro">
+                <p
+                  className={`hero-digest__bio player-profile__bio${account?.bio ? "" : " player-profile__bio--muted"}`}
+                >
+                  {account?.bio || "No bio yet."}
+                </p>
+                <div className="hero-digest__ribbon hero-digest__ribbon--profile" aria-label="Profile highlights">
+                  <HeroDigestRibbonItem icon={HiOutlineTrophy} label="MMR" value={formatRibbonMmr(dotaMmr)} />
+                  <HeroDigestRibbonItem icon={HiOutlineUserGroup} label="Roles">
+                    {account?.preferredRoles?.length ? (
+                      <PlayerRoleIcons player={account} roles={account.preferredRoles} size="sm" />
+                    ) : (
+                      roles
+                    )}
+                  </HeroDigestRibbonItem>
+                  <HeroDigestRibbonItem icon={HiOutlineMapPin} label="Location" value={account?.location} />
+                </div>
+                </div>
+                <div className="hero-digest__stats-slot">
+                  <DotaGlobalStatsHeroStrip dotaStats={dotaStats} />
+                </div>
+                {(account?.steamProfile || account?.discordUsername) && (
+                  <div className="hero-digest__links player-profile__links">
+                    {account?.steamProfile ? (
+                      <a
+                        href={account.steamProfile}
+                        className="player-profile__link-btn"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Steam{account.steamPersona ? ` · ${account.steamPersona}` : ""}
+                      </a>
+                    ) : null}
+                    {account?.discordUsername ? (
+                      <span className="player-profile__link-chip">Discord · {account.discordUsername}</span>
+                    ) : null}
                   </div>
                 )}
-                <div className="player-profile__hero-copy">
-                  <h1
-                    id="player-profile-title"
-                    className={`community-page__hero-title${heroTitleShineClass ? ` ${heroTitleShineClass}` : ""}`}
-                  >
-                    {account?.displayName || account?.slug}
-                  </h1>
-                  <div className="player-profile__hero-meta">
-                    <span
-                      className={`player-profile__bpc-id${cardTier === "holo" ? " player-profile__bpc-id--holo" : ""}`}
-                    >
-                      {bpcIdShineClass ? (
-                        <span className={bpcIdShineClass}>{account?.bpcId}</span>
-                      ) : (
-                        account?.bpcId
-                      )}
-                    </span>
-                    <CardTierBadge tier={cardTier} />
-                    {currentTeam?.team?.name ? (
-                      <span className="player-profile__team-chip">{currentTeam.team.name}</span>
-                    ) : null}
-                    {memberSince ? <span className="player-profile__member-since">Since {memberSince}</span> : null}
-                  </div>
-                  {recognitions.length ? (
-                    <div className="player-profile__hero-recognitions" aria-label="Season honors">
-                      {recognitions.map((item) => (
-                        <ProfileHonorBadge key={item.id} item={item} />
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </>
+              </article>
+            </div>
           )}
         </div>
       </section>
 
       <div className="community-page player-profile-page">
-        {loading ? (
+        {loading && !profile ? (
           <section className="community-glass community-glass--liquid player-profile__panel" aria-busy="true">
             <div className="player-profile__loading">
               <div className="player-profile__skeleton player-profile__skeleton--card" />
@@ -415,208 +332,66 @@ export function PublicPlayerProfilePage() {
           </section>
         ) : null}
 
-        {!loading && !error && profile ? (
+        {!loading && profile ? (
           <>
-            <section className={profileHeroPanelClass}>
-              <div className="player-profile__hero-grid">
-                <div className="player-profile__card-wrap">
-                  {card ? <PlayerProfileCard manifest={card} cardTier={cardTier} /> : null}
-                </div>
-                <div
-                  className={`player-profile__about${aboutTeamLogoUrl ? " player-profile__about--team" : ""}${aboutFxClass ? ` ${aboutFxClass}` : ""}`}
-                  style={aboutTeamLogoUrl ? { "--about-team-logo": `url("${aboutTeamLogoUrl}")` } : undefined}
-                >
-                  {aboutTeamLogoUrl ? <div className="player-profile__about-team-bg" aria-hidden="true" /> : null}
-                  <div className="player-profile__about-inner">
-                    <h2 className="player-profile__section-title">About</h2>
-                    {account?.bio ? (
-                      <p className="player-profile__bio">{account.bio}</p>
-                    ) : (
-                      <p className="player-profile__bio player-profile__bio--muted">No bio yet.</p>
-                    )}
-                    <div className="player-profile__stats-grid">
-                      <StatBlock label="MMR" value={account?.mmr != null ? account.mmr : null} />
-                      <StatBlock label="Roles" value={roles} />
-                      <StatBlock label="Location" value={account?.location} />
-                      <StatBlock
-                        label="Matches"
-                        value={profile.career?.matchesPlayed != null ? profile.career.matchesPlayed : null}
-                      />
-                      <StatBlock
-                        label="Registrations"
-                        value={
-                          profile.career?.approvedRegistrations != null
-                            ? `${profile.career.approvedRegistrations} approved`
-                            : null
-                        }
-                      />
-                    </div>
-                    <div className="player-profile__links">
-                      {account?.steamProfile ? (
-                        <a
-                          href={account.steamProfile}
-                          className="player-profile__link-btn"
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Steam{account.steamPersona ? ` · ${account.steamPersona}` : ""}
-                        </a>
-                      ) : null}
-                      {account?.discordUsername ? (
-                        <span className="player-profile__link-chip">Discord · {account.discordUsername}</span>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <div className="player-profile__content-grid">
-              <div className="player-profile__content-col player-profile__content-col--main">
-                {currentTeam?.team ? (
-                  <section className={profilePanelClass()}>
-                    <h2 className="player-profile__section-title">Current team</h2>
-                    <div className="player-profile__team-card player-profile__team-card--featured">
-                      <TeamLogoImg
-                        src={aboutTeamLogoUrl}
-                        alt=""
-                        width={56}
-                        height={56}
-                        className="player-profile__team-logo player-profile__team-logo--lg"
-                      />
-                      <div className="player-profile__team-card-copy">
-                        <p className="player-profile__team-name">{currentTeam.team.name}</p>
-                        {currentTeam.player?.role ? (
-                          <p className="player-profile__team-role">Role · {currentTeam.player.role}</p>
-                        ) : null}
+            <div className="player-profile__content-grid profile-feed-layout profile-wireframe">
+              <div className="player-profile__content-col player-profile__content-col--main profile-feed profile-wireframe__main">
+                <article className={`profile-feed__post profile-feed__post--team ${profilePanelClass()}`.trim()}>
+                  <h2 className="player-profile__section-title">Team</h2>
+                  {currentTeam?.team ? (
+                    <>
+                      <div className="player-profile__team-card player-profile__team-card--featured profile-wireframe__about-team">
+                        <TeamLogoImg
+                          src={aboutTeamLogoUrl}
+                          alt=""
+                          width={48}
+                          height={48}
+                          className="player-profile__team-logo"
+                        />
+                        <div className="player-profile__team-card-copy">
+                          <p className="player-profile__team-name">{currentTeam.team.name}</p>
+                          {currentTeam.player?.role ? (
+                            <p className="player-profile__team-role">Role · {currentTeam.player.role}</p>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
-                    {rosterMembers.length ? (
-                      <>
-                        <p className="player-profile__subsection-label">Roster</p>
-                        <div className="player-profile__teammate-grid">
+                      {rosterMembers.length ? (
+                        <div className="player-profile__teammate-grid profile-wireframe__about-roster">
                           {rosterMembers.map((mate) => (
                             <TeammateChip
                               key={mate.id || mate.name}
                               mate={mate}
-                              isSelf={mate.id === currentTeam.player?.id}
+                              isSelf={mate.id === currentTeam?.player?.id}
                               linkState={location.state}
                             />
                           ))}
                         </div>
-                      </>
-                    ) : null}
-                    {currentTeam.formerTeammates?.length ? (
-                      <>
-                        <p className="player-profile__subsection-label">Former members</p>
-                        <ul className="player-profile__teammates player-profile__teammates--former">
-                          {currentTeam.formerTeammates.map((mate) => (
-                            <li key={`former-${mate.id}`} className="player-profile__teammate-former">
-                              {mate.slug ? (
-                                <Link to={`/player/${mate.slug}`} state={location.state} className="player-profile__teammate-link">
-                                  {mate.name}
-                                </Link>
-                              ) : (
-                                <span className="player-profile__teammate-link player-profile__teammate-link--static">
-                                  {mate.name}
-                                </span>
-                              )}
-                              <PlayerRoleIcons player={mate} className="player-profile__teammate-former-roles" size="sm" />
-                            </li>
-                          ))}
-                        </ul>
-                      </>
-                    ) : null}
-                  </section>
-                ) : null}
+                      ) : null}
+                    </>
+                  ) : (
+                    <p className="player-profile__bio player-profile__bio--muted">Not assigned to a team yet.</p>
+                  )}
+                </article>
 
-                {profile.matchHistory?.length ? (
-                  <section className={profilePanelClass()}>
-                    <h2 className="player-profile__section-title">Match history</h2>
-                    <div className="player-profile__match-seasons">
-                      {visibleMatchSeasonGroups.map((group) => (
-                        <section key={group.key} className="player-profile__match-season" aria-label={group.seasonLabel}>
-                          <header className="player-profile__match-season-head">
-                            <div className="player-profile__match-season-copy">
-                              {group.seasonSlug ? (
-                                <Link to={`/seasons/${group.seasonSlug}`} className="player-profile__match-season-title">
-                                  {group.seasonLabel}
-                                </Link>
-                              ) : (
-                                <p className="player-profile__match-season-title">{group.seasonLabel}</p>
-                              )}
-                              {group.seasonCardBadge ? (
-                                <span className="player-profile__match-season-badge">{group.seasonCardBadge}</span>
-                              ) : null}
-                            </div>
-                            <span className="player-profile__match-season-count">
-                              {group.matches.length} match{group.matches.length === 1 ? "" : "es"}
-                            </span>
-                          </header>
-                          <ul className="player-profile__match-list">
-                            {group.matches.map((row) => (
-                              <MatchHistoryRow
-                                key={`${row.matchId}-${row.teamName}-${row.appearanceLabel}`}
-                                row={row}
-                              />
-                            ))}
-                          </ul>
-                        </section>
-                      ))}
-                    </div>
-                    {hasMoreMatchHistory || canCollapseMatchHistory ? (
-                      <div className="player-profile__show-more-wrap">
-                        {hasMoreMatchHistory ? (
-                          <button type="button" className="player-profile__show-more-btn" onClick={showMoreMatchHistory}>
-                            Show more
-                          </button>
-                        ) : null}
-                        {canCollapseMatchHistory ? (
-                          <button type="button" className="player-profile__show-more-btn" onClick={showLessMatchHistory}>
-                            Show less
-                          </button>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </section>
+                <DotaLeagueStatsPanel dotaStats={dotaStats} panelClass={profilePanelClass()} />
+
+                {profileMatchHistory.length ? (
+                  <MatchActivityFeed
+                    allMatches={profileMatchHistory}
+                    dotaMatchById={dotaMatchById}
+                    panelClass={profilePanelClass()}
+                  />
                 ) : null}
               </div>
 
-              <div className="player-profile__content-col player-profile__content-col--side">
-                {profile.seasonHistory?.length ? (
-                  <section className={profilePanelClass()}>
-                    <h2 className="player-profile__section-title">Season history</h2>
-                    <ul className="player-profile__history-list">
-                      {profile.seasonHistory.map((entry) => (
-                        <li key={`${entry.seasonSlug}-${entry.seasonNumber}`} className="player-profile__history-item">
-                          <div className="player-profile__history-team">
-                            {entry.teamLogoUrl ? (
-                              <img src={entry.teamLogoUrl} alt="" className="player-profile__history-logo" />
-                            ) : (
-                              <TeamLogoImg
-                                src={teamLogoForName(entry.teamName)}
-                                alt=""
-                                width={36}
-                                height={36}
-                                className="player-profile__history-logo"
-                              />
-                            )}
-                            <div>
-                              <Link to={`/seasons/${entry.seasonSlug}`} className="player-profile__history-title">
-                                {entry.seasonName || `Season ${entry.seasonNumber}`}
-                              </Link>
-                              {entry.teamName ? <p className="player-profile__history-sub">{entry.teamName}</p> : null}
-                            </div>
-                          </div>
-                          <div className="player-profile__history-meta">
-                            {entry.highestStage ? <span>{entry.highestStage}</span> : null}
-                            {entry.placement ? <span>#{entry.placement}</span> : null}
-                            {entry.role ? <span>{entry.role}</span> : null}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
+              <div className="player-profile__content-col player-profile__content-col--side profile-feed__rail profile-wireframe__rail">
+                {!cardDeckLoading && cardDeck?.collection?.length > 0 ? (
+                  <CardDeck
+                    deck={cardDeck}
+                    className={profilePanelClass("player-profile__card-deck profile-wireframe__deck")}
+                    surfaceTier={cardTier}
+                    hideWhenEmpty
+                  />
                 ) : null}
 
                 {stintGroups.length ? (
@@ -687,26 +462,6 @@ export function PublicPlayerProfilePage() {
                         </div>
                       ))}
                     </div>
-                  </section>
-                ) : null}
-
-                {!cardDeckLoading && cardDeck?.collection?.length > 0 ? (
-                  <CardDeck
-                    deck={cardDeck}
-                    className={profilePanelClass("player-profile__card-deck")}
-                    surfaceTier={cardTier}
-                    hideWhenEmpty
-                  />
-                ) : null}
-
-                {profile.achievements?.length ? (
-                  <section className={profilePanelClass()}>
-                    <h2 className="player-profile__section-title">Achievements</h2>
-                    <ul className="player-profile__achievements">
-                      {profile.achievements.map((item, index) => (
-                        <li key={item.id || index}>{typeof item === "string" ? item : item.title || item.label}</li>
-                      ))}
-                    </ul>
                   </section>
                 ) : null}
               </div>

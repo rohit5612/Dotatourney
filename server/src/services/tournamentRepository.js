@@ -13,6 +13,7 @@ import { parseSeasonLabelFromName, seasonSlugFromLabel } from "../utils/tourname
 import { serializeTournamentDeckTheme } from "../utils/tournamentDeckTheme.js";
 import { buildTeamsWithActivePlayers, buildTeamsForPublicDisplay, reseedFutureMatchLineups } from "./rosterMembershipService.js";
 import { clearTransferPoolOnAssignment } from "./teamEliminationService.js";
+import { syncSeasonTeamHonorsOnComplete } from "./leagueTeamService.js";
 
 function parseMeta(raw) {
   if (raw == null) return {};
@@ -114,6 +115,7 @@ export function buildPublishedSnapshotFromRow(row) {
     season_card_bg: row.season_card_bg,
     season_card_badge: row.season_card_badge,
     season_card_deck_theme: serializeTournamentDeckTheme(row.season_card_deck_theme),
+    dota_league_id: row.dota_league_id ?? null,
   };
 }
 
@@ -154,10 +156,11 @@ export async function createTournament(payload) {
       description, prize_pool, prize_pool_breakdown, entry_fee, start_date, end_date, registration_deadline,
       discord_url, rulebook, live_youtube_url, announcements, banner_announcements, tournament_honors, visibility_mode, bracket_active, status,
       registration_code_prefix, registration_code_seq, payment_qr_image, payment_upi_id, registrations_open, registration_cap, engine_config,
-      season_card_bg, season_card_badge, season_card_deck_theme, engine_template_id, google_sheet_spreadsheet_id, google_sheet_tab_name
+      season_card_bg, season_card_badge, season_card_deck_theme, engine_template_id, google_sheet_spreadsheet_id, google_sheet_tab_name,
+      dota_league_id
     )
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
-      $25, $26, $27, $28, $29, $30, $31::jsonb, $32, $33, $34::jsonb, $35, $36, $37)
+      $25, $26, $27, $28, $29, $30, $31::jsonb, $32, $33, $34::jsonb, $35, $36, $37, $38)
     RETURNING *;
   `;
   const values = [
@@ -198,6 +201,11 @@ export async function createTournament(payload) {
     payload.engineTemplateId || payload.engine_template_id || null,
     payload.googleSheetSpreadsheetId || payload.google_sheet_spreadsheet_id || "",
     payload.googleSheetTabName || payload.google_sheet_tab_name || "",
+    payload.dotaLeagueId != null && payload.dotaLeagueId !== ""
+      ? Number(payload.dotaLeagueId)
+      : payload.dota_league_id != null && payload.dota_league_id !== ""
+        ? Number(payload.dota_league_id)
+        : null,
   ];
   const { rows } = await pool.query(query, values);
   return rows[0];
@@ -241,6 +249,7 @@ export async function updateTournament(tournamentId, payload) {
         engine_template_id = COALESCE($34, engine_template_id),
         google_sheet_spreadsheet_id = $35,
         google_sheet_tab_name = $36,
+        dota_league_id = CASE WHEN $38::boolean THEN $37::bigint ELSE dota_league_id END,
         updated_at = NOW()
     WHERE id = $1
     RETURNING *;
@@ -288,6 +297,18 @@ export async function updateTournament(tournamentId, payload) {
       : undefined,
     payload.googleSheetSpreadsheetId ?? payload.google_sheet_spreadsheet_id ?? "",
     payload.googleSheetTabName ?? payload.google_sheet_tab_name ?? "",
+    Object.prototype.hasOwnProperty.call(payload, "dotaLeagueId") ||
+      Object.prototype.hasOwnProperty.call(payload, "dota_league_id")
+      ? payload.dotaLeagueId != null && payload.dotaLeagueId !== ""
+        ? Number(payload.dotaLeagueId)
+        : payload.dota_league_id != null && payload.dota_league_id !== ""
+          ? Number(payload.dota_league_id)
+          : null
+      : null,
+    Boolean(
+      Object.prototype.hasOwnProperty.call(payload, "dotaLeagueId") ||
+        Object.prototype.hasOwnProperty.call(payload, "dota_league_id"),
+    ),
   ];
   const { rows } = await pool.query(query, values);
   if (rows[0]) {
@@ -320,7 +341,8 @@ export async function getTournament(tournamentId) {
   }
 
   const teamsResult = await pool.query(
-    `SELECT id, name, captain, abbr, seed, logo_url AS "logoUrl", accent_color AS "accentColor"
+    `SELECT id, name, captain, abbr, seed, logo_url AS "logoUrl", accent_color AS "accentColor",
+            league_team_id AS "leagueTeamId"
      FROM teams
      WHERE tournament_id = $1
      ORDER BY seed ASC NULLS LAST, created_at ASC`,
@@ -370,7 +392,8 @@ export async function replaceTeamsAndPlayers(tournamentId, teams, players, teamP
 
   for (const team of teams) {
     await pool.query(
-      "INSERT INTO teams (id, tournament_id, name, captain, abbr, seed, logo_url, accent_color) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+      `INSERT INTO teams (id, tournament_id, name, captain, abbr, seed, logo_url, accent_color, league_team_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         team.id,
         tournamentId,
@@ -380,6 +403,7 @@ export async function replaceTeamsAndPlayers(tournamentId, teams, players, teamP
         team.seed,
         team.logoUrl || team.logo_url || "",
         team.accentColor || team.accent_color || "",
+        team.leagueTeamId || team.league_team_id || null,
       ],
     );
   }
@@ -419,7 +443,8 @@ export async function replaceTeamsAndPlayers(tournamentId, teams, players, teamP
 
 async function loadWorkingRoster(client, tournamentId) {
   const teamsResult = await client.query(
-    `SELECT id, name, captain, abbr, seed, logo_url AS "logoUrl", accent_color AS "accentColor"
+    `SELECT id, name, captain, abbr, seed, logo_url AS "logoUrl", accent_color AS "accentColor",
+            league_team_id AS "leagueTeamId"
      FROM teams
      WHERE tournament_id = $1
      ORDER BY seed ASC NULLS LAST, created_at ASC`,
@@ -485,8 +510,10 @@ async function replaceRosterSnapshotContents(client, tournamentId, rosterId) {
     const snapshotTeamId = randomUUID();
     teamIdMap.set(team.id, snapshotTeamId);
     await client.query(
-      `INSERT INTO roster_snapshot_teams (id, roster_snapshot_id, tournament_id, source_team_id, name, captain, abbr, seed, logo_url, accent_color)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      `INSERT INTO roster_snapshot_teams (
+        id, roster_snapshot_id, tournament_id, source_team_id, name, captain, abbr, seed, logo_url, accent_color, league_team_id
+      )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
         snapshotTeamId,
         rosterId,
@@ -498,6 +525,7 @@ async function replaceRosterSnapshotContents(client, tournamentId, rosterId) {
         team.seed,
         team.logoUrl || team.logo_url || "",
         team.accentColor || team.accent_color || "",
+        team.leagueTeamId || team.league_team_id || null,
       ],
     );
   }
@@ -593,6 +621,7 @@ export async function getRosterSnapshot(tournamentId, rosterId) {
 
   const teamsResult = await pool.query(
     `SELECT id, source_team_id AS "sourceTeamId", name, captain, abbr, seed, logo_url AS "logoUrl", accent_color AS "accentColor",
+            league_team_id AS "leagueTeamId",
             group_key AS "groupKey",
             eliminated_at AS "eliminatedAt", eliminated_by AS "eliminatedBy", elimination_source AS "eliminationSource"
      FROM roster_snapshot_teams
@@ -1037,6 +1066,13 @@ export async function syncApprovedRosterFromTeamSave(tournamentId, rosterId, adm
         if (field === "captain") current.captain = nextValue;
         if (field === "logo_url") current.logoUrl = nextValue;
         if (field === "accent_color") current.accentColor = nextValue;
+      }
+      const leagueTeamId = savedTeam.leagueTeamId || savedTeam.league_team_id;
+      if (leagueTeamId) {
+        await client.query(`UPDATE roster_snapshot_teams SET league_team_id = $1 WHERE id = $2`, [
+          leagueTeamId,
+          snapshotTeamId,
+        ]);
       }
     }
     const playersResult = await client.query(
@@ -1779,6 +1815,7 @@ export async function completeTournament(tournamentId, adminUserId, { force = fa
       );
     }
     await client.query("COMMIT");
+    await syncSeasonTeamHonorsOnComplete(tournamentId, honors);
     await snapshotSeasonCardsForTournament(tournamentId);
     return (await getTournament(tournamentId))?.tournament;
   } catch (e) {

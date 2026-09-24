@@ -7,6 +7,7 @@ import { isInlineTeamLogoUrl, isStaticTeamLogoUrl } from "../utils/teamLogoUrl.j
 import { AdminGlassPanel } from "../admin/components/AdminGlassPanel.jsx";
 import { TeamHistoryPanel } from "../admin/teams/TeamHistoryPanel.jsx";
 import { TeamsPanelModal } from "../admin/teams/TeamsPanelModal.jsx";
+import { LeagueTeamAddModal } from "../admin/teams/LeagueTeamAddModal.jsx";
 
 export function TeamsPage({
   tournamentId = "",
@@ -15,6 +16,10 @@ export function TeamsPage({
   newCaptain,
   setNewCaptain,
   addCaptain,
+  leagueTeams = [],
+  addTeamFromLeague,
+  createLeagueTeamAndAdd,
+  leagueTeamBusy = false,
   assignPlayer,
   autoAssign,
   saveTeams,
@@ -47,6 +52,7 @@ export function TeamsPage({
   const [actionMenuTeamId, setActionMenuTeamId] = useState("");
   const [playerModalTeam, setPlayerModalTeam] = useState(null);
   const [logoPickerTeam, setLogoPickerTeam] = useState(null);
+  const [leagueAddOpen, setLeagueAddOpen] = useState(false);
   const [playerSearch, setPlayerSearch] = useState("");
   const [rosterName, setRosterName] = useState("");
   const editingApprovedRoster = Boolean(approvedRoster?.id && activeRosterId === approvedRoster.id);
@@ -322,9 +328,17 @@ export function TeamsPage({
             </button>
             {isTeamPaneActive ? (
               <>
-                <input placeholder="Team name" className="rounded-md border border-input bg-background p-2" value={newCaptain.team} onChange={(event) => setNewCaptain((prev) => ({ ...prev, team: event.target.value }))} />
-                <button type="button" className="btn btn-primary" onClick={addCaptain}>
+                <button type="button" className="btn btn-primary" onClick={() => setLeagueAddOpen(true)}>
                   Add team
+                </button>
+                <input
+                  placeholder="Quick name (legacy)"
+                  className="rounded-md border border-input bg-background p-2"
+                  value={newCaptain.team}
+                  onChange={(event) => setNewCaptain((prev) => ({ ...prev, team: event.target.value }))}
+                />
+                <button type="button" className="btn btn-outline" onClick={addCaptain} title="Add without linking a league franchise">
+                  Quick add
                 </button>
                 <button type="button" className="btn btn-outline" onClick={autoAssign}>
                   Auto assign
@@ -359,6 +373,9 @@ export function TeamsPage({
 
             return (
               <div key={team.id} className="rounded-2xl border border-border bg-background p-5 shadow-sm">
+                {team.leagueTeamId ? (
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-primary/80">League franchise linked</p>
+                ) : null}
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
                   <div className="flex shrink-0 flex-col items-center gap-2">
                     <div className="flex h-28 w-28 items-center justify-center overflow-hidden rounded-xl border border-border bg-card shadow-inner">
@@ -762,6 +779,15 @@ export function TeamsPage({
       <div className="rounded-lg border border-border/50 bg-background/30 p-3 text-sm text-muted-foreground">
         Pro tip: finalize at least one player per role before lock-in. This reduces imbalance and improves draft integrity in elimination formats.
       </div>
+
+      <LeagueTeamAddModal
+        open={leagueAddOpen}
+        onClose={() => setLeagueAddOpen(false)}
+        leagueTeams={leagueTeams}
+        busy={leagueTeamBusy}
+        onSelectExisting={addTeamFromLeague}
+        onCreateNew={createLeagueTeamAndAdd}
+      />
       </AdminGlassPanel>
     </div>
   );

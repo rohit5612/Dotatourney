@@ -9,7 +9,11 @@
     "start": "node src/index.js",
     "migrate": "node src/db/migrate.js",
     "test": "node --test src/services/**/*.test.js",
-    "export-overlay-cards": "node scripts/export-overlay-player-cards.mjs"
+    "export-overlay-cards": "node scripts/export-overlay-player-cards.mjs",
+    "sync-opendota-player": "node scripts/sync-opendota-player.js",
+    "sync-opendota-tournament": "node scripts/sync-opendota-tournament.js",
+    "sync-opendota-community": "node scripts/sync-opendota-community.js",
+    "import-opendota-csv": "node scripts/import-opendota-csv.js"
   },
   "dependencies": {
     "@upstash/ratelimit": "^2.0.8",

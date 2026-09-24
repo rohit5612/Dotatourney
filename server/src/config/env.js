@@ -74,6 +74,15 @@ export const env = {
   /** Numeric Discord server ID for auto-join on link */
   discordGuildId: process.env.DISCORD_GUILD_ID?.trim() || "",
   steamApiKey: process.env.STEAM_API_KEY?.trim() || "",
+  opendotaApiKey: process.env.OPENDOTA_API_KEY?.trim() || "",
+  /** Default TTL for OpenDota player profile snapshots (ms). */
+  opendotaPlayerSnapshotTtlMs: toNumber(process.env.OPENDOTA_PLAYER_SNAPSHOT_TTL_MS, 72 * 60 * 60 * 1000),
+  /** League roster match index refresh (ms). */
+  opendotaLeagueIndexTtlMs: toNumber(process.env.OPENDOTA_LEAGUE_INDEX_TTL_MS, 12 * 60 * 60 * 1000),
+  /** Min delay between OpenDota HTTP calls (ms). */
+  opendotaMinRequestIntervalMs: toNumber(process.env.OPENDOTA_MIN_REQUEST_INTERVAL_MS, 1_100),
+  /** Cap live /matches/{id} fetches per player league sync (cache fills the rest). */
+  opendotaMaxMatchDetailFetchesPerSync: toNumber(process.env.OPENDOTA_MAX_MATCH_DETAIL_FETCHES, 20),
   nodeEnv: process.env.NODE_ENV || "development",
   cashfreeClientId: process.env.CASHFREE_CLIENT_ID?.trim() || "",
   cashfreeClientSecret: process.env.CASHFREE_CLIENT_SECRET?.trim() || "",
