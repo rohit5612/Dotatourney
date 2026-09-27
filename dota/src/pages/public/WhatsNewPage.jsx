@@ -3,8 +3,10 @@ import { useSearchParams } from "react-router-dom";
 import { useSiteContent } from "../../hooks/useSiteContent.js";
 import {
   compareSemverDesc,
+  formatWebsiteVersion,
   isMajorReleaseVersion,
   majorReleaseEntries,
+  normalizeWebsiteVersion,
 } from "../../utils/websiteVersionSchema.js";
 import { WhatsNewChangelogModal } from "./WhatsNewChangelogModal.jsx";
 import { WhatsNewReleaseBlock } from "./WhatsNewReleaseBlock.jsx";
@@ -61,7 +63,8 @@ function resolveMajorFilter(paramVersion, entries) {
 }
 
 export function WhatsNewPage() {
-  const { versionHistory, versionChangeLog } = useSiteContent();
+  const { versionHistory, versionChangeLog, websiteVersion } = useSiteContent();
+  const liveVersionLabel = formatWebsiteVersion(normalizeWebsiteVersion(websiteVersion));
   const [searchParams, setSearchParams] = useSearchParams();
 
   const majorEntries = useMemo(() => {
@@ -206,8 +209,8 @@ export function WhatsNewPage() {
             <div className="whats-new-page__toolbar-actions">
               <p className="whats-new-page__filter-hint">
                 {filter === FILTER_ALL
-                  ? `Showing ${visibleEntries.length} of ${majorEntries.length} major releases`
-                  : `Showing ${majorFilterLabel(majorEntries.find((e) => e.version === filter) || { version: filter })}`}
+                  ? `Site version v${liveVersionLabel} · ${visibleEntries.length} of ${majorEntries.length} major releases`
+                  : `Site version v${liveVersionLabel}`}
               </p>
               <button
                 type="button"
