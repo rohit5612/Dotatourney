@@ -4,6 +4,13 @@ import { mergePublicPlayerDotaStats } from "../utils/mergePublicPlayerDotaStats.
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 const TOKEN_KEY = "bpcl-admin-token";
 
+/** Bypass Netlify /api proxy (≈26s limit) for long OpenDota jobs when build has VITE_API_PUBLIC_URL. */
+function directApiBase() {
+  const origin = import.meta.env.VITE_API_PUBLIC_URL?.trim();
+  if (origin) return `${origin.replace(/\/$/, "")}/api`;
+  return API_BASE;
+}
+
 let unauthorizedHandler = null;
 
 export function setUnauthorizedHandler(handler) {
@@ -28,14 +35,16 @@ export function setAuthToken(token) {
 }
 
 async function request(path, options = {}) {
+  const { apiBase, ...fetchOptions } = options;
+  const base = apiBase || API_BASE;
   const token = getAuthToken();
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(`${base}${path}`, {
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers || {}),
+      ...(fetchOptions.headers || {}),
     },
-    ...options,
+    ...fetchOptions,
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
@@ -409,6 +418,7 @@ export const api = {
     request(`/admin/player-accounts/${accountId}/dota-stats/sync`, {
       method: "POST",
       body: JSON.stringify(payload),
+      apiBase: directApiBase(),
     }),
   listPlayerAccounts: (params = {}) => {
     const q = new URLSearchParams();
