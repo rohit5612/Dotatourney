@@ -746,10 +746,27 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
     if (!selectedId) return;
     setSyncingDotaStats(true);
     try {
-      const { result } = await api.syncPlayerDotaStats(selectedId);
-      setMessage?.(summarizeDotaStatsSync(result));
-      const data = await api.getPlayerAccount(selectedId);
-      setDetail(data);
+      const response = await api.syncPlayerDotaStats(selectedId);
+      if (response.accepted) {
+        setMessage?.(
+          response.message ||
+            "Dota stats sync started in the background. Refresh this player in about a minute.",
+        );
+        window.setTimeout(async () => {
+          try {
+            const data = await api.getPlayerAccount(selectedId);
+            setDetail(data);
+          } catch {
+            // ignore poll errors
+          }
+        }, 60_000);
+        return;
+      }
+      if (response.result) {
+        setMessage?.(summarizeDotaStatsSync(response.result));
+        const data = await api.getPlayerAccount(selectedId);
+        setDetail(data);
+      }
     } catch (error) {
       setMessage?.(error.message || "Could not sync Dota stats.");
     } finally {

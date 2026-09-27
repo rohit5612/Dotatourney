@@ -15,8 +15,13 @@ import { writeAuditLog } from "../../services/auditLogService.js";
 import { publicPlayerAccount } from "../../services/playerAccountRepository.js";
 import { runPlayerDotaStatsSync } from "../../services/opendotaCommunitySync.js";
 import { invalidatePublicCache } from "../../services/publicCache.js";
+import { steam64ToSteam32 } from "../../utils/steamId.js";
+import { logError } from "../../utils/serverLogger.js";
 
 const router = express.Router();
+
+/** One OpenDota sync per account at a time (sync can run many minutes). */
+const dotaStatsSyncInflight = new Set();
 
 router.get("/portrait-gifs", requireAdmin, async (_req, res, next) => {
   try {
@@ -173,28 +178,55 @@ router.post("/:id/card", requireAdmin, requirePermission("playerCrm.accounts.upd
 router.post("/:id/dota-stats/sync", requireAdmin, requirePermission("playerCrm.accounts.update"), async (req, res, next) => {
   try {
     const body = z.object({ force: z.boolean().optional().default(false) }).parse(req.body ?? {});
-    const result = await runPlayerDotaStatsSync(req.params.id, { force: body.force });
-    if (!result.ok) {
-      if (result.reason === "not_found") return res.status(404).json({ message: "Player account not found" });
-      if (result.reason === "steam_not_linked") {
-        return res.status(400).json({ message: "Link Steam on this account before syncing Dota stats." });
-      }
-      return res.status(400).json({ message: "Could not sync Dota stats." });
+    const accountId = req.params.id;
+
+    const account = await findAccountById(accountId);
+    if (!account) return res.status(404).json({ message: "Player account not found" });
+    if (!steam64ToSteam32(account.steam_id)) {
+      return res.status(400).json({ message: "Link Steam on this account before syncing Dota stats." });
     }
-    invalidatePublicCache();
-    await writeAuditLog({
-      adminUserId: req.adminUser.id,
-      action: "player_account.dota_stats_sync",
-      entityType: "player_account",
-      entityId: req.params.id,
-      payload: {
-        force: body.force,
-        profilePlan: result.profile?.plan,
-        profileSynced: result.profile?.synced,
-        leagueCount: result.leagues?.length ?? 0,
-      },
+    if (dotaStatsSyncInflight.has(accountId)) {
+      return res.status(409).json({ message: "A Dota stats sync is already running for this account." });
+    }
+
+    dotaStatsSyncInflight.add(accountId);
+    const adminUserId = req.adminUser.id;
+
+    res.status(202).json({
+      accepted: true,
+      message:
+        "Dota stats sync started in the background. Refresh this player in about a minute to see updated snapshots.",
     });
-    return res.json({ result });
+
+    void (async () => {
+      try {
+        const result = await runPlayerDotaStatsSync(accountId, { force: body.force });
+        if (!result.ok) {
+          logError("admin.dota_stats_sync", "background sync failed", null, {
+            accountId,
+            reason: result.reason,
+          });
+          return;
+        }
+        invalidatePublicCache();
+        await writeAuditLog({
+          adminUserId,
+          action: "player_account.dota_stats_sync",
+          entityType: "player_account",
+          entityId: accountId,
+          payload: {
+            force: body.force,
+            profilePlan: result.profile?.plan,
+            profileSynced: result.profile?.synced,
+            leagueCount: result.leagues?.length ?? 0,
+          },
+        });
+      } catch (error) {
+        logError("admin.dota_stats_sync", "background sync error", error, { accountId });
+      } finally {
+        dotaStatsSyncInflight.delete(accountId);
+      }
+    })();
   } catch (error) {
     return next(error);
   }
