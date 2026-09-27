@@ -55,13 +55,19 @@ function dotaStatsMeta(dotaStats) {
   return { global, leagueEntries, updated, hasGlobal, hasLeague: leagueEntries.length > 0 };
 }
 
-function DotaGlobalStatsBody({ global, updated, hasGlobal, layout }) {
+function resolveDotabuffProfileUrl(global, steam32) {
+  return global?.dotabuffProfileUrl || dotabuffPlayerUrl(steam32) || null;
+}
+
+function DotaGlobalStatsBody({ global, updated, hasGlobal, layout, steam32 }) {
   const titleClass =
     layout === "hero" ? "player-profile__hero-dota-title" : "profile-feed__post-title";
   const headClass =
     layout === "hero"
       ? "player-profile__hero-dota-head"
       : "profile-feed__post-head profile-feed__post-head--compact";
+  const dotabuffUrl = resolveDotabuffProfileUrl(global, steam32);
+  const extLinkClass = layout === "hero" ? "hero-digest__ext" : "profile-feed__ext-link";
 
   return (
     <>
@@ -109,6 +115,11 @@ function DotaGlobalStatsBody({ global, updated, hasGlobal, layout }) {
           ) : null}
         </>
       )}
+      {dotabuffUrl ? (
+        <a href={dotabuffUrl} className={extLinkClass} target="_blank" rel="noreferrer">
+          Dotabuff profile
+        </a>
+      ) : null}
     </>
   );
 }
@@ -116,17 +127,25 @@ function DotaGlobalStatsBody({ global, updated, hasGlobal, layout }) {
 export function DotaGlobalStatsHeroStrip({ dotaStats }) {
   if (!dotaStats?.available) return null;
   const { global, updated, hasGlobal } = dotaStatsMeta(dotaStats);
+  const dotabuffUrl = resolveDotabuffProfileUrl(global, dotaStats.steam32);
 
   if (!hasGlobal) {
     return (
-      <p className="hero-digest__dota-hint profile-feed__muted">Dota stats appear after OpenDota sync.</p>
+      <div className="hero-digest__dota hero-digest__dota--pending" aria-label="Dota stats">
+        <p className="hero-digest__dota-hint profile-feed__muted">Dota stats appear after OpenDota sync.</p>
+        {dotabuffUrl ? (
+          <div className="hero-digest__dota-foot">
+            <a href={dotabuffUrl} className="hero-digest__ext" target="_blank" rel="noreferrer">
+              Dotabuff profile
+            </a>
+          </div>
+        ) : null}
+      </div>
     );
   }
 
   const wins = global.wins ?? 0;
   const losses = global.losses ?? 0;
-  const dotabuffUrl =
-    global.dotabuffProfileUrl || dotabuffPlayerUrl(dotaStats.steam32) || null;
   return (
     <div className="hero-digest__dota" aria-label="Dota stats">
       <div className="hero-digest__dota-body">
@@ -174,7 +193,13 @@ export function DotaGlobalStatsPanel({ dotaStats, panelClass = "", layout = "pan
   if (layout === "hero") {
     return (
       <section className="player-profile__hero-dota" aria-label="Dota stats">
-        <DotaGlobalStatsBody global={global} updated={updated} hasGlobal={hasGlobal} layout="hero" />
+        <DotaGlobalStatsBody
+          global={global}
+          updated={updated}
+          hasGlobal={hasGlobal}
+          layout="hero"
+          steam32={dotaStats.steam32}
+        />
       </section>
     );
   }
@@ -183,7 +208,13 @@ export function DotaGlobalStatsPanel({ dotaStats, panelClass = "", layout = "pan
     <article
       className={`profile-feed__post profile-feed__post--stats profile-feed__post--stats-global profile-feed__post--wire-row ${panelClass}`.trim()}
     >
-      <DotaGlobalStatsBody global={global} updated={updated} hasGlobal={hasGlobal} layout="panel" />
+      <DotaGlobalStatsBody
+        global={global}
+        updated={updated}
+        hasGlobal={hasGlobal}
+        layout="panel"
+        steam32={dotaStats.steam32}
+      />
     </article>
   );
 }
@@ -204,7 +235,7 @@ export function DotaLeagueStatsPanel({ dotaStats, panelClass = "" }) {
       </header>
 
       {!hasLeague ? (
-        <p className="profile-feed__muted">League stats appear once circuit games are synced.</p>
+        <p className="profile-feed__muted">League stats will appear here once synced.</p>
       ) : (
         <div className="profile-feed__league-stack">
           {leagueEntries.map((primaryLeague) => {
