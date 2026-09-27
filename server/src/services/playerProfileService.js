@@ -169,6 +169,23 @@ function cardTierRankSql(column = "card_tier") {
   END`;
 }
 
+/** Within the default tier: current-season registrants first, then everyone else. */
+function communityDefaultTierRegistrationRankSql(effectiveTierExpr, registrationTierColumn = "best_card.card_tier") {
+  return `CASE
+    WHEN ${effectiveTierExpr} = 'default' THEN
+      CASE WHEN ${registrationTierColumn} IS NOT NULL THEN 0 ELSE 1 END
+    ELSE 0
+  END`;
+}
+
+function communityDirectoryEffectiveTierExpr() {
+  return `COALESCE(
+    NULLIF(TRIM(pa.card_tier_override), ''),
+    NULLIF(TRIM(best_card.card_tier), ''),
+    'default'
+  )`;
+}
+
 function activeSeasonRegistrationLateral(activeTournamentId, paramIndex) {
   if (!activeTournamentId) {
     return {
@@ -198,7 +215,7 @@ export async function getCommunityDirectory({ search = "", tier = "", limit = 48
   if (activeTournamentId) params.push(activeTournamentId);
   const lateral = activeSeasonRegistrationLateral(activeTournamentId, 1);
   const lateralJoin = lateral.sql;
-  const effectiveTierExpr = `COALESCE(NULLIF(TRIM(best_card.card_tier), ''), 'default')`;
+  const effectiveTierExpr = communityDirectoryEffectiveTierExpr();
 
   let where = `WHERE pa.email_verified_at IS NOT NULL
     AND pa.steam_id IS NOT NULL
@@ -226,12 +243,13 @@ export async function getCommunityDirectory({ search = "", tier = "", limit = 48
   params.push(safeOffset);
 
   const tierRank = cardTierRankSql(effectiveTierExpr);
+  const defaultTierRegistrationRank = communityDefaultTierRegistrationRankSql(effectiveTierExpr);
   const { rows } = await pool.query(
     `SELECT pa.*, best_card.card_tier AS directory_card_tier
      FROM player_accounts pa
      ${lateralJoin}
      ${where}
-     ORDER BY ${tierRank}, pa.display_name ASC NULLS LAST, pa.created_at ASC
+     ORDER BY ${tierRank}, ${defaultTierRegistrationRank}, pa.display_name ASC NULLS LAST, pa.created_at ASC
      LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params,
   );
@@ -240,6 +258,8 @@ export async function getCommunityDirectory({ search = "", tier = "", limit = 48
   const players = [];
   for (const account of rows) {
     const registrationTier = account.directory_card_tier || "default";
+    const sortTier =
+      (account.card_tier_override && String(account.card_tier_override).trim()) || registrationTier || "default";
     const card = await buildPublicDisplayCardManifest(account, {
       registration: {
         card_tier: registrationTier,
@@ -255,7 +275,7 @@ export async function getCommunityDirectory({ search = "", tier = "", limit = 48
       displayName: account.display_name || account.slug,
       steam32Id: steam64ToSteam32(account.steam_id),
       avatarUrl: account.avatar_url || account.steam_avatar_url || "",
-      cardTier: registrationTier,
+      cardTier: sortTier,
       card,
       badges: recognitions.map(({ label, kind }) => ({ label, kind })),
     });
@@ -272,7 +292,7 @@ export async function listCommunityPlayersForExport({ steam32Id = null } = {}) {
   if (activeTournamentId) params.push(activeTournamentId);
   const lateral = activeSeasonRegistrationLateral(activeTournamentId, 1);
   const lateralJoin = lateral.sql;
-  const effectiveTierExpr = `COALESCE(NULLIF(TRIM(best_card.card_tier), ''), 'default')`;
+  const effectiveTierExpr = communityDirectoryEffectiveTierExpr();
 
   let where = `WHERE pa.email_verified_at IS NOT NULL
     AND pa.steam_id IS NOT NULL
@@ -285,12 +305,13 @@ export async function listCommunityPlayersForExport({ steam32Id = null } = {}) {
   }
 
   const tierRank = cardTierRankSql(effectiveTierExpr);
+  const defaultTierRegistrationRank = communityDefaultTierRegistrationRankSql(effectiveTierExpr);
   const { rows } = await pool.query(
     `SELECT pa.*, best_card.card_tier AS directory_card_tier
      FROM player_accounts pa
      ${lateralJoin}
      ${where}
-     ORDER BY ${tierRank}, pa.display_name ASC NULLS LAST, pa.created_at ASC`,
+     ORDER BY ${tierRank}, ${defaultTierRegistrationRank}, pa.display_name ASC NULLS LAST, pa.created_at ASC`,
     params,
   );
 

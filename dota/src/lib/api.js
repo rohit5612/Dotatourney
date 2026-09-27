@@ -88,6 +88,11 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(payload),
     }),
+  updateAdminVersionChangeLog: (payload) =>
+    request("/admin/site-content/version-changelog", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
   updateAdminSeasonCardBg: (id, cardBg) =>
     request(`/admin/seasons/${encodeURIComponent(id)}`, {
       method: "PATCH",
@@ -237,6 +242,11 @@ export const api = {
     }),
   getSponsorCheckoutStatus: (contributionId) =>
     request(`/public/sponsors/checkout/${encodeURIComponent(contributionId)}/status`),
+  submitSponsorCheckoutProof: (contributionId, payload) =>
+    request(`/public/sponsors/checkout/${encodeURIComponent(contributionId)}/submit-proof`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   createTournament: (payload) =>
     request("/tournaments", {
       method: "POST",
@@ -392,6 +402,11 @@ export const api = {
     }),
   grantPlayerCoins: (accountId, payload) =>
     request(`/admin/player-accounts/${accountId}/coins`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  syncPlayerDotaStats: (accountId, payload = {}) =>
+    request(`/admin/player-accounts/${accountId}/dota-stats/sync`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),

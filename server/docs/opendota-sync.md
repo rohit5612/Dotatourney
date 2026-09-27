@@ -5,7 +5,7 @@ Player profiles read **cached** OpenDota data from Postgres. Public page views d
 ## Setup
 
 1. Set `dota_league_id` on the tournament in **Admin → Setup** (Valve in-house league ID).
-2. Optional: `OPENDOTA_API_KEY` in server `.env` for higher rate limits.
+2. Optional: `OPENDOTA_API_KEY` in server `.env` for higher rate limits. Without it, the server defaults to **~1 request every 2 seconds** and backs off on HTTP 429.
 
 ## Scripts
 

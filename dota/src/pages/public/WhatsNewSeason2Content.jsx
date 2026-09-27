@@ -16,45 +16,46 @@ import {
 import { SITE_BRAND_SHORT } from "../../constants/siteMeta.js";
 import { usePublicTournament } from "../../context/PublicTournamentContext.jsx";
 import { bundleTotalForTier } from "../../utils/commerceBundle.js";
+import { WhatsNewSectionHead, WhatsNewSectionLinks } from "./whatsNewShared.jsx";
 
 const WHY_PILLARS = [
   {
     icon: HiOutlineUserGroup,
-    title: "By the community",
-    copy: "BPCL is player-run at heart. Card bundles let the scene fund itself instead of relying on one-off sponsors or ad-hoc donations.",
+    title: "Community-funded",
+    copy: "Card bundles help the scene fund seasons without one-off sponsors.",
   },
   {
     icon: HiOutlineTrophy,
-    title: "Grow the prize pool",
-    copy: "Your support directly helps us improve the tournament, grow the prize pool, and make BPCL bigger every season.",
+    title: "Prize pool",
+    copy: "Checkout support grows the pool and improves each campaign.",
   },
   {
     icon: HiOutlineIdentification,
-    title: "Build your legacy",
-    copy: "Choose your card, support the scene, and carry a season-long identity on your profile, the community directory, and team pages.",
+    title: "Your identity",
+    copy: "Tier, art, and profile presence across directory and team pages.",
   },
 ];
 
 const REGISTRATION_STEPS = [
   {
     icon: HiOutlineUserPlus,
-    title: "Create your account",
-    copy: "Sign up, verify your email, and link Google, Discord, and Steam from your dashboard.",
+    title: "Create account",
+    copy: "Verify email; link Google, Discord, and Steam.",
   },
   {
     icon: HiOutlineCreditCard,
-    title: "Register for the season",
-    copy: "Complete player details, pick a card bundle, apply BPC coins, and pay online in one checkout flow.",
+    title: "Register & checkout",
+    copy: "Player details, card bundle, BPC coins, UPI from the dashboard.",
   },
   {
     icon: HiOutlineUserGroup,
     title: "Substitute pool",
-    copy: "When the registration cap is reached, main registration closes and the substitute pool opens — join free with MMR, roles, and availability.",
+    copy: "After the cap, mains close — join the pool with MMR and roles.",
   },
   {
     icon: HiOutlineArrowsRightLeft,
-    title: "Match-day substitutes",
-    copy: "Registered players can request a sub before a match (rescind up to 4 hours before start). Admins assign from the pool, matching tier when possible.",
+    title: "Match-day subs",
+    copy: "Request a sub before matches; admins assign from the pool.",
   },
 ];
 
@@ -68,18 +69,10 @@ function ComparisonTick({ included }) {
       </span>
     );
   }
-  return <span className="whats-new-page__dash" aria-hidden="true">—</span>;
-}
-
-function SectionHead({ kicker, title, lead, titleId }) {
   return (
-    <header className="whats-new-page__section-head">
-      {kicker ? <p className="whats-new-page__section-kicker">{kicker}</p> : null}
-      <h2 id={titleId} className="whats-new-page__section-title">
-        {title}
-      </h2>
-      {lead ? <p className="whats-new-page__section-lead">{lead}</p> : null}
-    </header>
+    <span className="whats-new-page__dash" aria-hidden="true">
+      —
+    </span>
   );
 }
 
@@ -90,16 +83,16 @@ export function WhatsNewSeason2Content() {
   const tiers = commerce?.cardTiers || {};
 
   return (
-    <div className="whats-new-page__version-inner">
+    <div className="whats-new-page__version-inner whats-new-page__version-inner--visual">
       <section
-        className="community-glass community-glass--liquid whats-new-page__panel"
+        className="community-glass community-glass--liquid whats-new-page__panel whats-new-page__panel--visual"
         aria-labelledby="whats-new-compare-title"
       >
-        <SectionHead
+        <WhatsNewSectionHead
           kicker="Bundles"
           titleId="whats-new-compare-title"
-          title="Compare card bundles"
-          lead="Pick a bundle at checkout. Prices below reflect the active season; your dashboard shows the exact total before you pay."
+          title="Compare card tiers"
+          lead="Prices follow the active season — your dashboard shows the exact total before payment."
         />
 
         <div className="whats-new-page__table-wrap">
@@ -150,45 +143,26 @@ export function WhatsNewSeason2Content() {
           </table>
         </div>
 
-        <div className="whats-new-page__callouts">
-          <p className="whats-new-page__callout">
-            <span className="whats-new-page__callout-mark">*</span>
-            Discord privileges and custom assets are reviewed by admins before going live on your profile.
-          </p>
-          <p className="whats-new-page__callout whats-new-page__callout--coins">
-            <span className="whats-new-page__callout-mark">**</span>
-            BPC coin grants: Champion — 200 coins (Holo) / 100 coins (Gold). Runner-up — 100 coins (Holo) / 50 coins (Gold).
-          </p>
-        </div>
+        <ul className="whats-new-page__key-points whats-new-page__key-points--compact">
+          <li>Discord perks and custom assets are admin-reviewed before going live.</li>
+          <li>BPC coin grants: Champion 200 (Holo) / 100 (Gold); Runner-up 100 / 50.</li>
+        </ul>
       </section>
 
       <section
-        className="community-glass community-glass--liquid whats-new-page__panel"
+        className="community-glass community-glass--liquid whats-new-page__panel whats-new-page__panel--visual"
         aria-labelledby="whats-new-why-title"
       >
-        <SectionHead
-          kicker="Community first"
+        <WhatsNewSectionHead
+          kicker="Why cards"
           titleId="whats-new-why-title"
-          title="Why we built this"
-          lead="Premium cards are cosmetic — but the impact on the league is real."
+          title={`Support ${SITE_BRAND_SHORT}`}
+          lead="Premium cards are cosmetic — checkout helps fund the league you play in."
         />
 
-        <div className="whats-new-page__manifesto">
-          <p className="whats-new-page__manifesto-hook">
-            🔥 This system is built for the community — by the community.
-          </p>
-          <p className="whats-new-page__manifesto-body">
-            Your support directly helps us improve the tournament, grow the prize pool, and make {SITE_BRAND_SHORT}{" "}
-            bigger every season.
-          </p>
-          <p className="whats-new-page__manifesto-close">
-            Choose your card, support the scene, and build your {SITE_BRAND_SHORT} legacy. 👑
-          </p>
-        </div>
-
-        <div className="whats-new-page__pillar-grid">
+        <div className="whats-new-page__pillar-grid whats-new-page__pillar-grid--tight">
           {WHY_PILLARS.map(({ icon: Icon, title, copy }) => (
-            <article key={title} className="whats-new-page__pillar">
+            <article key={title} className="whats-new-page__pillar whats-new-page__pillar--compact">
               <span className="whats-new-page__pillar-icon" aria-hidden="true">
                 <Icon />
               </span>
@@ -200,31 +174,24 @@ export function WhatsNewSeason2Content() {
       </section>
 
       <section
-        className="community-glass community-glass--liquid whats-new-page__panel whats-new-page__panel--accounts"
+        className="community-glass community-glass--liquid whats-new-page__panel whats-new-page__panel--visual"
         aria-labelledby="whats-new-accounts-title"
       >
-        <SectionHead
+        <WhatsNewSectionHead
           kicker="Getting started"
           titleId="whats-new-accounts-title"
-          title="Player accounts & registration"
-          lead="One verified account powers registration, checkout, substitutes, and your public player card."
+          title="Accounts & registration"
+          lead="One verified account for checkout, substitutes, and your public card."
         />
 
-        <div className="whats-new-page__intro-band">
-          <p>
-            Link Google, Discord, and Steam, confirm your email, and manage everything from the dashboard. No separate
-            OTP forms or manual payment screenshots — tournament registration runs entirely through your account.
-          </p>
-        </div>
-
-        <ol className="whats-new-page__timeline">
+        <ol className="whats-new-page__timeline whats-new-page__timeline--compact">
           {REGISTRATION_STEPS.map(({ icon: Icon, title, copy }, index) => (
             <li key={title} className="whats-new-page__timeline-step">
               <div className="whats-new-page__timeline-rail" aria-hidden="true">
                 <span className="whats-new-page__timeline-num">{index + 1}</span>
                 {index < REGISTRATION_STEPS.length - 1 ? <span className="whats-new-page__timeline-line" /> : null}
               </div>
-              <article className="whats-new-page__timeline-card">
+              <article className="whats-new-page__timeline-card whats-new-page__timeline-card--compact">
                 <span className="whats-new-page__timeline-icon" aria-hidden="true">
                   <Icon />
                 </span>
@@ -237,23 +204,13 @@ export function WhatsNewSeason2Content() {
           ))}
         </ol>
 
-        <div className="whats-new-page__cta-band">
-          <div className="whats-new-page__cta-copy">
-            <p className="whats-new-page__cta-eyebrow">Ready to join?</p>
-            <p className="whats-new-page__cta-lead">Create your account and lock in your season card at checkout.</p>
-          </div>
-          <div className="whats-new-page__cta-row">
-            <Link to="/register" className="whats-new-page__cta whats-new-page__cta--primary">
-              Register for the season
-            </Link>
-            <Link to="/community" className="whats-new-page__cta">
-              Browse community
-            </Link>
-            <Link to="/rules" className="whats-new-page__cta">
-              Read rules
-            </Link>
-          </div>
-        </div>
+        <WhatsNewSectionLinks
+          links={[
+            { to: "/register", label: "Register", primary: true },
+            { to: "/community", label: "Community" },
+            { to: "/rules", label: "Rules" },
+          ]}
+        />
       </section>
     </div>
   );

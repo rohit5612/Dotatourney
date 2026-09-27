@@ -3,20 +3,30 @@ import { env } from "../config/env.js";
 const BASE = "https://api.opendota.com/api";
 
 let lastRequestAt = 0;
+/** Extra delay after 429 (ms), decays on successful responses. */
+let rateLimitPenaltyMs = 0;
 
 async function throttle() {
-  const wait = env.opendotaMinRequestIntervalMs - (Date.now() - lastRequestAt);
+  const interval = env.opendotaMinRequestIntervalMs + rateLimitPenaltyMs;
+  const wait = interval - (Date.now() - lastRequestAt);
   if (wait > 0) {
     await new Promise((r) => setTimeout(r, wait));
   }
   lastRequestAt = Date.now();
 }
 
+function backoffMsFor429(retryCount, retryAfterSec) {
+  if (retryAfterSec != null && Number.isFinite(retryAfterSec) && retryAfterSec > 0) {
+    return Math.min(retryAfterSec * 1000, 120_000);
+  }
+  return Math.min(5_000 * 2 ** retryCount, 120_000);
+}
+
 /**
  * @param {string} path e.g. `/players/123/wl`
  * @param {Record<string, string | number | undefined>} [query]
  */
-export async function opendotaFetch(path, query = {}) {
+export async function opendotaFetch(path, query = {}, retryCount = 0) {
   await throttle();
   const url = new URL(`${BASE}${path.startsWith("/") ? path : `/${path}`}`);
   for (const [key, value] of Object.entries(query)) {
@@ -29,9 +39,20 @@ export async function opendotaFetch(path, query = {}) {
   }
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (res.status === 429) {
-    await new Promise((r) => setTimeout(r, 5_000));
-    return opendotaFetch(path, query);
+    const maxRetries = env.opendotaApiKey ? 8 : 14;
+    if (retryCount >= maxRetries) {
+      const err = new Error("OpenDota 429: rate limit retries exhausted");
+      err.status = 429;
+      throw err;
+    }
+    const retryAfterHeader = res.headers.get("retry-after");
+    const retryAfterSec = retryAfterHeader ? Number(retryAfterHeader) : null;
+    const waitMs = backoffMsFor429(retryCount, retryAfterSec);
+    rateLimitPenaltyMs = Math.min(rateLimitPenaltyMs + 500, 4_000);
+    await new Promise((r) => setTimeout(r, waitMs));
+    return opendotaFetch(path, query, retryCount + 1);
   }
+  rateLimitPenaltyMs = Math.max(0, rateLimitPenaltyMs - 250);
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     const err = new Error(`OpenDota ${res.status}: ${text.slice(0, 200)}`);

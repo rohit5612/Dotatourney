@@ -6,6 +6,7 @@ import { pollCheckoutPaid, playerApi } from "../../lib/playerApi";
 import { cardTierDisplayLabel } from "../../constants/cardTierPreviews.js";
 import { bundleTotalForTier, formatDiscountLabel } from "../../utils/commerceBundle.js";
 import { CashfreeGatewayModal } from "../payment/CashfreeGatewayModal.jsx";
+import { ManualUpiPaymentStep } from "../payment/ManualUpiPaymentStep.jsx";
 
 const TIER_ORDER = ["default", "player", "gold", "holo"];
 
@@ -17,6 +18,8 @@ export function DashboardCheckout({ tournamentSlug, registrationsOpen, eligible 
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [gateway, setGateway] = useState(null);
+  const [manualCheckout, setManualCheckout] = useState(null);
+  const [completionKind, setCompletionKind] = useState("paid");
   const [confirmingPayment, setConfirmingPayment] = useState(false);
 
   const [liveCoins, setLiveCoins] = useState(0);
@@ -47,8 +50,8 @@ export function DashboardCheckout({ tournamentSlug, registrationsOpen, eligible 
     try {
       const result = await playerApi.checkoutConfirm(tournamentSlug, { cardTier, coinsToApply });
       if (result.provider === "manual" || result.manualMode) {
-        await playerApi.simulatePay(result.orderId);
-        setStep("done");
+        setManualCheckout({ orderId: result.orderId, upi: result.upi });
+        setStep("manual_pay");
         return;
       }
       if (!result.paymentSessionId) {
@@ -78,7 +81,10 @@ export function DashboardCheckout({ tournamentSlug, registrationsOpen, eligible 
     setError("");
     try {
       const status = await pollCheckoutPaid(orderId);
-      if (status?.status === "paid") setStep("done");
+      if (status?.status === "paid") {
+        setCompletionKind("paid");
+        setStep("done");
+      }
       else {
         setError(
           "We could not confirm your payment yet. If money was deducted, wait a minute and refresh — or check your email.",
@@ -113,14 +119,38 @@ export function DashboardCheckout({ tournamentSlug, registrationsOpen, eligible 
     const tierLabel = tiers[cardTier]?.label || cardTierDisplayLabel(cardTier);
     return (
       <section className="mt-8 rounded-lg border border-accent/40 bg-card p-5">
-        <h2 className="font-serif text-xl text-accent">Registration complete</h2>
-        <p className="mt-2 text-muted-foreground">Payment confirmed. Bundle: {tierLabel}.</p>
+        <h2 className="font-serif text-xl text-accent">
+          {completionKind === "under_review" ? "Payment proof received" : "Registration complete"}
+        </h2>
+        <p className="mt-2 text-muted-foreground">
+          {completionKind === "under_review"
+            ? "Your UPI payment proof is under admin review. You will receive an email once payment is confirmed."
+            : `Payment confirmed. Bundle: ${tierLabel}.`}
+        </p>
         {isPremiumCard ? (
           <p className="mt-3 text-sm text-muted-foreground">
             Our admins will process and upload your custom card within <strong>48 hours</strong>. Until then, your
             default season card is shown on your profile and in the community directory.
           </p>
         ) : null}
+      </section>
+    );
+  }
+
+  if (step === "manual_pay" && manualCheckout) {
+    return (
+      <section className="mt-8 rounded-lg border border-border bg-card p-5">
+        <h2 className="font-serif text-xl">Complete UPI payment</h2>
+        <p className="mt-2 text-sm text-muted-foreground">Pay via UPI, then upload your payment screenshot.</p>
+        <ManualUpiPaymentStep
+          upi={manualCheckout.upi}
+          busy={busy}
+          onSubmit={async (payload) => {
+            await playerApi.submitCheckoutProof(manualCheckout.orderId, payload);
+            setCompletionKind("under_review");
+            setStep("done");
+          }}
+        />
       </section>
     );
   }
@@ -197,7 +227,7 @@ export function DashboardCheckout({ tournamentSlug, registrationsOpen, eligible 
 
       {error ? <p className="mt-3 text-destructive text-sm">{error}</p> : null}
       {confirmingPayment ? (
-        <p className="mt-3 text-sm text-muted-foreground">Confirming your payment with Cashfree…</p>
+        <p className="mt-3 text-sm text-muted-foreground">Confirming your payment…</p>
       ) : null}
 
       <button type="button" className="btn btn-primary mt-4" onClick={pay} disabled={busy || confirmingPayment || !preview}>

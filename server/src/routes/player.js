@@ -725,6 +725,22 @@ router.post("/checkout/:orderId/simulate-pay", requirePlayer, async (req, res, n
   }
 });
 
+router.post("/checkout/:orderId/submit-proof", requirePlayer, async (req, res, next) => {
+  try {
+    const body = z
+      .object({
+        paymentScreenshot: z.string().min(1),
+        notes: z.string().optional().default(""),
+      })
+      .parse(req.body);
+    const { submitManualCheckoutProof } = await import("../services/paymentService.js");
+    const result = await submitManualCheckoutProof(req.params.orderId, req.playerAccount.id, body);
+    res.status(201).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post("/tournaments/:slug/substitute", requirePlayer, async (req, res, next) => {
   try {
     const body = z

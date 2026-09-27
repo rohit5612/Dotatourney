@@ -1,6 +1,6 @@
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link, useLocation } from "react-router-dom";
+import { Link, Navigate, useLocation } from "react-router-dom";
 import {
   HiOutlineArrowDownTray,
   HiOutlineBolt,
@@ -11,6 +11,7 @@ import {
 import { FaExternalLinkAlt, FaYoutube } from "react-icons/fa";
 import { AppFooter } from "../components/AppFooter";
 import { PageLoadingSpinner } from "../components/PageLoadingSpinner";
+import { compressImageFileForDataUrl } from "../utils/compressImageForUpload.js";
 import {
   augmentGroupedBracketMatches,
   blastStageRoundColumnCount,
@@ -61,9 +62,6 @@ import { TeamLogoImg } from "../components/TeamLogoImg.jsx";
 import { StandingsTable } from "../components/StandingsTable.jsx";
 import { BracketTokenHelp } from "../components/bracket/BracketTokenHelp.jsx";
 import { SiteNavbar } from "../components/navigation/SiteNavbar.jsx";
-const PublicTeamsPage = lazy(() =>
-  import("../components/teams/PublicTeamsPage.jsx").then((module) => ({ default: module.PublicTeamsPage })),
-);
 const BracketDiagram = lazy(() =>
   import("../components/BracketDiagram.jsx").then((module) => ({ default: module.BracketDiagram })),
 );
@@ -71,7 +69,7 @@ const BracketDiagram = lazy(() =>
 const PUBLIC_ROUTE_STYLES = {
   "/": () => Promise.all([import("../styles/landing-hero.css"), import("../styles/tournament-honors.css")]),
   "/tournament": () => Promise.all([import("../styles/tournament-page.css"), import("../styles/tournament-honors.css")]),
-  "/teams": () => Promise.all([import("../styles/teams-page.css"), import("../styles/tournament-honors.css")]),
+  "/league": () => Promise.all([import("../styles/league-teams-page.css"), import("../styles/teams-page.css"), import("../styles/tournament-honors.css")]),
   "/schedule": () => import("../styles/schedule-page.css"),
   "/register": () => import("../styles/registration-page.css"),
   "/rules": () => import("../styles/general-rules-page.css"),
@@ -198,25 +196,6 @@ const images = {
 function formatDate(value) {
   if (!value) return "TBA";
   return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-}
-
-
-/** Downscale and JPEG-wrap payment proofs so JSON POST stays under typical reverse-proxy limits (nginx default 1m). */
-async function compressImageFileForDataUrl(file, maxEdge = 1680, jpegQuality = 0.88) {
-  const bitmap = await createImageBitmap(file);
-  try {
-    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
-    const w = Math.max(1, Math.round(bitmap.width * scale));
-    const h = Math.max(1, Math.round(bitmap.height * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(bitmap, 0, 0, w, h);
-    return canvas.toDataURL("image/jpeg", jpegQuality);
-  } finally {
-    bitmap.close();
-  }
 }
 
 const formatNameMap = {
@@ -555,20 +534,14 @@ export function PublicApp({ path, navigate }) {
     );
   }
 
+  if (path === "/teams") {
+    return <Navigate to="/league?view=rosters" replace />;
+  }
+
   if (path === "/schedule") {
     return (
       <PageContentShell path={path} navigate={navigate}>
         <PublicSchedule event={displayEvent} message={message} />
-      </PageContentShell>
-    );
-  }
-
-  if (path === "/teams") {
-    return (
-      <PageContentShell path={path} navigate={navigate}>
-        <Suspense fallback={<PageLoadingSpinner label="Loading teams…" />}>
-          <PublicTeamsPage event={event} message={message} navigate={navigate} />
-        </Suspense>
       </PageContentShell>
     );
   }
@@ -1729,8 +1702,9 @@ export function PrivacyPolicyPage() {
             documents you upload (such as payment screenshots).
           </li>
           <li>
-            <strong>Payment data:</strong> Transaction references and payment status from our
-            payment gateway. We do not store full card numbers or UPI PINs on our servers.
+            <strong>Payment data:</strong> Transaction references, payment screenshots you upload, and
+            payment status we record after verification. We do not store UPI PINs or full card numbers on
+            our servers.
           </li>
           <li>
             <strong>Communications:</strong> Emails we send (OTPs, verification, registration
@@ -1772,8 +1746,9 @@ export function PrivacyPolicyPage() {
         <p>We may share limited data with:</p>
         <ul>
           <li>
-            <strong>Payment processors</strong> (such as Cashfree) to complete INR
-            transactions.
+            <strong>Banking and UPI networks</strong> when you complete a transfer to the payee details we
+            display; we receive only what you and your bank app show (such as references and screenshots
+            you choose to submit).
           </li>
           <li>
             <strong>Email delivery providers</strong> configured by organisers for transactional

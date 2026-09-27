@@ -82,18 +82,20 @@ export function PlayerOverviewPage() {
   const linkageDone = [account.emailVerified, account.steamLinked, account.discordLinked].filter(Boolean).length;
   const canUpgradeCard = upgradeEligibility?.eligible && (upgradeEligibility?.upgradeOptions?.length ?? 0) > 0;
 
-  async function handleUpgradeSuccess({ targetTier, tournamentName }) {
+  async function handleUpgradeSuccess({ targetTier, tournamentName, underReview = false }) {
     setUpgradeModalOpen(false);
-    await Promise.all([
-      refreshCardManifest(),
-      loadUpgradeEligibility(),
-      playerApi.history().then((r) => {
-        setRegistrations(r.registrations || []);
-        setRecognitions(r.recognitions || []);
-      }),
-      refreshMe?.(),
-    ]);
-    setUpgradeSuccess({ targetTier, tournamentName });
+    if (!underReview) {
+      await Promise.all([
+        refreshCardManifest(),
+        loadUpgradeEligibility(),
+        playerApi.history().then((r) => {
+          setRegistrations(r.registrations || []);
+          setRecognitions(r.recognitions || []);
+        }),
+        refreshMe?.(),
+      ]);
+    }
+    setUpgradeSuccess({ targetTier, tournamentName, underReview });
   }
 
   return (
@@ -238,6 +240,7 @@ export function PlayerOverviewPage() {
         open={Boolean(upgradeSuccess)}
         targetTier={upgradeSuccess?.targetTier}
         tournamentName={upgradeSuccess?.tournamentName}
+        underReview={upgradeSuccess?.underReview}
         onClose={() => setUpgradeSuccess(null)}
       />
     </div>

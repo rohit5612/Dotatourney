@@ -1,19 +1,22 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   HiOutlineBookOpen,
   HiOutlineCalendarDays,
+  HiOutlineMap,
   HiOutlineMegaphone,
   HiOutlineShieldCheck,
   HiOutlineSignal,
   HiOutlineSparkles,
   HiOutlineUserGroup,
   HiOutlineChevronDown,
+  HiOutlineChevronLeft,
   HiOutlineChevronUp,
 } from "react-icons/hi2";
 import { TeamLogoImg } from "../TeamLogoImg.jsx";
 import { SITE_BRAND_FULL } from "../../constants/siteMeta.js";
 import { BRACKET_FINISH_LABELS, seasonFinishLabel } from "../../utils/leagueSeasonLabels.js";
+import { BpCadutiMapModal, BP_CADUTI_MAP_IMAGE } from "./BpCadutiMapModal.jsx";
 import "../../styles/league-teams-page.css";
 import "../../styles/seasons-page.css";
 
@@ -53,38 +56,11 @@ function loreHookLine(paragraphs) {
   return paragraphs[0].length > 140 ? `${paragraphs[0].slice(0, 137).trim()}…` : paragraphs[0];
 }
 
-function loreAsThreeParagraphs(lore) {
-  const blocks = String(lore || "")
+function loreParagraphBlocks(lore) {
+  return String(lore || "")
     .trim()
     .split(/\n\s*\n/)
     .map((part) => part.trim())
-    .filter(Boolean);
-  if (!blocks.length) return [];
-
-  if (blocks.length >= 3) {
-    return blocks.slice(0, 3);
-  }
-
-  if (blocks.length === 2) {
-    const secondSentences = splitSentences(blocks[1]);
-    if (secondSentences.length >= 2) {
-      const mid = Math.ceil(secondSentences.length / 2);
-      return [
-        blocks[0],
-        secondSentences.slice(0, mid).join(" "),
-        secondSentences.slice(mid).join(" "),
-      ];
-    }
-    return [blocks[0], blocks[1]];
-  }
-
-  const sentences = splitSentences(blocks[0]);
-  if (sentences.length <= 3) {
-    return sentences.length ? sentences : [blocks[0]];
-  }
-  const per = Math.ceil(sentences.length / 3);
-  return [0, 1, 2]
-    .map((index) => sentences.slice(index * per, (index + 1) * per).join(" "))
     .filter(Boolean);
 }
 
@@ -103,18 +79,27 @@ export function LeagueFranchiseHero({
 }) {
   const status = statusLabel(team.status);
   const isActiveStatus = status === "Active";
-  const loreParagraphs = loreAsThreeParagraphs(team.lore);
+  const loreParagraphs = loreParagraphBlocks(team.lore);
   const loreHook = loreHookLine(loreParagraphs);
   const hasLore = loreParagraphs.length > 0;
   const hasHistory = appearanceSeasons.length > 0 || placementRows.length > 0;
   const [loreExpanded, setLoreExpanded] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
   const loreCanExpand =
     loreParagraphs.length > 1 ||
-    (loreParagraphs[0]?.length ?? 0) > 96;
+    (loreParagraphs[0]?.length ?? 0) > 220;
 
   useEffect(() => {
     setLoreExpanded(false);
   }, [team?.slug, team?.id]);
+
+  const openMap = useCallback(() => {
+    setMapOpen(true);
+  }, []);
+
+  const closeMap = useCallback(() => {
+    setMapOpen(false);
+  }, []);
 
   return (
     <section
@@ -299,6 +284,52 @@ export function LeagueFranchiseHero({
                   Franchise lore
                 </h2>
               </div>
+              {!mapOpen ? (
+                <div className="franchise-lore-saga__map-slot" role="complementary" aria-label="BP Caduti map">
+                  <div className="franchise-lore-saga__map-entry">
+                    <div className="franchise-lore-saga__map-btn-wrap">
+                      <button
+                        type="button"
+                        className="franchise-lore-saga__map-banner franchise-lore-saga__map-banner--desktop"
+                        onClick={openMap}
+                        aria-label="Click to view the map"
+                      >
+                        <HiOutlineChevronLeft className="franchise-lore-saga__map-banner-arrow" aria-hidden />
+                        <span className="franchise-lore-saga__map-banner-text">Click to view the map</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="franchise-lore-saga__map-banner franchise-lore-saga__map-banner--mobile"
+                        onClick={openMap}
+                        aria-label="Click to view the map"
+                      >
+                        <span className="franchise-lore-saga__map-banner-badge">New</span>
+                        <span className="franchise-lore-saga__map-banner-text">View map</span>
+                      </button>
+                      <div className="franchise-lore-saga__map-btn-frame">
+                        <button
+                          type="button"
+                          className="franchise-lore-saga__map-btn"
+                          onClick={openMap}
+                          aria-label="Open BP Caduti continental map"
+                        >
+                          <span className="franchise-lore-saga__map-btn-ring" aria-hidden />
+                          <img
+                            className="franchise-lore-saga__map-btn-img"
+                            src={BP_CADUTI_MAP_IMAGE}
+                            alt=""
+                            decoding="async"
+                          />
+                          <span className="franchise-lore-saga__map-btn-glyph" aria-hidden>
+                            <HiOutlineMap />
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                    <span className="franchise-lore-saga__map-label">Map</span>
+                  </div>
+                </div>
+              ) : null}
             </header>
 
             {loreHook ? (
@@ -343,6 +374,8 @@ export function LeagueFranchiseHero({
             ) : null}
           </section>
         ) : null}
+
+        {hasLore ? <BpCadutiMapModal open={mapOpen} onClose={closeMap} /> : null}
       </div>
     </section>
   );

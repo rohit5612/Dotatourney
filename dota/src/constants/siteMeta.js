@@ -50,9 +50,14 @@ const ROUTE_META = {
     title: `Bracket & Schedule${TITLE_SUFFIX}`,
     description: "Match schedule and bracket for the Bharat Pro Circuit League Dota 2 tournament.",
   },
+  "/league": {
+    title: `The League${TITLE_SUFFIX}`,
+    description:
+      "BPC League franchises — permanent teams, season rosters, honors, and legacy across every campaign.",
+  },
   "/teams": {
-    title: `Teams${TITLE_SUFFIX}`,
-    description: "Competing teams in the current BPC League Dota 2 tournament.",
+    title: `Season rosters${TITLE_SUFFIX}`,
+    description: "Competing team rosters for the current BPC League Dota 2 season.",
   },
   "/seasons": {
     title: `Seasons${TITLE_SUFFIX}`,

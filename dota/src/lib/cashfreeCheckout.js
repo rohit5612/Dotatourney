@@ -19,7 +19,7 @@ export function loadCashfreeScript() {
       existing.addEventListener("load", () => resolve(window.Cashfree));
       existing.addEventListener("error", () => {
         scriptPromise = null;
-        reject(new Error("Failed to load Cashfree"));
+        reject(new Error("Failed to load secure checkout"));
       });
       return;
     }
@@ -30,7 +30,7 @@ export function loadCashfreeScript() {
     script.onload = () => resolve(window.Cashfree);
     script.onerror = () => {
       scriptPromise = null;
-      reject(new Error("Failed to load Cashfree"));
+      reject(new Error("Failed to load secure checkout"));
     };
     document.body.appendChild(script);
   });

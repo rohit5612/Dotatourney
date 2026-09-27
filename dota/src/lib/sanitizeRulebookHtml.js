@@ -71,6 +71,25 @@ export function sanitizeDescriptionHtml(raw) {
   return DOMPurify.sanitize(html, DESCRIPTION_PURIFY);
 }
 
+/** Landing-page banner: inline styles + optional scoped `<style>` (admin-authored). */
+const BANNER_ANNOUNCEMENT_PURIFY = {
+  ALLOWED_TAGS: [...RULEBOOK_PURIFY.ALLOWED_TAGS, "style"],
+  ALLOWED_ATTR: RULEBOOK_PURIFY.ALLOWED_ATTR,
+  ALLOW_DATA_ATTR: false,
+};
+
+export function sanitizeBannerAnnouncementHtml(raw) {
+  if (!raw || typeof raw !== "string") return "";
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  const looksLikeHtml = /<\/?[a-z][\s\S]*?>/i.test(trimmed);
+  const html = looksLikeHtml ? trimmed : trimmed.replace(/\n/g, "<br>");
+  return DOMPurify.sanitize(html, BANNER_ANNOUNCEMENT_PURIFY);
+}
+
+export const bannerAnnouncementContentClassName =
+  "landing-banner-announcement__body-html [&_a]:font-semibold [&_a]:text-[#042f2e] [&_a]:underline [&_a]:underline-offset-2 hover:[&_a]:text-[#0f0f14] [&_p+p]:mt-2 [&_strong,&_b]:font-extrabold [&_em,&_i]:italic";
+
 /** Tailwind hooks for rendered overview / description blocks. */
 export const descriptionContentClassName =
   "tournament-description-html [&_a]:font-medium [&_a]:text-secondary [&_a]:underline [&_a]:underline-offset-2 hover:[&_a]:text-foreground [&_p+p]:mt-3 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5";

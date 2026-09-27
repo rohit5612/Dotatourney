@@ -79,8 +79,14 @@ export const env = {
   opendotaPlayerSnapshotTtlMs: toNumber(process.env.OPENDOTA_PLAYER_SNAPSHOT_TTL_MS, 72 * 60 * 60 * 1000),
   /** League roster match index refresh (ms). */
   opendotaLeagueIndexTtlMs: toNumber(process.env.OPENDOTA_LEAGUE_INDEX_TTL_MS, 12 * 60 * 60 * 1000),
-  /** Min delay between OpenDota HTTP calls (ms). */
-  opendotaMinRequestIntervalMs: toNumber(process.env.OPENDOTA_MIN_REQUEST_INTERVAL_MS, 1_100),
+  /**
+   * Min delay between OpenDota HTTP calls (ms).
+   * Without OPENDOTA_API_KEY, default ~1 req / 2s (OpenDota anonymous free tier).
+   */
+  opendotaMinRequestIntervalMs: toNumber(
+    process.env.OPENDOTA_MIN_REQUEST_INTERVAL_MS,
+    process.env.OPENDOTA_API_KEY?.trim() ? 1_100 : 2_000,
+  ),
   /** Cap live /matches/{id} fetches per player league sync (cache fills the rest). */
   opendotaMaxMatchDetailFetchesPerSync: toNumber(process.env.OPENDOTA_MAX_MATCH_DETAIL_FETCHES, 20),
   nodeEnv: process.env.NODE_ENV || "development",
@@ -88,6 +94,13 @@ export const env = {
   cashfreeClientSecret: process.env.CASHFREE_CLIENT_SECRET?.trim() || "",
   /** sandbox | production */
   cashfreeEnv: process.env.CASHFREE_ENV?.trim().toLowerCase() === "production" ? "production" : "sandbox",
+  /** gateway | manual — manual uses UPI QR + proof upload; gateway uses Cashfree when configured */
+  paymentMode:
+    process.env.PAYMENT_MODE?.trim().toLowerCase() === "manual" ? "manual" : "gateway",
+  paymentUpiVpa: process.env.PAYMENT_UPI_VPA?.trim() || "",
+  paymentUpiPayeeName: process.env.PAYMENT_UPI_PAYEE_NAME?.trim() || "BPC League",
+  /** Dev: allow simulate-pay endpoint when PAYMENT_MODE=manual */
+  paymentAllowSimulate: process.env.PAYMENT_ALLOW_SIMULATE === "true",
   /** Service account JSON (minified one-line). Or use GOOGLE_SERVICE_ACCOUNT_JSON_B64 / GOOGLE_APPLICATION_CREDENTIALS. */
   googleServiceAccountJson: process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim() || "",
   googleServiceAccountJsonB64: process.env.GOOGLE_SERVICE_ACCOUNT_JSON_B64?.trim() || "",
@@ -135,6 +148,9 @@ if (env.nodeEnv === "production") {
   }
   if (!env.upstashRedisRestUrl && !env.redisUrl) {
     warnings.push("Redis is not configured — public cache will be in-memory only per process");
+  }
+  if (env.paymentMode === "manual" && !env.paymentUpiVpa) {
+    warnings.push("PAYMENT_MODE=manual but PAYMENT_UPI_VPA is unset — manual checkout will fail");
   }
   for (const msg of warnings) {
     console.warn(`[env] production warning: ${msg}`);

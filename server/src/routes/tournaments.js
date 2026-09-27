@@ -237,6 +237,28 @@ function stripReplacedPlayersFromTeamAssignments(registrations, players) {
   });
 }
 
+function attachTeamIdsToPlayers(players, teamPlayers) {
+  const teamByPlayerId = new Map();
+  for (const record of teamPlayers || []) {
+    const playerId = record.player_id ?? record.playerId;
+    const teamId = record.team_id ?? record.teamId;
+    if (playerId && teamId) teamByPlayerId.set(playerId, teamId);
+  }
+  return (players || []).map((player) => ({
+    ...player,
+    teamId: teamByPlayerId.get(player.id) ?? player.teamId ?? null,
+  }));
+}
+
+async function validateTournamentTeamAssignments(tournamentId, players, teamPlayers) {
+  const registrations = await listPlayerRegistrations(tournamentId);
+  const normalizedPlayers = stripReplacedPlayersFromTeamAssignments(
+    registrations,
+    attachTeamIdsToPlayers(players, teamPlayers),
+  );
+  return await validateRosterRegistrations(registrations, normalizedPlayers);
+}
+
 async function persistProgressedMatches(tournamentId, snapshot, baseMatches) {
   const progressed = reapplyAllProgression(baseMatches);
 
@@ -710,7 +732,11 @@ router.post("/:id/rosters", async (req, res, next) => {
     const data = await getTournament(req.params.id);
     if (!data) return res.status(404).json({ message: "Tournament not found" });
 
-    const validationMessage = await validateRosterRegistrations(req.params.id, data.players);
+    const validationMessage = await validateTournamentTeamAssignments(
+      req.params.id,
+      data.players,
+      data.teamPlayers,
+    );
     if (validationMessage) return res.status(400).json({ message: validationMessage });
 
     const roster = await createRosterSnapshot(req.params.id, payload.name.trim());
@@ -732,7 +758,11 @@ router.put("/:id/rosters/:rosterId", async (req, res, next) => {
     if (!data) return res.status(404).json({ message: "Tournament not found" });
 
     if (payload.replaceFromCurrent) {
-      const validationMessage = await validateRosterRegistrations(req.params.id, data.players);
+      const validationMessage = await validateTournamentTeamAssignments(
+        req.params.id,
+        data.players,
+        data.teamPlayers,
+      );
       if (validationMessage) return res.status(400).json({ message: validationMessage });
     }
 
@@ -756,7 +786,11 @@ router.post("/:id/rosters/:rosterId/approve", async (req, res, next) => {
     const roster = await getRosterSnapshot(req.params.id, req.params.rosterId);
     if (!roster) return res.status(404).json({ message: "Roster not found" });
 
-    const validationMessage = await validateRosterRegistrations(req.params.id, roster.players);
+    const validationMessage = await validateTournamentTeamAssignments(
+      req.params.id,
+      roster.players,
+      roster.teamPlayers,
+    );
     if (validationMessage) return res.status(400).json({ message: validationMessage });
 
     if (roster.teams.length !== data.tournament.team_count) {
@@ -1487,8 +1521,24 @@ router.patch("/:id/registrations/:registrationId", requirePermission("playerCrm.
     if (prev?.substituteFlag) {
       return res.status(403).json({ message: "Substitute pool entries are managed under Player CRM → Substitutes." });
     }
-    const registration = await updatePlayerRegistration(req.params.id, req.params.registrationId, payload);
+    let registration = await updatePlayerRegistration(req.params.id, req.params.registrationId, payload);
     if (!registration) return res.status(404).json({ message: "Registration not found" });
+
+    if (payload.paymentStatus === "paid" && prev?.paymentStatus !== "paid") {
+      try {
+        const { tryFulfillManualOrderOnAdminPaid } = await import("../services/paymentService.js");
+        const fulfillResult = await tryFulfillManualOrderOnAdminPaid(req.params.id, req.params.registrationId);
+        if (fulfillResult.fulfilled) {
+          registration = await getPlayerRegistrationById(req.params.id, req.params.registrationId);
+        }
+      } catch (fulfillErr) {
+        logError("payment", "manual checkout fulfill on admin paid failed", fulfillErr, {
+          tournamentId: req.params.id,
+          registrationId: req.params.registrationId,
+        });
+      }
+    }
+
     logAction("registration", "admin.updated", {
       adminId: req.adminUser.id,
       tournamentId: req.params.id,

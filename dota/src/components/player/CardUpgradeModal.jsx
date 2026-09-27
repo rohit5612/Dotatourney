@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { cardTierDisplayLabel } from "../cards/CardTierBadge.jsx";
 import { useBodyScrollLock } from "../../hooks/useBodyScrollLock.js";
 import { pollCheckoutPaid, playerApi } from "../../lib/playerApi";
+import { ManualUpiPaymentStep } from "../payment/ManualUpiPaymentStep.jsx";
 import { BundleCheckoutPanel } from "./BundleCheckoutPanel.jsx";
 
 const CashfreeGatewayModal = lazy(() =>
@@ -22,6 +23,7 @@ export function CardUpgradeModal({ open, eligibility, onClose, onSuccess }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [gateway, setGateway] = useState(null);
+  const [manualCheckout, setManualCheckout] = useState(null);
   const [confirmingPayment, setConfirmingPayment] = useState(false);
   const previewHardKey = useRef("");
 
@@ -41,6 +43,7 @@ export function CardUpgradeModal({ open, eligibility, onClose, onSuccess }) {
     import("../../lib/cashfreeCheckout.js").then((m) => m.loadCashfreeScript()).catch(() => {});
     setError("");
     setGateway(null);
+    setManualCheckout(null);
     const firstTier = upgradeOptions[0]?.tier || "";
     setTargetTier(firstTier);
     setCoinsToApply(0);
@@ -95,9 +98,7 @@ export function CardUpgradeModal({ open, eligibility, onClose, onSuccess }) {
     try {
       const result = await playerApi.upgradeConfirm(slug, { targetTier, coinsToApply });
       if (result.provider === "manual" || result.manualMode) {
-        await playerApi.simulatePay(result.orderId);
-        const status = await playerApi.checkoutStatus(result.orderId);
-        await finishUpgrade(status?.cardTier || targetTier);
+        setManualCheckout({ orderId: result.orderId, upi: result.upi });
         return;
       }
       if (!result.paymentSessionId) {
@@ -165,33 +166,50 @@ export function CardUpgradeModal({ open, eligibility, onClose, onSuccess }) {
         {confirmingPayment ? (
           <div className="player-dash__loading player-dash__loading--inline" style={{ marginBottom: "1rem" }}>
             <span className="player-dash__loading-pulse" aria-hidden="true" />
-            <p className="player-auth__sub">Confirming your payment with Cashfree…</p>
+            <p className="player-auth__sub">Confirming your payment…</p>
           </div>
         ) : null}
-        <BundleCheckoutPanel
-          mode="upgrade"
-          selectedTier={targetTier}
-          onSelectTier={setTargetTier}
-          tierEntries={tierEntries}
-          preview={preview}
-          previewLoading={previewLoading}
-          tournamentName={eligibility?.tournament?.name}
-          coinsToApply={coinsToApply}
-          displayCoins={liveCoins}
-          onCoinsChange={setCoinsToApply}
-          onLiveCoinsChange={setLiveCoins}
-          onPay={pay}
-          busy={busy}
-          confirmingPayment={confirmingPayment}
-          payLabel="Pay & upgrade"
-          currentTierLabel={cardTierDisplayLabel(eligibility?.currentTier)}
-          compact
-          footerLink={{
-            external: true,
-            label: "Cancel",
-            onClick: onClose,
-          }}
-        />
+        {manualCheckout ? (
+          <ManualUpiPaymentStep
+            upi={manualCheckout.upi}
+            busy={busy}
+            onSubmit={async (payload) => {
+              await playerApi.submitCheckoutProof(manualCheckout.orderId, payload);
+              setManualCheckout(null);
+              onClose();
+              await onSuccess?.({
+                targetTier,
+                tournamentName: eligibility?.tournament?.name || "",
+                underReview: true,
+              });
+            }}
+          />
+        ) : (
+          <BundleCheckoutPanel
+            mode="upgrade"
+            selectedTier={targetTier}
+            onSelectTier={setTargetTier}
+            tierEntries={tierEntries}
+            preview={preview}
+            previewLoading={previewLoading}
+            tournamentName={eligibility?.tournament?.name}
+            coinsToApply={coinsToApply}
+            displayCoins={liveCoins}
+            onCoinsChange={setCoinsToApply}
+            onLiveCoinsChange={setLiveCoins}
+            onPay={pay}
+            busy={busy}
+            confirmingPayment={confirmingPayment}
+            payLabel="Pay & upgrade"
+            currentTierLabel={cardTierDisplayLabel(eligibility?.currentTier)}
+            compact
+            footerLink={{
+              external: true,
+              label: "Cancel",
+              onClick: onClose,
+            }}
+          />
+        )}
       </div>
       {gateway ? (
         <Suspense fallback={null}>

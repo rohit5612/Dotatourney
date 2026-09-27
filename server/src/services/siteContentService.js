@@ -1,13 +1,16 @@
 import { pool } from "../db/pool.js";
 import { normalizeOrgRoster } from "./seasonContentSchema.js";
 import {
+  normalizeVersionChangeLog,
   normalizeVersionHistory,
   normalizeWebsiteVersion,
+  readVersionHistory,
 } from "./websiteVersionSchema.js";
 
 const ORG_ROSTER_KEY = "org_roster";
 const WEBSITE_VERSION_KEY = "website_version";
 const VERSION_HISTORY_KEY = "version_history";
+const VERSION_CHANGELOG_KEY = "version_changelog";
 
 export async function getOrgRoster() {
   const { rows } = await pool.query(`SELECT payload FROM public_site_content WHERE key = $1`, [ORG_ROSTER_KEY]);
@@ -62,12 +65,8 @@ export async function updateWebsiteVersion(payload) {
 }
 
 export async function getVersionHistory() {
-  try {
-    const payload = await getSiteContentPayload(VERSION_HISTORY_KEY, { entries: [] });
-    return normalizeVersionHistory(payload);
-  } catch {
-    return { entries: [] };
-  }
+  const payload = await getSiteContentPayload(VERSION_HISTORY_KEY, { entries: [] });
+  return readVersionHistory(payload);
 }
 
 export async function updateVersionHistory(payload) {
@@ -81,11 +80,32 @@ export async function updateVersionHistory(payload) {
   return normalized;
 }
 
+export async function getVersionChangeLog() {
+  try {
+    const payload = await getSiteContentPayload(VERSION_CHANGELOG_KEY, { lines: [] });
+    return normalizeVersionChangeLog(payload);
+  } catch {
+    return { lines: [] };
+  }
+}
+
+export async function updateVersionChangeLog(payload) {
+  const normalized = normalizeVersionChangeLog(payload);
+  await pool.query(
+    `INSERT INTO public_site_content (key, payload, updated_at)
+     VALUES ($1, $2::jsonb, NOW())
+     ON CONFLICT (key) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()`,
+    [VERSION_CHANGELOG_KEY, JSON.stringify(normalized)],
+  );
+  return normalized;
+}
+
 export async function getPublicSiteContent() {
-  const [orgRoster, websiteVersion, versionHistory] = await Promise.all([
+  const [orgRoster, websiteVersion, versionHistory, versionChangeLog] = await Promise.all([
     getOrgRoster(),
     getWebsiteVersion(),
     getVersionHistory(),
+    getVersionChangeLog(),
   ]);
-  return { orgRoster, websiteVersion, versionHistory };
+  return { orgRoster, websiteVersion, versionHistory, versionChangeLog };
 }

@@ -4,7 +4,7 @@ import { resolvePublicNavLinks } from "../constants/publicNav.js";
 import { api } from "../lib/api.js";
 import { peekCache } from "../lib/requestCache.js";
 
-/** Navbar links with conditional Teams when roster teams are on the public payload. */
+/** Navbar links for the public site (conditional items from publicNav constants). */
 export function useSiteNavLinks() {
   const tournamentCtx = useContext(PublicTournamentContext);
   const [fallbackEvent, setFallbackEvent] = useState(() => peekCache("public:tournament") ?? null);

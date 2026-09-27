@@ -199,6 +199,9 @@ function PlayerAccountDetailModal({
   onClearAvatar,
   savingAvatar,
   canWrite = true,
+  dotaStats,
+  onSyncDotaStats,
+  syncingDotaStats,
 }) {
   const account = detail?.account;
   const accountAvatar = resolveAccountAvatarUrl(account);
@@ -352,6 +355,31 @@ function PlayerAccountDetailModal({
                     </a>
                   ) : null}
                 </div>
+                {account.steamId ? (
+                  <div className="mt-4 rounded-lg border border-border/60 bg-background/40 p-3">
+                    <h5 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Dota stats (OpenDota)</h5>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Uses cached snapshots when still valid; otherwise fetches profile, heroes, and league stats from OpenDota
+                      (same pipeline as the community sync job).
+                    </p>
+                    {dotaStats?.lastUpdated ? (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Last profile snapshot: {formatDate(dotaStats.lastUpdated)}
+                        {dotaStats.profileCached && dotaStats.heroesCached ? " · cached" : ""}
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-xs text-muted-foreground">No OpenDota profile snapshot stored yet.</p>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm mt-3"
+                      disabled={!canWrite || syncingDotaStats}
+                      onClick={onSyncDotaStats}
+                    >
+                      {syncingDotaStats ? "Syncing Dota stats…" : "Sync Dota stats"}
+                    </button>
+                  </div>
+                ) : null}
               </section>
 
               <section className="player-crm__modal-section player-crm__modal-section--card">
@@ -694,6 +722,40 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
   const [gifPickerTarget, setGifPickerTarget] = useState(null);
   const [removeCardConfirmOpen, setRemoveCardConfirmOpen] = useState(false);
   const [removingCard, setRemovingCard] = useState(false);
+  const [syncingDotaStats, setSyncingDotaStats] = useState(false);
+
+  function summarizeDotaStatsSync(result) {
+    if (!result?.ok) return "Dota stats sync failed.";
+    const profilePart =
+      result.profile?.plan === "skip"
+        ? "Global profile: already cached (skipped OpenDota fetch)."
+        : "Global profile: synced from OpenDota.";
+    const leagues = result.leagues || [];
+    if (!leagues.length) return `${profilePart} No linked tournament leagues for this account.`;
+    const synced = leagues.filter((row) => row.synced).length;
+    const skipped = leagues.filter((row) => row.plan === "skip").length;
+    const statsOnly = leagues.filter((row) => row.statsOnly).length;
+    const parts = [profilePart, `Leagues: ${leagues.length} linked`];
+    if (synced) parts.push(`${synced} fetched from OpenDota`);
+    if (statsOnly) parts.push(`${statsOnly} rebuilt from cache`);
+    if (skipped) parts.push(`${skipped} already cached`);
+    return parts.join(". ");
+  }
+
+  async function syncDotaStatsForAccount() {
+    if (!selectedId) return;
+    setSyncingDotaStats(true);
+    try {
+      const { result } = await api.syncPlayerDotaStats(selectedId);
+      setMessage?.(summarizeDotaStatsSync(result));
+      const data = await api.getPlayerAccount(selectedId);
+      setDetail(data);
+    } catch (error) {
+      setMessage?.(error.message || "Could not sync Dota stats.");
+    } finally {
+      setSyncingDotaStats(false);
+    }
+  }
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -1204,6 +1266,9 @@ export function PlayerAccountsCrmPage({ setMessage, canWrite = true }) {
           onClearAvatar={clearAvatarOverride}
           savingAvatar={savingAvatar}
           canWrite={canWrite}
+          dotaStats={detail?.dotaStats}
+          onSyncDotaStats={syncDotaStatsForAccount}
+          syncingDotaStats={syncingDotaStats}
         />
       ) : null}
 

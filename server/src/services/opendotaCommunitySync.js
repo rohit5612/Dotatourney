@@ -1,6 +1,12 @@
 import { pool } from "../db/pool.js";
 import { steam64ToSteam32 } from "../utils/steamId.js";
 import { getSnapshot } from "./opendotaRepository.js";
+import {
+  buildLeagueStatsForPlayer,
+  syncPlayerLeagueMatches,
+  syncPlayerOpenDotaSnapshots,
+} from "./opendotaSyncService.js";
+import { leagueSnapshotIsSettled } from "../utils/opendotaMatchVisibility.js";
 
 function isExpired(expiresAt) {
   if (!expiresAt) return true;
@@ -107,8 +113,12 @@ export async function profileSyncPlan(playerAccountId, { force = false } = {}) {
     profile?.payload?.profile &&
     typeof profile.payload.profile === "object" &&
     !isExpired(profile.expires_at);
+  const heroesList = heroes?.payload?.heroes;
+  const restricted = profile?.payload?.matchHistoryRestricted === true;
   const hasHeroes =
-    Array.isArray(heroes?.payload?.heroes) && heroes.payload.heroes.length > 0 && !isExpired(heroes.expires_at);
+    Array.isArray(heroesList) &&
+    !isExpired(heroes.expires_at) &&
+    (heroesList.length > 0 || restricted);
   if (hasProfile && hasHeroes) return "skip";
   return "sync";
 }
@@ -123,15 +133,16 @@ export async function leagueSyncPlan(playerAccountId, dotaLeagueId, { force = fa
   const statsSnap = await getSnapshot(playerAccountId, `league_stats:${dotaLeagueId}`);
 
   const leagueOk =
-    leagueSnap?.payload?.verifiedLeague === true &&
+    leagueSnap?.payload &&
     !isExpired(leagueSnap.expires_at) &&
-    (Array.isArray(leagueSnap.payload?.raw) && leagueSnap.payload.raw.length > 0 ||
-      Array.isArray(leagueSnap.payload?.matchIds) && leagueSnap.payload.matchIds.length > 0);
+    leagueSnapshotIsSettled(leagueSnap.payload);
 
   const statsOk =
     statsSnap?.payload &&
-    Number(statsSnap.payload.games) > 0 &&
-    !isExpired(statsSnap.expires_at);
+    !isExpired(statsSnap.expires_at) &&
+    (Number(statsSnap.payload.games) > 0 ||
+      statsSnap.payload.emptyLeagueSync === true ||
+      leagueSnap?.payload?.emptyLeagueSync === true);
 
   if (leagueOk && statsOk) return "skip";
   if (leagueOk && !statsOk) return "stats_only";
@@ -148,4 +159,88 @@ export async function countOpendotaCoverage() {
        (SELECT COUNT(*)::int FROM opendota_league_match_index) AS league_index_rows`,
   );
   return rows[0];
+}
+
+/**
+ * Cache-first OpenDota sync for one player (profile + heroes + linked league stats).
+ * Same plan logic as sync-opendota-community.js player phase — no tournament roster / match linking.
+ */
+export async function runPlayerDotaStatsSync(playerAccountId, { force = false } = {}) {
+  const { rows } = await pool.query(`SELECT id, steam_id FROM player_accounts WHERE id = $1 LIMIT 1`, [
+    playerAccountId,
+  ]);
+  const account = rows[0];
+  if (!account) return { ok: false, reason: "not_found" };
+
+  const steam32 = steam64ToSteam32(account.steam_id);
+  if (!steam32) return { ok: false, reason: "steam_not_linked" };
+
+  const result = {
+    ok: true,
+    steam32,
+    profile: { plan: null, synced: false, fetchedAt: null },
+    leagues: [],
+  };
+
+  const profilePlan = await profileSyncPlan(playerAccountId, { force });
+  result.profile.plan = profilePlan;
+  if (profilePlan === "skip") {
+    const profileSnap = await getSnapshot(playerAccountId, "profile");
+    result.profile.fetchedAt = profileSnap?.fetched_at ?? null;
+  } else {
+    const profileResult = await syncPlayerOpenDotaSnapshots(playerAccountId, steam32);
+    if (profileResult.ok === false) {
+      result.profile.synced = false;
+      result.profile.error = profileResult.reason || "sync_failed";
+    } else {
+      result.profile.synced = true;
+      result.profile.matchHistoryRestricted = profileResult.matchHistoryRestricted === true;
+    }
+    const profileSnap = await getSnapshot(playerAccountId, "profile");
+    result.profile.fetchedAt = profileSnap?.fetched_at ?? null;
+  }
+
+  const leagues = await listLeagueIdsForPlayerAccount(playerAccountId);
+  for (const league of leagues) {
+    const plan = await leagueSyncPlan(playerAccountId, league.dotaLeagueId, { force });
+    const leagueResult = {
+      dotaLeagueId: league.dotaLeagueId,
+      tournamentSlug: league.tournamentSlug,
+      tournamentName: league.tournamentName,
+      plan,
+      synced: false,
+      statsOnly: false,
+      games: null,
+      winRate: null,
+      matchIds: null,
+      cached: null,
+    };
+
+    if (plan === "skip") {
+      const statsSnap = await getSnapshot(playerAccountId, `league_stats:${league.dotaLeagueId}`);
+      leagueResult.games = statsSnap?.payload?.games ?? null;
+      leagueResult.winRate = statsSnap?.payload?.winRate ?? null;
+    } else if (plan === "stats_only") {
+      leagueResult.statsOnly = true;
+      const built = await buildLeagueStatsForPlayer(playerAccountId, steam32, league.dotaLeagueId, {
+        allowOpenDotaSync: false,
+      });
+      leagueResult.games = built.games;
+      leagueResult.winRate = built.winRate;
+    } else {
+      const sync = await syncPlayerLeagueMatches(playerAccountId, steam32, league.dotaLeagueId);
+      const built = await buildLeagueStatsForPlayer(playerAccountId, steam32, league.dotaLeagueId, {
+        allowOpenDotaSync: false,
+      });
+      leagueResult.synced = true;
+      leagueResult.matchIds = sync.matchIds?.length ?? 0;
+      leagueResult.cached = Boolean(sync.cached);
+      leagueResult.games = built.games;
+      leagueResult.winRate = built.winRate;
+    }
+
+    result.leagues.push(leagueResult);
+  }
+
+  return result;
 }

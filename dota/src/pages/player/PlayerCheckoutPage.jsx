@@ -10,6 +10,7 @@ import {
   useRegistrationTournament,
 } from "../../components/player/RegistrationFlow.jsx";
 import { CARD_TIER_ORDER, cardTierDisplayLabel } from "../../constants/cardTierPreviews.js";
+import { ManualUpiPaymentStep } from "../../components/payment/ManualUpiPaymentStep.jsx";
 import { pollCheckoutPaid, playerApi } from "../../lib/playerApi";
 import { bundleTotalForTier } from "../../utils/commerceBundle.js";
 
@@ -32,6 +33,8 @@ export function PlayerCheckoutPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [gateway, setGateway] = useState(null);
+  const [manualCheckout, setManualCheckout] = useState(null);
+  const [completionKind, setCompletionKind] = useState("paid");
   const [confirmingPayment, setConfirmingPayment] = useState(false);
   const previewHardKey = useRef("");
 
@@ -90,8 +93,8 @@ export function PlayerCheckoutPage() {
     try {
       const result = await playerApi.checkoutConfirm(slug, { cardTier, coinsToApply });
       if (result.provider === "manual" || result.manualMode) {
-        await playerApi.simulatePay(result.orderId);
-        setStep("done");
+        setManualCheckout({ orderId: result.orderId, upi: result.upi });
+        setStep("manual_pay");
         return;
       }
       if (!result.paymentSessionId) {
@@ -121,7 +124,10 @@ export function PlayerCheckoutPage() {
     setError("");
     try {
       const status = await pollCheckoutPaid(orderId);
-      if (status?.status === "paid") setStep("done");
+      if (status?.status === "paid") {
+        setCompletionKind("paid");
+        setStep("done");
+      }
       else {
         setError(
           "We could not confirm your payment yet. If money was deducted, wait a minute and refresh — or check your email.",
@@ -148,10 +154,22 @@ export function PlayerCheckoutPage() {
               <path d="M22 4 12 14.01l-3-3" />
             </svg>
           </div>
-          <h1 className="player-dash__hero-title player-reg__success-title">Registration complete</h1>
+          <h1 className="player-dash__hero-title player-reg__success-title">
+            {completionKind === "under_review" ? "Payment proof received" : "Registration complete"}
+          </h1>
           <p className="player-auth__sub">
-            Payment confirmed for <strong>{preview?.tournament?.name || tournament?.name || "this tournament"}</strong>.
-            Your card tier: <strong>{tierLabel}</strong>.
+            {completionKind === "under_review" ? (
+              <>
+                We received your UPI payment proof for{" "}
+                <strong>{preview?.tournament?.name || tournament?.name || "this tournament"}</strong>. Admins will
+                verify your payment and confirm your registration — watch your email.
+              </>
+            ) : (
+              <>
+                Payment confirmed for <strong>{preview?.tournament?.name || tournament?.name || "this tournament"}</strong>.
+                Your card tier: <strong>{tierLabel}</strong>.
+              </>
+            )}
           </p>
           {isPremiumCard ? (
             <p className="player-auth__sub mt-3">
@@ -187,28 +205,46 @@ export function PlayerCheckoutPage() {
       {confirmingPayment ? (
         <div className="player-dash__loading player-dash__loading--inline" style={{ marginBottom: "1rem" }}>
           <span className="player-dash__loading-pulse" aria-hidden="true" />
-          <p className="player-auth__sub">Confirming your payment with Cashfree…</p>
+          <p className="player-auth__sub">Confirming your payment…</p>
         </div>
       ) : null}
 
-      <BundleCheckoutPanel
-        mode="registration"
-        selectedTier={cardTier}
-        onSelectTier={setCardTier}
-        tierEntries={tierEntries}
-        preview={preview}
-        previewLoading={previewLoading}
-        tournamentName={preview?.tournament?.name || tournament?.name}
-        coinsToApply={coinsToApply}
-        displayCoins={liveCoins}
-        onCoinsChange={setCoinsToApply}
-        onLiveCoinsChange={setLiveCoins}
-        onPay={pay}
-        busy={busy}
-        confirmingPayment={confirmingPayment}
-        payLabel="Pay & register"
-        footerLink={{ to: `/dashboard/register/${slug}`, label: "← Edit details" }}
-      />
+      {step === "manual_pay" && manualCheckout ? (
+        <section className="player-dash__card">
+          <h2 className="font-serif text-xl">Complete UPI payment</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Pay the exact amount below, then upload a screenshot of the successful transaction.
+          </p>
+          <ManualUpiPaymentStep
+            upi={manualCheckout.upi}
+            busy={busy}
+            onSubmit={async (payload) => {
+              await playerApi.submitCheckoutProof(manualCheckout.orderId, payload);
+              setCompletionKind("under_review");
+              setStep("done");
+            }}
+          />
+        </section>
+      ) : (
+        <BundleCheckoutPanel
+          mode="registration"
+          selectedTier={cardTier}
+          onSelectTier={setCardTier}
+          tierEntries={tierEntries}
+          preview={preview}
+          previewLoading={previewLoading}
+          tournamentName={preview?.tournament?.name || tournament?.name}
+          coinsToApply={coinsToApply}
+          displayCoins={liveCoins}
+          onCoinsChange={setCoinsToApply}
+          onLiveCoinsChange={setLiveCoins}
+          onPay={pay}
+          busy={busy}
+          confirmingPayment={confirmingPayment}
+          payLabel="Pay & register"
+          footerLink={{ to: `/dashboard/register/${slug}`, label: "← Edit details" }}
+        />
+      )}
       </RegistrationBody>
       {gateway ? (
         <Suspense fallback={null}>

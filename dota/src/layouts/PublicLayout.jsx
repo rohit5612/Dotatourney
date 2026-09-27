@@ -13,7 +13,8 @@ import "../styles/publicPagesStyles.js";
 
 /** Warm route JS chunks after first paint so navigations feel instant. */
 const PUBLIC_ROUTE_CHUNK_PRELOADS = [
-  () => import("../components/teams/PublicTeamsPage.jsx"),
+  () => import("../pages/league/LeagueTeamsPage.jsx"),
+  () => import("../components/teams/SeasonRosterGrid.jsx"),
   () => import("../components/BracketDiagram.jsx"),
   () => import("../pages/public/SeasonsHubPage.jsx"),
   () => import("../pages/public/SeasonDetailPage.jsx"),

@@ -13,6 +13,9 @@ import { sortRolesByDefault } from "../utils/teamPage.js";
 
 function registrationStageLabel(registration) {
   if (registration.substituteFlag) return "Substitute signup";
+  if (registration.paymentScreenshot && registration.paymentStatus === "unpaid") {
+    return "Payment proof submitted · verify UPI";
+  }
   if (registration.paymentStatus === "paid" && registration.registrationStatus === "pending") {
     return "Paid · awaiting approval";
   }
@@ -26,6 +29,7 @@ function registrationStageLabel(registration) {
 function draftFromRegistration(registration) {
   return {
     registrationStatus: registration.registrationStatus,
+    paymentStatus: registration.paymentStatus || "unpaid",
     adminNotes: registration.adminNotes || "",
     displayName: registration.displayName || registration.steamName || registration.name || "",
   };
@@ -34,6 +38,7 @@ function draftFromRegistration(registration) {
 function isDraftDirty(registration, draft) {
   return (
     draft.registrationStatus !== registration.registrationStatus ||
+    (draft.paymentStatus || "unpaid") !== (registration.paymentStatus || "unpaid") ||
     (draft.adminNotes || "") !== (registration.adminNotes || "") ||
     (draft.displayName || "").trim() !== (registration.displayName || registration.steamName || registration.name || "").trim()
   );
@@ -42,6 +47,7 @@ function isDraftDirty(registration, draft) {
 export function RegistrationCrmPage({ tournamentId, registrations, refreshRegistrations, canWrite = true, canDelete = canWrite }) {
   const access = useAdminAccess();
   const [manualRegOpen, setManualRegOpen] = useState(false);
+  const [paymentProofPreview, setPaymentProofPreview] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("pending");
   const [paymentFilter, setPaymentFilter] = useState("");
@@ -412,6 +418,28 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
                     Submitted: {new Date(registration.createdAt).toLocaleString()}
                   </p>
                   {registration.notes ? <p className="mt-2 text-sm text-muted-foreground">Player notes: {registration.notes}</p> : null}
+                  {registration.paymentScreenshot ? (
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        className="block rounded-md border border-border p-1"
+                        onClick={() => setPaymentProofPreview(registration.paymentScreenshot)}
+                      >
+                        <img
+                          src={registration.paymentScreenshot}
+                          alt="Payment proof thumbnail"
+                          className="h-20 w-auto max-w-[140px] object-contain"
+                        />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={() => setPaymentProofPreview(registration.paymentScreenshot)}
+                      >
+                        View payment proof
+                      </button>
+                    </div>
+                  ) : null}
                   {registration.archivedAt ? <p className="mt-2 text-sm text-secondary">Archived: {registration.archivedReason || "No reason recorded"}</p> : null}
                   {registration.replacedAt ? (
                     <p className="mt-2 text-sm text-secondary">
@@ -432,7 +460,7 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
                 </div>
               </div>
               <div className="mt-3 flex flex-col gap-2 lg:flex-row lg:items-end">
-                <div className="grid flex-1 gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_2fr]">
+                <div className="grid flex-1 gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_2fr]">
                   <input
                     className="rounded-md border border-input bg-background p-2 disabled:opacity-60 sm:col-span-2 lg:col-span-1"
                     placeholder="Display name (shown on teams)"
@@ -440,6 +468,16 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
                     disabled={archived || !canWrite}
                     onChange={(event) => updateDraft(registration, { displayName: event.target.value })}
                   />
+                  <select
+                    className="rounded-md border border-input bg-background p-2 disabled:opacity-60"
+                    value={draft.paymentStatus}
+                    disabled={archived || !canWrite}
+                    onChange={(event) => updateDraft(registration, { paymentStatus: event.target.value })}
+                  >
+                    <option value="unpaid">Unpaid</option>
+                    <option value="paid">Paid</option>
+                    <option value="refunded">Refunded</option>
+                  </select>
                   <select
                     className="rounded-md border border-input bg-background p-2 disabled:opacity-60"
                     value={draft.registrationStatus}
@@ -590,6 +628,23 @@ export function RegistrationCrmPage({ tournamentId, registrations, refreshRegist
                 Archive registration
               </button>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {paymentProofPreview ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Payment proof"
+          onClick={() => setPaymentProofPreview("")}
+        >
+          <div className="max-h-[90vh] max-w-3xl overflow-auto rounded-lg border border-border bg-card p-3" onClick={(e) => e.stopPropagation()}>
+            <img src={paymentProofPreview} alt="Payment proof" className="max-h-[85vh] w-full object-contain" />
+            <button type="button" className="btn btn-outline mt-3 w-full" onClick={() => setPaymentProofPreview("")}>
+              Close
+            </button>
           </div>
         </div>
       ) : null}

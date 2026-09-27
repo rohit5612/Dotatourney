@@ -4,6 +4,7 @@ import { getCoinBalance } from "./playerAccountRepository.js";
 import { buildCardManifest, listCardAssetsForAccount } from "./cardManifestService.js";
 import { getPublicPlayerProfile } from "./playerProfileService.js";
 import { demoAccessCardTier, isDemoAccessAccount } from "../utils/demoAccessAccount.js";
+import { getSnapshot } from "./opendotaRepository.js";
 
 const CARD_TIER_RANK_SQL = `CASE COALESCE(NULLIF(TRIM(pr.card_tier), ''), 'default')
   WHEN 'holo' THEN 0
@@ -228,6 +229,17 @@ export async function getPlayerAccountAdminDetail(id) {
 
   const publicProfile = account.slug ? await getPublicPlayerProfile(account.slug) : null;
 
+  let dotaStats = null;
+  if (account.steam_id) {
+    const profileSnap = await getSnapshot(id, "profile");
+    const heroesSnap = await getSnapshot(id, "heroes");
+    dotaStats = {
+      lastUpdated: profileSnap?.fetched_at ?? null,
+      profileCached: Boolean(profileSnap?.payload?.profile),
+      heroesCached: Array.isArray(heroesSnap?.payload?.heroes) && heroesSnap.payload.heroes.length > 0,
+    };
+  }
+
   return {
     account: {
       ...publicPlayerAccount(account),
@@ -250,6 +262,7 @@ export async function getPlayerAccountAdminDetail(id) {
           teamHistory: publicProfile.teamHistory,
         }
       : null,
+    dotaStats,
   };
 }
 

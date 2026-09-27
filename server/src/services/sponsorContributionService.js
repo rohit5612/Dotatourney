@@ -7,7 +7,9 @@ import {
   fetchCashfreeOrder,
   publicCashfreeMode,
 } from "./cashfreeService.js";
-import { sendSponsorPaymentConfirmedEmail } from "./emailService.js";
+import { sendSponsorPaymentConfirmedEmail, sendManualPaymentProofReceivedEmail } from "./emailService.js";
+import { assertCheckoutProviderAvailable, publicPaymentFlags } from "./paymentProvider.js";
+import { buildManualUpiPayload } from "../utils/upiPayUri.js";
 import { logAction, logError } from "../utils/serverLogger.js";
 
 const OTP_TTL_MS = 15 * 60 * 1000;
@@ -273,14 +275,47 @@ export async function createSponsorCheckout(email) {
       };
     }
 
-    const provider = cashfreeConfigured() ? "cashfree" : "manual";
+    const provider = assertCheckoutProviderAvailable();
+    const amountPaise = row.amount_rupees * 100;
+
     if (provider === "manual") {
-      const err = new Error("Online payments are not configured. Contact organisers to complete your sponsorship.");
-      err.status = 503;
-      throw err;
+      await client.query(
+        `UPDATE sponsor_contributions
+         SET provider = 'manual', updated_at = NOW()
+         WHERE id = $1`,
+        [row.id],
+      );
+      await client.query("COMMIT");
+
+      const sponsorRef = `SP${String(row.id).replace(/-/g, "").slice(0, 10).toUpperCase()}`;
+      const upi = buildManualUpiPayload({
+        bpcId: sponsorRef,
+        amountRupees: row.amount_rupees,
+        orderType: "sponsor",
+      });
+
+      logAction("payment", "sponsor.checkout_created", {
+        contributionId: row.id,
+        amountRupees: row.amount_rupees,
+        email: row.email,
+        provider: "manual",
+      });
+
+      return {
+        contributionId: row.id,
+        provider: "manual",
+        manualMode: true,
+        amount: amountPaise,
+        currency: "INR",
+        paymentSessionId: null,
+        amountRupees: row.amount_rupees,
+        name: row.name,
+        email: row.email,
+        upi,
+        ...publicPaymentFlags(),
+      };
     }
 
-    const amountPaise = row.amount_rupees * 100;
     const cfOrder = await createCashfreeOrder({
       orderAmountPaise: amountPaise,
       currency: "INR",
@@ -432,6 +467,98 @@ export async function reconcileSponsorContribution(contributionId) {
   await fulfillPaidSponsorContribution(contributionId, { paymentRef: paymentId, paymentId });
   logAction("payment", "sponsor.reconciled", { contributionId, cfOrderId });
   return true;
+}
+
+function sponsorReferenceId(contributionId) {
+  return `SP${String(contributionId).replace(/-/g, "").slice(0, 10).toUpperCase()}`;
+}
+
+export async function submitSponsorManualProof(contributionId, { paymentScreenshot, notes = "" }) {
+  const screenshot = String(paymentScreenshot || "").trim();
+  if (!screenshot) {
+    const err = new Error("Payment screenshot is required");
+    err.status = 400;
+    throw err;
+  }
+
+  const { rows } = await pool.query(`SELECT * FROM sponsor_contributions WHERE id = $1`, [contributionId]);
+  const row = rows[0];
+  if (!row) {
+    const err = new Error("Sponsor contribution not found");
+    err.status = 404;
+    throw err;
+  }
+  if (row.provider !== "manual") {
+    const err = new Error("This sponsorship uses a different payment flow");
+    err.status = 400;
+    throw err;
+  }
+  if (row.flow_stage === "paid") {
+    const err = new Error("This sponsorship is already paid");
+    err.status = 409;
+    throw err;
+  }
+  if (row.flow_stage === "awaiting_review") {
+    const err = new Error("Payment proof was already submitted and is under review");
+    err.status = 409;
+    throw err;
+  }
+  if (row.flow_stage !== "awaiting_payment") {
+    const err = new Error("Complete email verification before submitting payment proof");
+    err.status = 403;
+    throw err;
+  }
+
+  const notesText = String(notes || "").trim();
+  const { rows: updatedRows } = await pool.query(
+    `UPDATE sponsor_contributions
+     SET payment_screenshot = $2,
+         payment_notes = $3,
+         flow_stage = 'awaiting_review',
+         updated_at = NOW()
+     WHERE id = $1
+     RETURNING *`,
+    [contributionId, screenshot, notesText],
+  );
+  const contribution = mapContributionRow(updatedRows[0]);
+
+  logAction("payment", "sponsor.proof_submitted", {
+    contributionId,
+    email: contribution.email,
+    amountRupees: contribution.amountRupees,
+  });
+
+  try {
+    await sendManualPaymentProofReceivedEmail({
+      to: contribution.email,
+      name: contribution.name,
+      tournamentName: "BPC League sponsorship",
+      publicCode: sponsorReferenceId(contributionId),
+      kind: "sponsor",
+    });
+  } catch (err) {
+    logError("email", "sponsor proof mail failed", err, { contributionId });
+  }
+
+  return { ok: true, contributionId, status: "awaiting_review" };
+}
+
+export async function confirmManualSponsorContribution(contributionId) {
+  const { rows } = await pool.query(`SELECT * FROM sponsor_contributions WHERE id = $1`, [contributionId]);
+  const row = rows[0];
+  if (!row) {
+    const err = new Error("Sponsor contribution not found");
+    err.status = 404;
+    throw err;
+  }
+  if (row.provider !== "manual" || row.flow_stage !== "awaiting_review") {
+    return { fulfilled: false };
+  }
+  const result = await fulfillPaidSponsorContribution(contributionId, {
+    paymentRef: "admin-verified",
+    paymentId: `manual-sponsor-${contributionId}`,
+  });
+  return { fulfilled: true, ...result };
 }
 
 export async function getSponsorCheckoutStatus(contributionId) {

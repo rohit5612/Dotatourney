@@ -16,6 +16,11 @@
     <priority>0.9</priority>
   </url>
   <url>
+    <loc>https://bpcleague.in/league</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+  </url>
+  <url>
     <loc>https://bpcleague.in/teams</loc>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>

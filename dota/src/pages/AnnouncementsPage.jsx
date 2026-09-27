@@ -134,6 +134,8 @@ export function AnnouncementsPage({ setup, setSetup, saveTournament }) {
             <h2 className="mt-1 font-serif text-lg tracking-wide">Banner announcement</h2>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
               One floating banner on the home page. It appears every time someone visits the home page; they can hide it for that visit only.
+              Supports HTML and inline CSS (e.g. <code>&lt;strong&gt;</code>, <code>style=&quot;color:…&quot;</code>, or a{" "}
+              <code>&lt;style&gt;</code> block for richer layout).
             </p>
           </div>
           {bannerAnnouncement.body.trim() ? (
@@ -155,7 +157,7 @@ export function AnnouncementsPage({ setup, setSetup, saveTournament }) {
           className="min-h-24 w-full rounded-md border border-input bg-background p-3 text-sm leading-6"
           value={bannerAnnouncement.body}
           onChange={(event) => updateBannerAnnouncement({ body: event.target.value })}
-          placeholder="Short banner message for the landing page (keep it brief for mobile)..."
+          placeholder="Banner message — plain text or HTML (e.g. <strong>Season 3</strong> with inline styles)..."
         />
       </section>
 

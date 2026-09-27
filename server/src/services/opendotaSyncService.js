@@ -20,6 +20,10 @@ import {
 } from "./opendotaRepository.js";
 import { getTournament, updateMatch } from "./tournamentRepository.js";
 import { logError } from "../utils/serverLogger.js";
+import {
+  inferMatchHistoryRestricted,
+  leagueSnapshotIsSettled,
+} from "../utils/opendotaMatchVisibility.js";
 
 let heroesById = null;
 
@@ -124,6 +128,7 @@ export async function filterPlayerMatchRowsForLeague(
   dotaLeagueId,
   { fetchIfMissing = false, maxDetailFetches = env.opendotaMaxMatchDetailFetchesPerSync } = {},
 ) {
+  if (!rows?.length) return [];
   const leagueId = Number(dotaLeagueId);
   const mids = (rows || []).map((r) => Number(r.match_id)).filter((n) => Number.isFinite(n));
   const leagueByMatch = await batchGetMatchLeagueIds(mids);
@@ -148,29 +153,51 @@ export async function syncPlayerOpenDotaSnapshots(playerAccountId, steam32) {
   if (!steam32) return { skipped: true, reason: "no_steam32" };
   const expiresAt = new Date(Date.now() + env.opendotaPlayerSnapshotTtlMs);
 
-  const [profile, wl, heroes, totals] = await Promise.all([
-    opendotaFetch(`/players/${steam32}`),
+  let profile;
+  try {
+    profile = await opendotaFetch(`/players/${steam32}`);
+  } catch (error) {
+    if (error.status === 404) {
+      return { ok: false, reason: "opendota_profile_not_found" };
+    }
+    throw error;
+  }
+
+  const [wl, heroes, totals] = await Promise.all([
     opendotaFetch(`/players/${steam32}/wl`).catch(() => ({ win: 0, lose: 0 })),
     opendotaFetch(`/players/${steam32}/heroes`).catch(() => []),
     opendotaFetch(`/players/${steam32}/totals`).catch(() => []),
   ]);
 
+  const heroesList = Array.isArray(heroes) ? heroes : [];
+  const totalsList = Array.isArray(totals) ? totals : [];
+  const matchHistoryRestricted = inferMatchHistoryRestricted(wl, heroesList, totalsList);
+
   await upsertSnapshot({
     playerAccountId,
     snapshotKind: "profile",
     steam32,
-    payload: { profile, wl, totals: Array.isArray(totals) ? totals : [] },
+    payload: {
+      profile,
+      wl,
+      totals: totalsList,
+      matchHistoryRestricted,
+    },
     expiresAt,
   });
   await upsertSnapshot({
     playerAccountId,
     snapshotKind: "heroes",
     steam32,
-    payload: { heroes: Array.isArray(heroes) ? heroes.slice(0, 20) : [] },
+    payload: { heroes: heroesList.slice(0, 20) },
     expiresAt,
   });
 
-  return { ok: true, fetchedAt: new Date().toISOString() };
+  return {
+    ok: true,
+    fetchedAt: new Date().toISOString(),
+    matchHistoryRestricted,
+  };
 }
 
 export async function syncPlayerLeagueMatches(playerAccountId, steam32, dotaLeagueId) {
@@ -180,24 +207,51 @@ export async function syncPlayerLeagueMatches(playerAccountId, steam32, dotaLeag
   if (
     existing?.expires_at &&
     new Date(existing.expires_at) > new Date() &&
-    existing.payload?.verifiedLeague === true
+    leagueSnapshotIsSettled(existing.payload)
   ) {
     const ids = existing.payload?.matchIds || [];
     return { matchIds: ids, cached: true };
   }
 
   let verified = await listPlayerLeagueRowsFromCache(steam32, dotaLeagueId, 120);
+  let emptyReason = null;
 
   if (verified.length === 0) {
-    const list = await opendotaFetch(`/players/${steam32}/matches`, {
-      league_id: dotaLeagueId,
-      limit: 100,
-    });
-    verified = await filterPlayerMatchRowsForLeague(list, dotaLeagueId, {
-      fetchIfMissing: true,
-      maxDetailFetches: env.opendotaMaxMatchDetailFetchesPerSync,
-    });
+    const profileSnap = await getSnapshot(playerAccountId, "profile");
+    const restricted = profileSnap?.payload?.matchHistoryRestricted === true;
+
+    if (restricted) {
+      emptyReason = "match_history_restricted";
+    } else {
+      let list = [];
+      try {
+        list = await opendotaFetch(`/players/${steam32}/matches`, {
+          league_id: dotaLeagueId,
+          limit: 100,
+        });
+      } catch (error) {
+        if (error.status === 404 || error.status === 403) {
+          emptyReason = "opendota_matches_unavailable";
+        } else {
+          throw error;
+        }
+      }
+      if (!Array.isArray(list)) {
+        list = [];
+      }
+      if (list.length === 0 && !emptyReason) {
+        emptyReason = "no_league_matches_on_opendota";
+      }
+      verified = await filterPlayerMatchRowsForLeague(list, dotaLeagueId, {
+        fetchIfMissing: true,
+        maxDetailFetches: env.opendotaMaxMatchDetailFetchesPerSync,
+      });
+      if (verified.length === 0 && !emptyReason && list.length > 0) {
+        emptyReason = "no_verified_league_matches";
+      }
+    }
   }
+
   const matchIds = [];
   for (const row of verified) {
     const mid = Number(row.match_id);
@@ -213,16 +267,23 @@ export async function syncPlayerLeagueMatches(playerAccountId, steam32, dotaLeag
     });
   }
 
+  const emptyLeagueSync = verified.length === 0;
   const expiresAt = new Date(Date.now() + env.opendotaLeagueIndexTtlMs);
   await upsertSnapshot({
     playerAccountId,
     snapshotKind: kind,
     steam32,
-    payload: { matchIds, raw: verified, verifiedLeague: true },
+    payload: {
+      matchIds,
+      raw: verified,
+      verifiedLeague: true,
+      emptyLeagueSync,
+      ...(emptyLeagueSync && emptyReason ? { emptyReason } : {}),
+    },
     expiresAt,
   });
 
-  return { matchIds };
+  return { matchIds, emptyLeagueSync, emptyReason };
 }
 
 export async function syncLeagueIndexFromRoster(tournamentId) {
@@ -425,9 +486,8 @@ export async function buildLeagueStatsForPlayer(
   if (
     allowOpenDotaSync &&
     steam32 &&
-    (!leagueSnap?.payload?.verifiedLeague ||
-      !Array.isArray(leagueSnap?.payload?.raw) ||
-      leagueSnap.payload.raw.length === 0)
+    !leagueSnap?.payload?.emptyLeagueSync &&
+    !leagueSnapshotIsSettled(leagueSnap?.payload)
   ) {
     await syncPlayerLeagueMatches(playerAccountId, steam32, dotaLeagueId);
     leagueSnap = await getSnapshot(playerAccountId, leagueKind);
@@ -515,6 +575,12 @@ export async function buildLeagueStatsForPlayer(
           }
         : null,
     topHeroes,
+    ...(games === 0 && leagueSnap?.payload?.emptyLeagueSync
+      ? {
+          emptyLeagueSync: true,
+          emptyReason: leagueSnap.payload.emptyReason || "no_opendota_league_matches",
+        }
+      : {}),
   };
 
   if (games === 0 && staleLeagueStats) {

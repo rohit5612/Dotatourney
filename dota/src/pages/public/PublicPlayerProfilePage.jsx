@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { HiOutlineArrowLeft, HiOutlineMapPin, HiOutlineTrophy, HiOutlineUserGroup } from "react-icons/hi2";
+import { HiOutlineArrowLeft, HiOutlineChevronRight, HiOutlineMapPin, HiOutlineTrophy, HiOutlineUserGroup } from "react-icons/hi2";
 import { CardDeck } from "../../components/cards/CardDeck.jsx";
 import { CardTierBadge } from "../../components/cards/CardTierBadge.jsx";
 import { ProfileHonorBadge } from "../../components/honors/ProfileHonorBadge.jsx";
@@ -13,14 +13,19 @@ import { SITE_BRAND_SHORT } from "../../constants/siteMeta.js";
 import { api } from "../../lib/api";
 import { playerApi } from "../../lib/playerApi";
 import { usePublicCachedQuery } from "../../hooks/usePublicCachedQuery.js";
+import { teamAccentStyle, useLogoAccent } from "../../hooks/useLogoAccent.js";
 import { teamLogoForName } from "../player/dashboardTeamCard.js";
 import {
+  premiumAboutClass,
   premiumHeroBandClass,
   premiumLayoutClass,
   premiumShineTextClass,
   premiumTierPanelClass,
 } from "../../utils/cardTierEffects.js";
 import { resolveProfileBack } from "../../utils/profileBackNav.js";
+import { buildLeagueFranchiseSlugLookup, resolveTeamFranchiseHref } from "../../utils/teamPage.js";
+import { resolveAccountAvatarUrl } from "../../utils/resolvePlayerAvatar.js";
+import { normalizePortraitCrop, portraitCropTransform } from "../../utils/portraitCropStyle.js";
 import { rankMedalImageUrl } from "../../utils/dotaAssets.js";
 import { mmrFromRankTier } from "../../utils/dotaRankMmr.js";
 import {
@@ -79,6 +84,13 @@ function resolveStintStatus(entry) {
   return { label: "Former", active: false };
 }
 
+function stintFranchiseHref(entry, franchiseLookup) {
+  return resolveTeamFranchiseHref(
+    { name: entry.teamName, leagueTeamSlug: entry.leagueTeamSlug },
+    franchiseLookup,
+  );
+}
+
 function groupStintsBySeason(teamHistory) {
   const groups = new Map();
   for (const entry of teamHistory || []) {
@@ -100,27 +112,126 @@ function groupStintsBySeason(teamHistory) {
   return [...groups.values()].sort((a, b) => (b.seasonNumber ?? 0) - (a.seasonNumber ?? 0));
 }
 
-function TeammateChip({ mate, isSelf, linkState }) {
-  const content = (
+function sortRosterMembers(a, b) {
+  if (Boolean(b.isCaptain) !== Boolean(a.isCaptain)) return a.isCaptain ? -1 : 1;
+  return String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" });
+}
+
+function applyCaptainFallback(members, captainName) {
+  if (!members.length || members.some((m) => m.isCaptain)) return [...members].sort(sortRosterMembers);
+  const cap = String(captainName || "").trim().toLowerCase();
+  if (!cap) return [...members].sort(sortRosterMembers);
+  let marked = false;
+  const flagged = members.map((mate) => {
+    if (marked) return mate;
+    const labels = [mate.displayName, mate.name]
+      .map((value) => String(value || "").trim().toLowerCase())
+      .filter(Boolean);
+    if (labels.some((label) => label === cap)) {
+      marked = true;
+      return { ...mate, isCaptain: true };
+    }
+    return mate;
+  });
+  return flagged.sort(sortRosterMembers);
+}
+
+function CaptainCrownIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M5 16l-1-9 5 3 2-6 2 6 5-3-1 9H5zm0 2h14v2H5v-2z" />
+    </svg>
+  );
+}
+
+function rosterSlotPortraitStyle(mate) {
+  const customAvatar = String(mate?.avatarUrl || "").trim();
+  const crops = mate?.avatarPortraitCrop;
+  const playerCrop = crops?.player;
+  if (!customAvatar || !playerCrop) return undefined;
+  return portraitCropTransform(normalizePortraitCrop(playerCrop));
+}
+
+function ProfileRosterSlot({ mate, linkState, past = false }) {
+  const isCaptain = Boolean(mate.isCaptain);
+  const avatarUrl = resolveAccountAvatarUrl(mate);
+  const portraitStyle = rosterSlotPortraitStyle(mate);
+  const slotClass = [
+    "player-profile__roster-slot",
+    past ? "player-profile__roster-slot--past" : "",
+    isCaptain ? "player-profile__roster-slot--captain" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const body = (
     <>
-      <span className="player-profile__teammate-chip-avatar" aria-hidden="true">
-        {(mate.name || "?")[0]}
+      {isCaptain ? (
+        <span className="player-profile__roster-slot-captain" title="Captain">
+          <CaptainCrownIcon />
+        </span>
+      ) : null}
+      <span className="player-profile__roster-slot-avatar" aria-hidden="true">
+        {avatarUrl ? (
+          <img
+            src={avatarUrl}
+            alt=""
+            className="player-profile__roster-slot-avatar-img"
+            style={portraitStyle}
+            loading="lazy"
+            decoding="async"
+          />
+        ) : (
+          (mate.name || "?")[0]
+        )}
       </span>
-      <span className="player-profile__teammate-chip-copy">
-        <span className="player-profile__teammate-chip-name">{mate.name}</span>
-        <PlayerRoleIcons player={mate} className="player-profile__teammate-chip-roles" size="sm" />
-      </span>
+      <span className="player-profile__roster-slot-name">{mate.name}</span>
+      <PlayerRoleIcons player={mate} className="player-profile__roster-slot-roles" size="sm" />
     </>
   );
 
-  if (mate.slug && !isSelf) {
+  if (mate.slug) {
     return (
-      <Link to={`/player/${mate.slug}`} state={linkState} className="player-profile__teammate-chip">
-        {content}
+      <Link to={`/player/${mate.slug}`} state={linkState} className={slotClass}>
+        {body}
       </Link>
     );
   }
-  return <div className={`player-profile__teammate-chip${isSelf ? " player-profile__teammate-chip--self" : ""}`}>{content}</div>;
+
+  return <div className={slotClass}>{body}</div>;
+}
+
+function ProfileRosterFormation({ members, linkState, past = false }) {
+  if (!members.length) return null;
+  const topRow = members.slice(0, 3);
+  const bottomRow = members.slice(3, 5);
+  const overflow = members.slice(5);
+
+  return (
+    <div className={`player-profile__roster-formation${past ? " player-profile__roster-formation--past" : ""}`}>
+      {topRow.length ? (
+        <div className="player-profile__roster-formation-row player-profile__roster-formation-row--three">
+          {topRow.map((mate) => (
+            <ProfileRosterSlot key={mate.id || mate.name} mate={mate} linkState={linkState} past={past} />
+          ))}
+        </div>
+      ) : null}
+      {bottomRow.length ? (
+        <div className="player-profile__roster-formation-row player-profile__roster-formation-row--two">
+          {bottomRow.map((mate) => (
+            <ProfileRosterSlot key={mate.id || mate.name} mate={mate} linkState={linkState} past={past} />
+          ))}
+        </div>
+      ) : null}
+      {overflow.length ? (
+        <div className="player-profile__roster-formation-row player-profile__roster-formation-row--overflow">
+          {overflow.map((mate) => (
+            <ProfileRosterSlot key={mate.id || mate.name} mate={mate} linkState={linkState} past={past} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function PublicPlayerProfilePage() {
@@ -135,6 +246,7 @@ export function PublicPlayerProfilePage() {
   const { data: dotaStats } = usePublicCachedQuery(dotaCacheKey, fetchDotaStats);
   const [cardDeck, setCardDeck] = useState(null);
   const [cardDeckLoading, setCardDeckLoading] = useState(true);
+  const [leagueTeams, setLeagueTeams] = useState([]);
 
   useEffect(() => {
     if (!slug) return;
@@ -145,6 +257,21 @@ export function PublicPlayerProfilePage() {
       .catch(() => setCardDeck(null))
       .finally(() => setCardDeckLoading(false));
   }, [slug]);
+
+  useEffect(() => {
+    let active = true;
+    api
+      .getLeagueTeams()
+      .then((payload) => {
+        if (active) setLeagueTeams(payload.teams || []);
+      })
+      .catch(() => {
+        if (active) setLeagueTeams([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const account = profile?.account;
   const card = profile?.card;
@@ -163,9 +290,28 @@ export function PublicPlayerProfilePage() {
   const currentTeam = profile?.currentTeam;
   const aboutTeamLogoUrl =
     teamLogoForName(currentTeam?.team?.name) || currentTeam?.team?.logoUrl?.trim() || "";
-  const heroTeamLogoStyle = aboutTeamLogoUrl
-    ? { "--hero-team-logo": `url("${aboutTeamLogoUrl}")` }
+  const aboutTeamLogoStyle = aboutTeamLogoUrl
+    ? { "--about-team-logo": `url("${aboutTeamLogoUrl}")` }
     : undefined;
+  const teamAboutFxClass = premiumAboutClass(cardTier);
+  const hasTeamDigestBrand = Boolean(currentTeam?.team && aboutTeamLogoUrl);
+  const hasCustomTeamAccent = Boolean(currentTeam?.team?.accentColor?.trim());
+  const sampledTeamAccent = useLogoAccent(aboutTeamLogoUrl, {
+    enabled: hasTeamDigestBrand && !hasCustomTeamAccent,
+  });
+  const heroDigestTeamAccentStyle = hasTeamDigestBrand
+    ? teamAccentStyle(currentTeam?.team, sampledTeamAccent)
+    : undefined;
+  const heroDigestStyle = hasTeamDigestBrand
+    ? { ...aboutTeamLogoStyle, ...heroDigestTeamAccentStyle }
+    : undefined;
+  const heroDigestTeamBgClass = hasTeamDigestBrand
+    ? ` player-profile__about player-profile__about--team player-profile__about--team-accent${teamAboutFxClass ? ` ${teamAboutFxClass}` : ""}`
+    : "";
+  const leagueTeamSlug = currentTeam?.team?.leagueTeamSlug?.trim() || "";
+  const franchiseHref = leagueTeamSlug ? `/league/${encodeURIComponent(leagueTeamSlug)}` : null;
+  const teamPanelAccentStyle = currentTeam?.team ? teamAccentStyle(currentTeam.team, sampledTeamAccent) : undefined;
+  const teamPanelBranded = Boolean(currentTeam?.team && aboutTeamLogoUrl);
   const dotaMmr =
     dotaStats?.global?.rankMmr ?? mmrFromRankTier(dotaStats?.global?.rankTier) ?? null;
   const heroDigestRankMedalUrl = useMemo(() => {
@@ -177,6 +323,7 @@ export function PublicPlayerProfilePage() {
     );
   }, [dotaStats?.global?.rankTier, dotaStats?.global?.leaderboardRank]);
   const stintGroups = useMemo(() => groupStintsBySeason(profile?.teamHistory), [profile?.teamHistory]);
+  const franchiseSlugLookup = useMemo(() => buildLeagueFranchiseSlugLookup(leagueTeams), [leagueTeams]);
   const dotaMatchById = useMemo(() => {
     const byId = new Map();
     for (const row of dotaStats?.matchHistory || []) {
@@ -200,11 +347,29 @@ export function PublicPlayerProfilePage() {
         role: currentTeam.player.role,
         roles: currentTeam.player.roles,
         slug: account?.slug,
-        isCaptain: currentTeam.player.isCaptain,
+        isCaptain: Boolean(currentTeam.player.isCaptain),
+        avatarUrl: resolveAccountAvatarUrl(account),
+        steamAvatarUrl: account?.steamAvatarUrl || "",
+        avatarPortraitCrop: account?.avatarPortraitCrop || {},
       });
     }
-    return list;
+    return applyCaptainFallback(list, currentTeam.team?.captain);
   }, [currentTeam, account?.slug]);
+
+  const formerRosterMembers = useMemo(() => {
+    if (!currentTeam?.team) return [];
+    const list = currentTeam.formerTeammates || [];
+    return applyCaptainFallback(list, currentTeam.team?.captain);
+  }, [currentTeam]);
+
+  const profilePlayerIsCaptain = useMemo(() => {
+    const selfId = currentTeam?.player?.id;
+    if (selfId) {
+      const selfRow = rosterMembers.find((mate) => mate.id === selfId);
+      if (selfRow?.isCaptain) return true;
+    }
+    return Boolean(currentTeam?.player?.isCaptain);
+  }, [currentTeam, rosterMembers]);
 
   return (
     <div className={`player-profile-layout community-page-layout${layoutFxClass ? ` ${layoutFxClass}` : ""}`}>
@@ -212,12 +377,8 @@ export function PublicPlayerProfilePage() {
       <section
         className={`community-page__hero-band player-profile__hero-band player-profile__hero-band--wire${heroBandClass ? ` ${heroBandClass}` : ""}`}
         aria-labelledby="player-profile-title"
-        style={heroTeamLogoStyle}
       >
         <div className="community-page__hero-overlay" aria-hidden="true" />
-        {aboutTeamLogoUrl ? (
-          <div className="player-profile__hero-team-orb" aria-hidden="true" />
-        ) : null}
         <div className="community-page__hero-inner player-profile__hero-inner">
           <Link to={profileBack.to} className="player-profile__back">
             <HiOutlineArrowLeft aria-hidden="true" />
@@ -270,14 +431,22 @@ export function PublicPlayerProfilePage() {
 
               <article
                 className={profilePanelClass(
-                  `community-glass--liquid player-profile__panel player-profile__hero-digest${heroDigestRankMedalUrl ? " player-profile__hero-digest--rank" : ""}`,
+                  `community-glass--liquid player-profile__panel player-profile__hero-digest${heroDigestRankMedalUrl ? " player-profile__hero-digest--rank" : ""}${heroDigestTeamBgClass}`,
                 )}
+                style={heroDigestStyle}
               >
+                {heroDigestTeamBgClass ? (
+                  <>
+                    <div className="player-profile__about-team-bleed" aria-hidden="true" />
+                    <div className="player-profile__about-team-bg" aria-hidden="true" />
+                  </>
+                ) : null}
                 {heroDigestRankMedalUrl ? (
                   <div className="hero-digest__rank-medal" aria-hidden="true">
                     <img src={heroDigestRankMedalUrl} alt="" decoding="async" />
                   </div>
                 ) : null}
+                <div className="player-profile__about-inner player-profile__hero-digest-inner">
                 <div className="hero-digest__intro">
                 <p
                   className={`hero-digest__bio player-profile__bio${account?.bio ? "" : " player-profile__bio--muted"}`}
@@ -316,6 +485,7 @@ export function PublicPlayerProfilePage() {
                     ) : null}
                   </div>
                 )}
+                </div>
               </article>
             </div>
           )}
@@ -336,35 +506,68 @@ export function PublicPlayerProfilePage() {
           <>
             <div className="player-profile__content-grid profile-feed-layout profile-wireframe">
               <div className="player-profile__content-col player-profile__content-col--main profile-feed profile-wireframe__main">
-                <article className={`profile-feed__post profile-feed__post--team ${profilePanelClass()}`.trim()}>
-                  <h2 className="player-profile__section-title">Team</h2>
+                <article
+                  className={`profile-feed__post profile-feed__post--team player-profile__team-panel${teamPanelBranded ? " player-profile__team-panel--branded" : ""} ${profilePanelClass()}`.trim()}
+                  style={teamPanelAccentStyle}
+                >
+                  <header className="player-profile__team-panel-head">
+                    <div className="player-profile__team-panel-head-copy">
+                      <p className="player-profile__team-panel-eyebrow">Assigned franchise</p>
+                      <h2 className="player-profile__section-title player-profile__team-panel-title">Team</h2>
+                    </div>
+                    {currentTeam?.team && rosterMembers.length ? (
+                      <span className="player-profile__team-panel-count">{rosterMembers.length} players</span>
+                    ) : null}
+                  </header>
                   {currentTeam?.team ? (
                     <>
-                      <div className="player-profile__team-card player-profile__team-card--featured profile-wireframe__about-team">
+                      <div
+                        className={`player-profile__team-franchise${teamPanelBranded ? " player-profile__team-franchise--branded" : ""}`}
+                      >
                         <TeamLogoImg
                           src={aboutTeamLogoUrl}
                           alt=""
-                          width={48}
-                          height={48}
-                          className="player-profile__team-logo"
+                          width={96}
+                          height={96}
+                          className="player-profile__team-franchise-logo"
                         />
-                        <div className="player-profile__team-card-copy">
-                          <p className="player-profile__team-name">{currentTeam.team.name}</p>
-                          {currentTeam.player?.role ? (
-                            <p className="player-profile__team-role">Role · {currentTeam.player.role}</p>
-                          ) : null}
+                        <div className="player-profile__team-franchise-main">
+                          <div className="player-profile__team-franchise-top">
+                            <h3 className="player-profile__team-name">{currentTeam.team.name}</h3>
+                            {franchiseHref ? (
+                              <Link to={franchiseHref} className="player-profile__franchise-btn">
+                                View franchise
+                                <HiOutlineChevronRight aria-hidden="true" />
+                              </Link>
+                            ) : null}
+                          </div>
+                          {(currentTeam.player?.role || profilePlayerIsCaptain) && (
+                            <div className="player-profile__team-franchise-meta">
+                              {currentTeam.player?.role ? (
+                                <span className="player-profile__team-meta-line">
+                                  Your role · <strong>{currentTeam.player.role}</strong>
+                                </span>
+                              ) : null}
+                              {profilePlayerIsCaptain ? (
+                                <span className="player-profile__team-meta-line player-profile__team-meta-line--captain">
+                                  <CaptainCrownIcon />
+                                  Team captain
+                                </span>
+                              ) : null}
+                            </div>
+                          )}
                         </div>
                       </div>
                       {rosterMembers.length ? (
-                        <div className="player-profile__teammate-grid profile-wireframe__about-roster">
-                          {rosterMembers.map((mate) => (
-                            <TeammateChip
-                              key={mate.id || mate.name}
-                              mate={mate}
-                              isSelf={mate.id === currentTeam?.player?.id}
-                              linkState={location.state}
-                            />
-                          ))}
+                        <div className="player-profile__team-roster">
+                          <p className="player-profile__team-roster-label">Active roster</p>
+                          <ProfileRosterFormation members={rosterMembers} linkState={location.state} />
+                        </div>
+                      ) : null}
+                      {formerRosterMembers.length ? (
+                        <div className="player-profile__team-roster player-profile__team-roster--past">
+                          <p className="player-profile__team-roster-label">Past roster</p>
+                          <ProfileRosterFormation members={formerRosterMembers} linkState={location.state} past />
                         </div>
                       ) : null}
                     </>
@@ -420,6 +623,7 @@ export function PublicPlayerProfilePage() {
                             {group.stints.map((entry) => {
                               const stintStatus = resolveStintStatus(entry);
                               const logo = entry.logoUrl || teamLogoForName(entry.teamName);
+                              const teamFranchiseHref = stintFranchiseHref(entry, franchiseSlugLookup);
                               return (
                                 <li key={entry.membershipId || entry.rosterSnapshotId} className="player-profile__stint-item">
                                   <div className="player-profile__stint-team">
@@ -431,7 +635,16 @@ export function PublicPlayerProfilePage() {
                                       className="player-profile__history-logo"
                                     />
                                     <div>
-                                      <p className="player-profile__history-title">{entry.teamName}</p>
+                                      {teamFranchiseHref ? (
+                                        <Link
+                                          to={teamFranchiseHref}
+                                          className="player-profile__history-title"
+                                        >
+                                          {entry.teamName}
+                                        </Link>
+                                      ) : (
+                                        <p className="player-profile__history-title">{entry.teamName}</p>
+                                      )}
                                       <p className="player-profile__history-sub">
                                         {entry.startedAt
                                           ? formatDate(entry.startedAt)

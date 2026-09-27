@@ -36,13 +36,19 @@ import seasonsRouter from "./admin/seasons.js";
 import leagueTeamsRouter from "./admin/leagueTeams.js";
 import { orgRosterSchema } from "../services/seasonContentSchema.js";
 import {
+  getVersionChangeLog,
   getVersionHistory,
   getWebsiteVersion,
   updateOrgRoster,
+  updateVersionChangeLog,
   updateVersionHistory,
   updateWebsiteVersion,
 } from "../services/siteContentService.js";
-import { versionHistorySchema, websiteVersionSchema } from "../services/websiteVersionSchema.js";
+import {
+  versionChangeLogSchema,
+  versionHistorySchema,
+  websiteVersionSchema,
+} from "../services/websiteVersionSchema.js";
 import { invalidatePublicCache } from "../services/publicCache.js";
 import { listFormatPresets, resolveFormatPreset } from "../services/formatPresets.js";
 import {
@@ -80,8 +86,12 @@ router.put("/site-content/org-roster", requireAdmin, requirePermission("seasons.
 
 router.get("/site-content/version", requireAdmin, requirePermission("siteVersion.read"), async (_req, res, next) => {
   try {
-    const [websiteVersion, versionHistory] = await Promise.all([getWebsiteVersion(), getVersionHistory()]);
-    return res.json({ websiteVersion, versionHistory });
+    const [websiteVersion, versionHistory, versionChangeLog] = await Promise.all([
+      getWebsiteVersion(),
+      getVersionHistory(),
+      getVersionChangeLog(),
+    ]);
+    return res.json({ websiteVersion, versionHistory, versionChangeLog });
   } catch (error) {
     return next(error);
   }
@@ -127,6 +137,29 @@ router.put(
         payload: { entryCount: versionHistory.entries.length },
       });
       return res.json({ versionHistory });
+    } catch (error) {
+      return next(error);
+    }
+  },
+);
+
+router.put(
+  "/site-content/version-changelog",
+  requireAdmin,
+  requirePermission("siteVersion.update"),
+  async (req, res, next) => {
+    try {
+      const payload = versionChangeLogSchema.parse(req.body);
+      const versionChangeLog = await updateVersionChangeLog(payload);
+      invalidatePublicCache();
+      await writeAuditLog({
+        adminUserId: req.adminUser.id,
+        action: "site_content.version_changelog.update",
+        entityType: "site_content",
+        entityId: "version_changelog",
+        payload: { lineCount: versionChangeLog.lines.length },
+      });
+      return res.json({ versionChangeLog });
     } catch (error) {
       return next(error);
     }
@@ -591,6 +624,26 @@ router.patch("/card-assets/:id", requireAdmin, async (req, res, next) => {
       payload: { status },
     });
     return res.json({ asset });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post("/sponsor-contributions/:id/confirm-payment", requireAdmin, requireSuperadmin, async (req, res, next) => {
+  try {
+    const { confirmManualSponsorContribution } = await import("../services/sponsorContributionService.js");
+    const result = await confirmManualSponsorContribution(req.params.id);
+    if (!result.fulfilled) {
+      return res.status(400).json({ message: "Contribution is not awaiting manual payment confirmation" });
+    }
+    await writeAuditLog({
+      adminUserId: req.adminUser.id,
+      action: "sponsor.confirm_manual_payment",
+      entityType: "sponsor_contribution",
+      entityId: req.params.id,
+      payload: {},
+    });
+    return res.json(result);
   } catch (error) {
     return next(error);
   }

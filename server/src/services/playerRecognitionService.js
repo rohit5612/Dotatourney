@@ -392,6 +392,7 @@ export async function buildTeamStintHistory(playerAccountId) {
       rosterName: stint.roster_name,
       teamName: stint.team_name,
       logoUrl: stint.logo_url || "",
+      leagueTeamSlug: stint.league_team_slug || "",
       tournamentName: stint.tournament_name,
       tournamentSlug: stint.tournament_slug,
       tournamentId: stint.tournament_id,

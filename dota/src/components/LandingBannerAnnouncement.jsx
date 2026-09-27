@@ -2,10 +2,18 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { HiOutlineMegaphone, HiOutlineXMark } from "react-icons/hi2";
 import { formatAnnouncementPostedAt, pickBannerAnnouncement } from "../lib/announcementEntries.js";
+import {
+  bannerAnnouncementContentClassName,
+  sanitizeBannerAnnouncementHtml,
+} from "../lib/sanitizeRulebookHtml.js";
 
 export function LandingBannerAnnouncement({ tournament }) {
   const bannerSource = tournament?.banner_announcements;
   const banner = useMemo(() => pickBannerAnnouncement(bannerSource), [JSON.stringify(bannerSource ?? [])]);
+  const bannerHtml = useMemo(
+    () => (banner?.body ? sanitizeBannerAnnouncementHtml(banner.body) : ""),
+    [banner?.body],
+  );
   const [dismissed, setDismissed] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -31,7 +39,10 @@ export function LandingBannerAnnouncement({ tournament }) {
           </span>
           <div className="min-w-0 flex-1 overflow-y-auto">
             <p className="landing-banner-announcement__label">Important announcement</p>
-            <p className="landing-banner-announcement__body">{banner.body}</p>
+            <div
+              className={`landing-banner-announcement__body ${bannerAnnouncementContentClassName}`}
+              dangerouslySetInnerHTML={{ __html: bannerHtml }}
+            />
             {banner.postedAt ? (
               <p className="landing-banner-announcement__date">{formatAnnouncementPostedAt(banner.postedAt)}</p>
             ) : null}

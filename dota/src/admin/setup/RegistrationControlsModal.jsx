@@ -55,7 +55,7 @@ export function RegistrationControlsModal({
               <p className="setup-reg-status__label">{registrationsOpen ? "Registrations open" : "Registrations closed"}</p>
               <p className="setup-reg-status__hint">
                 {registrationsOpen
-                  ? "Players can complete checkout on the public registration page."
+                  ? "Players can register and pay from their player dashboard."
                   : "The registration form is hidden until you open again."}
               </p>
             </div>

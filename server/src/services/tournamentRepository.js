@@ -409,16 +409,21 @@ export async function replaceTeamsAndPlayers(tournamentId, teams, players, teamP
   }
 
   for (const player of players) {
+    const linkedAccountId = await resolveValidPlayerAccountId(pool, {
+      registrationId: player.registrationId || null,
+      playerAccountId: player.playerAccountId || player.player_account_id || null,
+    });
     await pool.query(
       `INSERT INTO players (
-        id, tournament_id, registration_id, name, display_name, role, roles, mmr, steam_name,
+        id, tournament_id, registration_id, player_account_id, name, display_name, role, roles, mmr, steam_name,
         steam_profile, discord_handle, location, is_captain
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
       [
         player.id,
         tournamentId,
         player.registrationId || null,
+        linkedAccountId,
         player.name,
         player.displayName || player.display_name || player.name || "",
         player.role,
@@ -451,8 +456,9 @@ async function loadWorkingRoster(client, tournamentId) {
     [tournamentId],
   );
   const playersResult = await client.query(
-    `SELECT id, registration_id AS "registrationId", name, display_name AS "displayName", role, roles, mmr, steam_name AS "steamName",
-            steam_profile AS "steamProfile", discord_handle AS "discordHandle", location, is_captain AS "isCaptain"
+    `SELECT id, registration_id AS "registrationId", player_account_id AS "playerAccountId", name, display_name AS "displayName",
+            role, roles, mmr, steam_name AS "steamName", steam_profile AS "steamProfile", discord_handle AS "discordHandle",
+            location, is_captain AS "isCaptain"
      FROM players
      WHERE tournament_id = $1
      ORDER BY created_at ASC`,
@@ -496,6 +502,32 @@ async function resolvePlayerAccountId(client, registrationId) {
   return rows[0]?.player_account_id || null;
 }
 
+/** Returns a player_accounts.id that exists, or null (avoids roster_snapshot_players FK violations). */
+async function resolveValidPlayerAccountId(client, { registrationId = null, playerAccountId = null } = {}) {
+  const candidateIds = [];
+  if (playerAccountId) candidateIds.push(playerAccountId);
+  if (registrationId) {
+    const fromRegistration = await resolvePlayerAccountId(client, registrationId);
+    if (fromRegistration) candidateIds.push(fromRegistration);
+  }
+  for (const id of candidateIds) {
+    const { rows } = await client.query(`SELECT id FROM player_accounts WHERE id = $1`, [id]);
+    if (rows[0]?.id) return rows[0].id;
+  }
+  if (registrationId) {
+    const { rows } = await client.query(
+      `SELECT pa.id
+       FROM player_registrations pr
+       JOIN player_accounts pa ON lower(pa.email) = lower(pr.email)
+       WHERE pr.id = $1
+       LIMIT 1`,
+      [registrationId],
+    );
+    if (rows[0]?.id) return rows[0].id;
+  }
+  return null;
+}
+
 async function replaceRosterSnapshotContents(client, tournamentId, rosterId) {
   const roster = await loadWorkingRoster(client, tournamentId);
   const teamIdMap = new Map();
@@ -533,7 +565,10 @@ async function replaceRosterSnapshotContents(client, tournamentId, rosterId) {
   for (const player of roster.players) {
     const snapshotPlayerId = randomUUID();
     playerIdMap.set(player.id, snapshotPlayerId);
-    const playerAccountId = await resolvePlayerAccountId(client, player.registrationId);
+    const playerAccountId = await resolveValidPlayerAccountId(client, {
+      registrationId: player.registrationId,
+      playerAccountId: player.playerAccountId,
+    });
     await client.query(
       `INSERT INTO roster_snapshot_players (
         id, roster_snapshot_id, tournament_id, source_player_id, registration_id, player_account_id, name, display_name, role, roles, mmr,
@@ -964,7 +999,10 @@ async function ensureSnapshotPlayerForRegistration(client, tournamentId, rosterI
 
   const snapshotPlayerId = randomUUID();
   const role = primaryRoleFromRegistration(registration);
-  const playerAccountId = registration.player_account_id || registration.playerAccountId || null;
+  const playerAccountId = await resolveValidPlayerAccountId(client, {
+    registrationId: registration.id,
+    playerAccountId: registration.player_account_id || registration.playerAccountId || null,
+  });
   await client.query(
     `INSERT INTO roster_snapshot_players (
       id, roster_snapshot_id, tournament_id, source_player_id, registration_id, player_account_id, name, display_name, role, roles, mmr,

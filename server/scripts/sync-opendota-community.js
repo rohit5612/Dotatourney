@@ -103,22 +103,23 @@ async function main() {
     printHelp();
     process.exit(0);
   }
-  if (args.tocsv && args.dryRun) {
+  if (args.toCsv && args.dryRun) {
     console.error("--tocsv and --dry-run cannot be combined");
     process.exit(1);
   }
 
   const coverage = await countOpendotaCoverage();
   log("OpenDota community sync starting", {
-    mode: args.tocsv ? "csv" : "database",
+    mode: args.toCsv ? "csv" : "database",
     dryRun: args.dryRun,
     force: args.force,
     throttleMs: env.opendotaMinRequestIntervalMs,
     hasApiKey: Boolean(env.opendotaApiKey),
+    rateLimitTier: env.opendotaApiKey ? "api_key" : "anonymous_free",
     coverage,
   });
 
-  if (args.tocsv) {
+  if (args.toCsv) {
     beginOpendotaExportBuffer();
   }
 
@@ -132,7 +133,7 @@ async function main() {
         try {
           const index = await syncLeagueIndexFromRoster(tournament.id);
           let link = { skipped: true, reason: "csv_export_mode" };
-          if (!args.tocsv) {
+          if (!args.toCsv) {
             link = await linkTournamentMatches(tournament.id);
           } else {
             log(
@@ -169,9 +170,18 @@ async function main() {
         } else if (args.dryRun) {
           log("  profile: would sync");
         } else {
-          await syncPlayerOpenDotaSnapshots(player.id, player.steam32);
-          stats.profileSynced += 1;
-          log("  profile: synced (profile + heroes snapshots)");
+          const profileResult = await syncPlayerOpenDotaSnapshots(player.id, player.steam32);
+          if (profileResult.ok === false) {
+            stats.errors += 1;
+            log(`  profile: skipped (${profileResult.reason || "failed"})`);
+          } else {
+            stats.profileSynced += 1;
+            if (profileResult.matchHistoryRestricted) {
+              log("  profile: synced — public match history appears restricted on OpenDota");
+            } else {
+              log("  profile: synced (profile + heroes snapshots)");
+            }
+          }
         }
 
         const leagues = await listLeagueIdsForPlayerAccount(player.id);
@@ -220,6 +230,8 @@ async function main() {
           log(`  league ${leagueLabel}: synced`, {
             matchIds: sync.matchIds?.length ?? 0,
             cached: Boolean(sync.cached),
+            emptyLeagueSync: Boolean(sync.emptyLeagueSync),
+            emptyReason: sync.emptyReason || null,
             games: built.games,
             winRate: built.winRate,
           });
@@ -233,7 +245,7 @@ async function main() {
       }
     }
 
-    if (args.tocsv) {
+    if (args.toCsv) {
       const buffered = getOpendotaExportBufferRows();
       await writeOpendotaCsvBundle({
         snapshots: buffered.snapshots,
@@ -245,21 +257,21 @@ async function main() {
           playersProcessed: stats.playersProcessed,
           tournaments: stats.tournaments,
         },
-      }, args.tocsv);
-      log(`CSV export written to ${args.tocsv}`, {
+      }, args.toCsv);
+      log(`CSV export written to ${args.toCsv}`, {
         snapshots: buffered.snapshots.length,
         matchCache: buffered.matchCache.length,
         leagueIndex: buffered.leagueIndex.length,
       });
     }
 
-    if (!args.dryRun && !args.tocsv) {
+    if (!args.dryRun && !args.toCsv) {
       invalidatePublicCache();
     }
 
     log("OpenDota community sync finished", stats);
   } finally {
-    if (args.tocsv) {
+    if (args.toCsv) {
       endOpendotaExportBuffer();
     }
     await pool.end();

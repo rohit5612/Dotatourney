@@ -195,21 +195,56 @@ export async function listLeagueTeamsPublic() {
               array_agg(DISTINCT s.number ORDER BY s.number)
               FILTER (WHERE s.number IS NOT NULL),
               '{}'
-            ) AS seasons_played,
-            COALESCE(
-              array_agg(DISTINCT s.number ORDER BY s.number)
-              FILTER (WHERE ste.placement = 1),
-              '{}'
-            ) AS championship_seasons
+            ) AS seasons_played
      FROM league_teams lt
      LEFT JOIN season_team_entries ste ON ste.league_team_id = lt.id
      LEFT JOIN seasons s ON s.id = ste.season_id
      GROUP BY lt.id
      ORDER BY lt.sort_order ASC, lt.name ASC`,
   );
+
+  const { rows: entryRows } = await pool.query(
+    `SELECT ste.league_team_id,
+            ste.display_name AS "displayName",
+            ste.placement,
+            ste.honors,
+            s.number AS "seasonNumber",
+            s.tournament_id AS "tournamentId"
+     FROM season_team_entries ste
+     JOIN seasons s ON s.id = ste.season_id`,
+  );
+
+  const honorsCache = await loadTournamentHonorsCache();
+  const championshipByTeamId = new Map();
+
+  for (const entry of entryRows) {
+    const honorsFromTournament = entry.tournamentId
+      ? await honorsCache.get(entry.tournamentId)
+      : null;
+    const storedHonors = entry.honors && typeof entry.honors === "object" ? entry.honors : {};
+    const placement = resolveSeasonPlacement({
+      placement: entry.placement,
+      honors: storedHonors,
+      honorsFromTournament,
+      teamNameForPlacement: entry.displayName || "",
+    });
+    if (placement !== 1) continue;
+    const teamId = entry.league_team_id;
+    const seasonNumber = Number(entry.seasonNumber);
+    if (!teamId || !Number.isFinite(seasonNumber)) continue;
+    const list = championshipByTeamId.get(teamId) || [];
+    if (!list.includes(seasonNumber)) list.push(seasonNumber);
+    championshipByTeamId.set(teamId, list);
+  }
+
+  for (const [teamId, seasons] of championshipByTeamId) {
+    seasons.sort((a, b) => a - b);
+    championshipByTeamId.set(teamId, seasons);
+  }
+
   return rows.map((row) => {
     const team = mapLeagueTeamRow(row);
-    const championshipSeasons = row.championship_seasons || row.championshipSeasons || [];
+    const championshipSeasons = championshipByTeamId.get(row.id) || [];
     return {
       id: team.id,
       slug: team.slug,
@@ -221,7 +256,7 @@ export async function listLeagueTeamsPublic() {
       status: team.status,
       foundedSeasonNumber: team.foundedSeasonNumber,
       seasonsPlayed: team.seasonsPlayed,
-      championshipSeasons: Array.isArray(championshipSeasons) ? championshipSeasons : [],
+      championshipSeasons,
     };
   });
 }

@@ -226,6 +226,24 @@
   isolation: isolate;
 }
 
+.player-profile__hero-digest.player-profile__about--team {
+  position: relative;
+  overflow: hidden;
+}
+
+.player-profile__hero-digest .player-profile__hero-digest-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+
+.player-profile__hero-digest.player-profile__about .player-profile__hero-digest-inner {
+  padding: 0;
+}
+
 .hero-digest__rank-medal {
   position: absolute;
   top: clamp(0.85rem, 2.2vw, 1.25rem);
@@ -267,7 +285,9 @@
   object-position: top right;
 }
 
-.player-profile__hero-digest--rank > *:not(.hero-digest__rank-medal) {
+.player-profile__hero-digest--rank > *:not(.hero-digest__rank-medal):not(.player-profile__about-team-bg):not(
+    .player-profile__about-team-bleed
+  ) {
   position: relative;
   z-index: 3;
 }
@@ -978,8 +998,514 @@
   }
 }
 
-.profile-feed__post--team {
-  min-height: auto;
+.profile-feed__post--team.player-profile__team-panel {
+  padding: clamp(1.2rem, 2.5vw, 1.55rem);
+  min-height: clamp(13.5rem, 28vh, 16.5rem);
+}
+
+.player-profile__team-panel {
+  position: relative;
+  overflow: hidden;
+}
+
+.player-profile__team-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.player-profile__team-panel-eyebrow {
+  margin: 0 0 0.2rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--foreground) 46%, var(--muted-foreground));
+}
+
+.player-profile__team-panel-title {
+  margin: 0;
+}
+
+.player-profile__team-panel-count {
+  padding: 0.28rem 0.62rem;
+  border-radius: 999px;
+  border: 1px solid var(--community-glass-border-soft);
+  background: color-mix(in srgb, var(--background) 38%, transparent);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--foreground) 58%, var(--muted-foreground));
+}
+
+.player-profile__team-franchise {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(0.95rem, 2.4vw, 1.35rem);
+  overflow: hidden;
+  margin-bottom: 0.95rem;
+  padding: clamp(0.85rem, 2vw, 1.05rem) clamp(0.95rem, 2.2vw, 1.2rem);
+  border-radius: 1rem;
+  border: 1px solid var(--community-glass-border-soft);
+  background: linear-gradient(
+    118deg,
+    color-mix(in srgb, var(--background) 58%, transparent) 0%,
+    color-mix(in srgb, var(--background) 32%, transparent) 55%,
+    color-mix(in srgb, var(--background) 22%, transparent) 100%
+  );
+  isolation: isolate;
+}
+
+.player-profile__team-franchise--branded::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 85% 120% at 8% 50%, rgb(var(--team-accent, 233 168 74) / 0.2), transparent 58%),
+    radial-gradient(ellipse 70% 90% at 100% 40%, rgb(var(--team-accent, 233 168 74) / 0.14), transparent 62%);
+}
+
+.player-profile__team-franchise--branded::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 12%;
+  bottom: 12%;
+  width: 2px;
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgb(var(--team-accent, 233 168 74) / 0.85) 45%,
+    transparent
+  );
+}
+
+.player-profile__team-panel--branded .player-profile__team-franchise {
+  border-color: color-mix(in srgb, rgb(var(--team-accent, 233 168 74)) 28%, var(--community-glass-border-soft));
+}
+
+.player-profile__team-franchise-logo {
+  position: relative;
+  z-index: 1;
+  width: clamp(4.65rem, 12vw, 5.5rem);
+  height: clamp(4.65rem, 12vw, 5.5rem);
+  object-fit: contain;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  filter: drop-shadow(0 10px 22px rgb(0 0 0 / 0.35))
+    drop-shadow(0 0 28px rgb(var(--team-accent, 233 168 74) / 0.22));
+}
+
+.player-profile__team-franchise-main {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.player-profile__team-franchise-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.75rem;
+}
+
+.player-profile__team-franchise-top .player-profile__team-name {
+  margin: 0;
+  font-size: clamp(1.15rem, 2.6vw, 1.375rem);
+  line-height: 1.12;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.player-profile__team-franchise-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.85rem;
+}
+
+.player-profile__team-meta-line {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--foreground) 62%, var(--muted-foreground));
+}
+
+.player-profile__team-meta-line strong {
+  font-weight: 650;
+  color: color-mix(in srgb, var(--foreground) 88%, var(--muted-foreground));
+}
+
+.player-profile__team-meta-line--captain {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  font-weight: 650;
+  color: color-mix(in srgb, rgb(var(--team-accent, 233 168 74)) 58%, white);
+}
+
+.player-profile__team-meta-line--captain svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+@media (max-width: 480px) {
+  .player-profile__team-franchise {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+
+  .player-profile__team-franchise-top,
+  .player-profile__team-franchise-meta {
+    justify-content: center;
+  }
+}
+
+.player-profile__franchise-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.38rem 0.78rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, rgb(var(--team-accent, 233 168 74)) 40%, var(--community-glass-border-soft));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, rgb(var(--team-accent, 233 168 74)) 22%, transparent),
+    color-mix(in srgb, var(--background) 72%, transparent)
+  );
+  color: color-mix(in srgb, rgb(var(--team-accent, 233 168 74)) 55%, white);
+  font-size: 0.625rem;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.player-profile__franchise-btn svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  flex-shrink: 0;
+  opacity: 0.92;
+}
+
+.player-profile__franchise-btn:hover {
+  border-color: color-mix(in srgb, rgb(var(--team-accent, 233 168 74)) 58%, white);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, rgb(var(--team-accent, 233 168 74)) 32%, transparent),
+    color-mix(in srgb, var(--background) 62%, transparent)
+  );
+  box-shadow: 0 0 20px rgb(var(--team-accent, 233 168 74) / 0.22);
+  transform: translateY(-1px);
+}
+
+.player-profile__franchise-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, rgb(var(--team-accent, 233 168 74)) 65%, white);
+  outline-offset: 2px;
+}
+
+.bpcl-tier-fx__panel.player-profile__team-panel .player-profile__franchise-btn {
+  border-color: color-mix(in srgb, #ffc84d 42%, rgb(var(--team-accent, 233 168 74)) 22%);
+  color: color-mix(in srgb, #ffe08a 72%, rgb(var(--team-accent, 233 168 74)) 28%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
+}
+
+.bpcl-tier-fx__panel.player-profile__team-panel .player-profile__franchise-btn:hover {
+  border-color: color-mix(in srgb, #ffd978 62%, rgb(var(--team-accent, 233 168 74)) 18%);
+  box-shadow:
+    0 0 18px rgb(255 196 72 / 0.22),
+    inset 0 1px 0 rgb(255 255 255 / 0.1);
+}
+
+.bpcl-tier-fx-holo__panel.player-profile__team-panel .player-profile__franchise-btn {
+  border-color: color-mix(in srgb, #6b5bff 38%, rgb(var(--team-accent, 233 168 74)) 18%);
+  color: color-mix(in srgb, #83f2ff 55%, rgb(var(--team-accent, 233 168 74)) 25%);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, #6b5bff 16%, transparent),
+    color-mix(in srgb, rgb(var(--team-accent, 233 168 74)) 14%, transparent)
+  );
+}
+
+.bpcl-tier-fx-holo__panel.player-profile__team-panel .player-profile__franchise-btn:hover {
+  border-color: color-mix(in srgb, #42cfff 48%, rgb(var(--team-accent, 233 168 74)) 16%);
+  box-shadow: 0 0 22px rgb(107 91 255 / 0.28);
+}
+
+.player-profile__team-roster {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-top: 0.15rem;
+}
+
+.player-profile__team-roster--past {
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--community-glass-border-soft);
+}
+
+.player-profile__team-roster-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--foreground) 52%, var(--muted-foreground));
+}
+
+.player-profile__team-roster--past .player-profile__team-roster-label {
+  color: color-mix(in srgb, var(--foreground) 42%, var(--muted-foreground));
+}
+
+.player-profile__roster-formation {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 0.45rem;
+  width: 100%;
+}
+
+/* Wide: row wrappers flatten so all slots share one centered row (up to 5 + overflow wrap). */
+.player-profile__roster-formation-row {
+  display: contents;
+}
+
+.player-profile__roster-formation-row--overflow {
+  opacity: 0.92;
+}
+
+/* Active roster: ~90% of panel, equal-width slots (5-across desktop, 3+2 mobile). */
+.player-profile__team-roster:not(.player-profile__team-roster--past) .player-profile__roster-formation {
+  width: 90%;
+  max-width: 100%;
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: clamp(0.35rem, 1.1vw, 0.55rem);
+}
+
+.player-profile__team-roster:not(.player-profile__team-roster--past) .player-profile__roster-formation-row {
+  display: contents;
+}
+
+@media (max-width: 719px) {
+  .player-profile__roster-formation {
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .player-profile__roster-formation-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.45rem;
+    width: 100%;
+  }
+
+  .player-profile__roster-formation-row--three {
+    max-width: 23.5rem;
+  }
+
+  .player-profile__roster-formation-row--two {
+    max-width: 15.75rem;
+  }
+
+  .player-profile__team-roster:not(.player-profile__team-roster--past) .player-profile__roster-formation {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    column-gap: 0.45rem;
+    row-gap: 0.5rem;
+  }
+
+  .player-profile__team-roster:not(.player-profile__team-roster--past) .player-profile__roster-formation-row {
+    display: contents;
+  }
+
+  .player-profile__team-roster:not(.player-profile__team-roster--past)
+    .player-profile__roster-formation
+    > :is(a.player-profile__roster-slot, .player-profile__roster-slot):nth-child(1) {
+    grid-column: 1 / 3;
+  }
+
+  .player-profile__team-roster:not(.player-profile__team-roster--past)
+    .player-profile__roster-formation
+    > :is(a.player-profile__roster-slot, .player-profile__roster-slot):nth-child(2) {
+    grid-column: 3 / 5;
+  }
+
+  .player-profile__team-roster:not(.player-profile__team-roster--past)
+    .player-profile__roster-formation
+    > :is(a.player-profile__roster-slot, .player-profile__roster-slot):nth-child(3) {
+    grid-column: 5 / 7;
+  }
+
+  .player-profile__team-roster:not(.player-profile__team-roster--past)
+    .player-profile__roster-formation
+    > :is(a.player-profile__roster-slot, .player-profile__roster-slot):nth-child(4) {
+    grid-column: 2 / 4;
+  }
+
+  .player-profile__team-roster:not(.player-profile__team-roster--past)
+    .player-profile__roster-formation
+    > :is(a.player-profile__roster-slot, .player-profile__roster-slot):nth-child(5) {
+    grid-column: 4 / 6;
+  }
+
+  .player-profile__team-roster:not(.player-profile__team-roster--past)
+    .player-profile__roster-formation
+    > :is(a.player-profile__roster-slot, .player-profile__roster-slot):nth-child(n + 6) {
+    grid-column: span 2;
+  }
+
+  .player-profile__roster-formation-row--overflow {
+    max-width: 23.5rem;
+  }
+}
+
+.player-profile__roster-slot,
+a.player-profile__roster-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.32rem;
+  width: min(100%, 6.45rem);
+  flex: 0 1 6.45rem;
+  padding: 0.55rem 0.4rem 0.6rem;
+  border-radius: 0.72rem;
+  border: 1px solid var(--community-glass-border-soft);
+  background: color-mix(in srgb, var(--background) 36%, transparent);
+  text-decoration: none;
+  color: inherit;
+  text-align: center;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+a.player-profile__roster-slot:hover {
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--community-glass-border-soft));
+  background: color-mix(in srgb, var(--primary) 7%, transparent);
+  transform: translateY(-1px);
+}
+
+.player-profile__team-roster:not(.player-profile__team-roster--past) .player-profile__roster-slot,
+.player-profile__team-roster:not(.player-profile__team-roster--past) a.player-profile__roster-slot {
+  width: 100%;
+  max-width: none;
+  flex: unset;
+  min-width: 0;
+  padding-inline: clamp(0.2rem, 0.8vw, 0.5rem);
+}
+
+.player-profile__roster-slot--captain {
+  border-color: color-mix(in srgb, rgb(var(--team-accent, 233 168 74)) 44%, var(--community-glass-border-soft));
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, rgb(var(--team-accent, 233 168 74)) 16%, transparent),
+    color-mix(in srgb, var(--background) 38%, transparent)
+  );
+  box-shadow: 0 0 18px rgb(var(--team-accent, 233 168 74) / 0.14);
+}
+
+.player-profile__roster-slot-captain {
+  position: absolute;
+  top: 0.32rem;
+  right: 0.32rem;
+  display: grid;
+  place-items: center;
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, rgb(var(--team-accent, 233 168 74)) 55%, var(--community-glass-border-soft));
+  background: color-mix(in srgb, rgb(var(--team-accent, 233 168 74)) 22%, var(--background));
+  color: color-mix(in srgb, rgb(var(--team-accent, 233 168 74)) 72%, white);
+  box-shadow: 0 0 10px rgb(var(--team-accent, 233 168 74) / 0.28);
+}
+
+.player-profile__roster-slot-captain svg {
+  width: 0.58rem;
+  height: 0.58rem;
+}
+
+.player-profile__roster-slot-avatar {
+  width: 2.15rem;
+  height: 2.15rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  font-size: 0.8125rem;
+  font-weight: 750;
+  border: 1px solid var(--community-glass-border-soft);
+  background: color-mix(in srgb, var(--primary) 12%, var(--background));
+}
+
+.player-profile__roster-slot-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  display: block;
+}
+
+.player-profile__roster-slot--captain .player-profile__roster-slot-avatar {
+  border-color: color-mix(in srgb, rgb(var(--team-accent, 233 168 74)) 45%, var(--community-glass-border-soft));
+  background: color-mix(in srgb, rgb(var(--team-accent, 233 168 74)) 14%, var(--background));
+}
+
+.player-profile__roster-slot-name {
+  width: 100%;
+  font-size: 0.6875rem;
+  font-weight: 650;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-profile__roster-slot-roles {
+  justify-content: center;
+}
+
+.player-profile__roster-formation--past .player-profile__roster-slot,
+.player-profile__roster-formation--past a.player-profile__roster-slot {
+  opacity: 0.82;
+  background: color-mix(in srgb, var(--background) 28%, transparent);
+}
+
+.player-profile__roster-slot--past.player-profile__roster-slot--captain,
+.player-profile__roster-formation--past .player-profile__roster-slot--captain {
+  box-shadow: none;
 }
 
 .player-profile__hero-inner {
@@ -1441,21 +1967,66 @@
 
 .player-profile__about-team-bg {
   position: absolute;
-  right: -2%;
+  right: -4%;
   top: 50%;
   transform: translateY(-50%);
-  width: min(50%, 280px);
-  height: 88%;
+  width: min(68%, 22rem);
+  height: 96%;
   background-image: var(--about-team-logo);
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center right;
-  opacity: 0.58;
-  filter: saturate(1.2) brightness(1.4);
+  opacity: 0.34;
+  filter: saturate(1.05) brightness(1.12);
   pointer-events: none;
   z-index: 0;
-  -webkit-mask-image: linear-gradient(to left, rgb(0 0 0 / 1) 32%, transparent 90%);
-  mask-image: linear-gradient(to left, rgb(0 0 0 / 1) 32%, transparent 90%);
+  -webkit-mask-image: linear-gradient(to left, rgb(0 0 0 / 1) 28%, transparent 92%);
+  mask-image: linear-gradient(to left, rgb(0 0 0 / 1) 28%, transparent 92%);
+}
+
+.player-profile__about-team-bleed {
+  position: absolute;
+  right: -10%;
+  top: 50%;
+  transform: translateY(-50%);
+  width: min(78%, 26rem);
+  height: 108%;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.88;
+  background:
+    radial-gradient(ellipse 72% 90% at 76% 48%, rgb(var(--team-accent, 233 168 74) / 0.44), transparent 66%),
+    radial-gradient(ellipse 48% 58% at 94% 78%, rgb(var(--team-accent, 233 168 74) / 0.26), transparent 62%);
+  -webkit-mask-image: linear-gradient(to left, rgb(0 0 0 / 1) 16%, transparent 90%);
+  mask-image: linear-gradient(to left, rgb(0 0 0 / 1) 16%, transparent 90%);
+}
+
+.player-profile__about--team-accent.player-profile__hero-digest {
+  box-shadow:
+    inset -1px 0 0 rgb(var(--team-accent, 233 168 74) / 0.12),
+    inset -48px 0 64px -32px rgb(var(--team-accent, 233 168 74) / 0.14);
+}
+
+.player-profile__about--team-accent .player-profile__about-team-bg {
+  filter: saturate(1.18) brightness(1.14)
+    drop-shadow(0 0 22px rgb(var(--team-accent, 233 168 74) / 0.48))
+    drop-shadow(0 0 52px rgb(var(--team-accent, 233 168 74) / 0.24));
+}
+
+.player-profile__about--team-accent:not(.bpcl-tier-fx__about):not(.bpcl-tier-fx-holo__about)::after {
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--background) 86%, transparent) 0%,
+    color-mix(in srgb, var(--background) 52%, transparent) 38%,
+    color-mix(in srgb, var(--background) 18%, transparent) 58%,
+    transparent 72%,
+    rgb(var(--team-accent, 233 168 74) / 0.08) 88%,
+    rgb(var(--team-accent, 233 168 74) / 0.16) 100%
+  );
+}
+
+.player-profile__about.profile-feed__post {
+  padding: 0;
 }
 
 .player-profile__about--team:not(.bpcl-tier-fx__about):not(.bpcl-tier-fx-holo__about)::after {

@@ -13,6 +13,8 @@ import { findAccountById } from "../../services/playerAccountRepository.js";
 import { listHostedPortraitGifs, saveCatalogPortraitGif, savePlayerPortraitGif } from "../../services/portraitGifService.js";
 import { writeAuditLog } from "../../services/auditLogService.js";
 import { publicPlayerAccount } from "../../services/playerAccountRepository.js";
+import { runPlayerDotaStatsSync } from "../../services/opendotaCommunitySync.js";
+import { invalidatePublicCache } from "../../services/publicCache.js";
 
 const router = express.Router();
 
@@ -163,6 +165,36 @@ router.post("/:id/card", requireAdmin, requirePermission("playerCrm.accounts.upd
       payload: { tier: body.tier, approve: body.approve, applyProfileTier: body.applyProfileTier },
     });
     return res.status(201).json(result);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post("/:id/dota-stats/sync", requireAdmin, requirePermission("playerCrm.accounts.update"), async (req, res, next) => {
+  try {
+    const body = z.object({ force: z.boolean().optional().default(false) }).parse(req.body ?? {});
+    const result = await runPlayerDotaStatsSync(req.params.id, { force: body.force });
+    if (!result.ok) {
+      if (result.reason === "not_found") return res.status(404).json({ message: "Player account not found" });
+      if (result.reason === "steam_not_linked") {
+        return res.status(400).json({ message: "Link Steam on this account before syncing Dota stats." });
+      }
+      return res.status(400).json({ message: "Could not sync Dota stats." });
+    }
+    invalidatePublicCache();
+    await writeAuditLog({
+      adminUserId: req.adminUser.id,
+      action: "player_account.dota_stats_sync",
+      entityType: "player_account",
+      entityId: req.params.id,
+      payload: {
+        force: body.force,
+        profilePlan: result.profile?.plan,
+        profileSynced: result.profile?.synced,
+        leagueCount: result.leagues?.length ?? 0,
+      },
+    });
+    return res.json({ result });
   } catch (error) {
     return next(error);
   }

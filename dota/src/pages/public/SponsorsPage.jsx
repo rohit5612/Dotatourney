@@ -21,6 +21,7 @@ import { usePublicTournament } from "../../context/PublicTournamentContext.jsx";
 import { api, pollSponsorPaid } from "../../lib/api.js";
 import { isValidPhoneNumber, PHONE_NUMBER_ERROR, sanitizePhoneInput } from "../../lib/phoneNumber.js";
 import { PageLoadingSpinner } from "../../components/PageLoadingSpinner.jsx";
+import { ManualUpiPaymentStep } from "../../components/payment/ManualUpiPaymentStep.jsx";
 
 const CashfreeGatewayModal = lazy(() =>
   import("../../components/payment/CashfreeGatewayModal.jsx").then((m) => ({
@@ -119,6 +120,8 @@ export function SponsorsPage() {
   const [confirmedAmount, setConfirmedAmount] = useState(null);
   const [otp, setOtp] = useState("");
   const [gateway, setGateway] = useState(null);
+  const [manualCheckout, setManualCheckout] = useState(null);
+  const [sponsorDoneKind, setSponsorDoneKind] = useState("paid");
   const [confirmingPayment, setConfirmingPayment] = useState(false);
   const [resumeLoading, setResumeLoading] = useState(Boolean(resumeOrderId));
 
@@ -297,6 +300,10 @@ export function SponsorsPage() {
     try {
       const checkout = await api.createSponsorCheckout({ email: form.email.trim() });
       setContributionId(checkout.contributionId);
+      if (checkout.provider === "manual" || checkout.manualMode) {
+        setManualCheckout({ contributionId: checkout.contributionId, upi: checkout.upi });
+        return;
+      }
       if (!checkout.paymentSessionId) {
         throw new Error("Payment session unavailable. Try again.");
       }
@@ -327,6 +334,7 @@ export function SponsorsPage() {
       const status = await pollSponsorPaid(orderId);
       if (status?.status === "paid" || status?.flowStage === "paid") {
         if (status.amountRupees) setConfirmedAmount(status.amountRupees);
+        setSponsorDoneKind("paid");
         setStep("done");
         setMessage("");
         window.history.replaceState({}, "", `/sponsors?orderId=${encodeURIComponent(orderId)}`);
@@ -575,7 +583,19 @@ export function SponsorsPage() {
                 Amount: <strong>{formatRupees(displayAmount)}</strong>
               </p>
             </div>
-            {confirmingPayment ? (
+            {manualCheckout ? (
+              <ManualUpiPaymentStep
+                upi={manualCheckout.upi}
+                busy={busy}
+                onSubmit={async (payload) => {
+                  await api.submitSponsorCheckoutProof(manualCheckout.contributionId, payload);
+                  setManualCheckout(null);
+                  setSponsorDoneKind("under_review");
+                  setStep("done");
+                  setFlowModalOpen(true);
+                }}
+              />
+            ) : confirmingPayment ? (
               <PageLoadingSpinner label="Confirming payment…" compact />
             ) : (
               <button
@@ -596,8 +616,17 @@ export function SponsorsPage() {
               ✓
             </div>
             <p className="sponsors-page__form-lead">
-              Payment of <strong>{formatRupees(displayAmount)}</strong> received. Welcome to the {SITE_BRAND_SHORT}{" "}
-              partner circle.
+              {sponsorDoneKind === "under_review" ? (
+                <>
+                  We received your payment proof for <strong>{formatRupees(displayAmount)}</strong>. Our team will verify
+                  your UPI payment and email you once it is confirmed.
+                </>
+              ) : (
+                <>
+                  Payment of <strong>{formatRupees(displayAmount)}</strong> received. Welcome to the {SITE_BRAND_SHORT}{" "}
+                  partner circle.
+                </>
+              )}
             </p>
 
             <div className="sponsors-page__next-steps" style={{ textAlign: "left" }}>

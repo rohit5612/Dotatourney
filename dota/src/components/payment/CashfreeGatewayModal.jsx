@@ -35,7 +35,7 @@ export function CashfreeGatewayModal({ open, paymentSessionId, mode = "sandbox",
         });
         if (!cancelled) onSettledRef.current?.(result);
       } catch (err) {
-        if (!cancelled) setError(err.message || "Could not open payment gateway.");
+        if (!cancelled) setError(err.message || "Could not open secure checkout.");
       } finally {
         if (!cancelled) setBusy(false);
       }

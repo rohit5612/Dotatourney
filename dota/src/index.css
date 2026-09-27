@@ -2268,6 +2268,12 @@ textarea.input:focus {
   color: #0f0f14;
 }
 
+.landing-banner-announcement__body-html :where(p, span, div, li) {
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+
 @media (min-width: 640px) {
   .landing-banner-announcement {
     padding: 1rem 1.125rem;

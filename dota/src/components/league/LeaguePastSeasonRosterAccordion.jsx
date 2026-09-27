@@ -109,12 +109,6 @@ export function LeaguePastSeasonRosterAccordion({
             <span className="season-card__stat-label">Finish</span>
             <span className="season-card__stat-value">{finishLabel}</span>
           </div>
-          {season.roster?.seed ? (
-            <div className="season-card__stat match-history-season__stat--hide-sm">
-              <span className="season-card__stat-label">Seed</span>
-              <span className="season-card__stat-value">#{season.roster.seed}</span>
-            </div>
-          ) : null}
         </div>
 
         <span className="league-past-roster-season__dropdown-label">

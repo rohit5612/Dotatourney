@@ -1,10 +1,13 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../../lib/api.js";
 import { TeamLogoImg } from "../../components/TeamLogoImg.jsx";
-import { SITE_BRAND_FULL } from "../../constants/siteMeta.js";
+import { SeasonRosterGrid } from "../../components/teams/SeasonRosterGrid.jsx";
+import { usePublicTournament } from "../../context/PublicTournamentContext.jsx";
+import { applyRouteMeta, SITE_BRAND_FULL } from "../../constants/siteMeta.js";
 import { useInView } from "../../hooks/useInView.js";
 import { hexToRgbTriplet } from "../../hooks/useLogoAccent.js";
+import { parseSeasonLabelFromName } from "../../utils/tournamentNaming.js";
 import "../../styles/league-teams-page.css";
 import "../../styles/team-logo-img.css";
 
@@ -30,16 +33,22 @@ function teamMatchesSeasonFilter(team, seasonFilter) {
   if (!seasonFilter || seasonFilter === "all") return true;
   const seasonNumber = Number(seasonFilter);
   if (!Number.isFinite(seasonNumber)) return true;
-  return (team.seasonsPlayed || []).includes(seasonNumber);
+  const played = (team.seasonsPlayed || []).map((value) => Number(value)).filter((n) => Number.isFinite(n));
+  return played.includes(seasonNumber);
+}
+
+function normalizeChampionshipSeasons(titles) {
+  if (!Array.isArray(titles)) return [];
+  return titles.map((value) => Number(value)).filter((n) => Number.isFinite(n));
 }
 
 function teamMatchesChampionFilter(team, championFilter, seasonFilter) {
   if (!championFilter || championFilter === "all") return true;
-  const titles = team.championshipSeasons || [];
+  const titles = normalizeChampionshipSeasons(team.championshipSeasons);
   if (championFilter === "champions") {
     if (seasonFilter && seasonFilter !== "all") {
       const seasonNumber = Number(seasonFilter);
-      return titles.includes(seasonNumber);
+      return Number.isFinite(seasonNumber) && titles.includes(seasonNumber);
     }
     return titles.length > 0;
   }
@@ -162,12 +171,46 @@ const LeagueFranchiseCard = memo(function LeagueFranchiseCard({ team, index }) {
 });
 
 export function LeagueTeamsPage() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { event, message, ready: tournamentReady } = usePublicTournament();
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [seasonFilter, setSeasonFilter] = useState("all");
   const [championFilter, setChampionFilter] = useState("all");
+
+  const hasSeasonRosters = (event?.teams || []).length > 0;
+  const rostersViewRequested = searchParams.get("view") === "rosters";
+  const view = rostersViewRequested && hasSeasonRosters ? "rosters" : "franchises";
+
+  const seasonLabel =
+    parseSeasonLabelFromName(event?.tournament?.name) || event?.tournament?.name || "current season";
+
+  useEffect(() => {
+    if (!tournamentReady || hasSeasonRosters || !rostersViewRequested) return;
+    setSearchParams({}, { replace: true });
+  }, [tournamentReady, hasSeasonRosters, rostersViewRequested, setSearchParams]);
+
+  useEffect(() => {
+    if (view === "rosters") {
+      applyRouteMeta("/league", {
+        title: `Season rosters | BPC League`,
+        description: `Competing team rosters, form, and standings for the ${seasonLabel} BPC League campaign.`,
+      });
+    } else {
+      applyRouteMeta("/league");
+    }
+  }, [view, seasonLabel]);
+
+  const setLeagueView = (next) => {
+    if (next === "rosters" && hasSeasonRosters) {
+      setSearchParams({ view: "rosters" }, { replace: true });
+    } else {
+      setSearchParams({}, { replace: true });
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -236,6 +279,46 @@ export function LeagueTeamsPage() {
         </p>
       </header>
 
+      {hasSeasonRosters ? (
+        <div className="league-view-switch" role="tablist" aria-label="League page views">
+          <button
+            type="button"
+            role="tab"
+            id="league-view-franchises"
+            aria-selected={view === "franchises"}
+            aria-controls="league-view-panel-franchises"
+            className={`league-view-switch__btn${view === "franchises" ? " league-view-switch__btn--active" : ""}`}
+            onClick={() => setLeagueView("franchises")}
+          >
+            Franchises
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="league-view-rosters"
+            aria-selected={view === "rosters"}
+            aria-controls="league-view-panel-rosters"
+            className={`league-view-switch__btn${view === "rosters" ? " league-view-switch__btn--active" : ""}`}
+            onClick={() => setLeagueView("rosters")}
+          >
+            {seasonLabel} rosters
+          </button>
+        </div>
+      ) : null}
+
+      {view === "rosters" ? (
+        <div
+          id="league-view-panel-rosters"
+          role="tabpanel"
+          aria-labelledby="league-view-rosters"
+          className="league-page__body league-page__body--rosters"
+        >
+          <SeasonRosterGrid event={event} message={message} navigate={navigate} embedded leagueTeams={teams} />
+        </div>
+      ) : null}
+
+      {view === "franchises" ? (
+        <div id="league-view-panel-franchises" role="tabpanel" aria-labelledby="league-view-franchises">
       {error ? <p className="league-page__message">{error}</p> : null}
       {loading ? (
         <div className="league-loading" aria-busy="true">
@@ -315,6 +398,8 @@ export function LeagueTeamsPage() {
               </button>
             </div>
           )}
+        </div>
+      ) : null}
         </div>
       ) : null}
     </div>

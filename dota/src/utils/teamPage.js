@@ -487,3 +487,56 @@ export function squadCountLabel(count) {
   if (n === 1) return "One squad enters the battlefield.";
   return `${n} squads enter the battlefield.`;
 }
+
+/** Matches server `slugifyLeagueTeamName` for name-based franchise fallback. */
+export function slugifyLeagueTeamName(name) {
+  const base = String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+  return base || "team";
+}
+
+/** Index public league franchises by id, slug, and normalized name. */
+export function buildLeagueFranchiseSlugLookup(leagueTeams = []) {
+  const byId = new Map();
+  const byName = new Map();
+  const slugs = new Set();
+
+  for (const franchise of leagueTeams) {
+    const slug = String(franchise.slug || "").trim();
+    if (slug) slugs.add(slug);
+    const id = franchise.id;
+    if (id && slug) byId.set(id, slug);
+    const nameKey = String(franchise.name || "").trim().toLowerCase();
+    if (nameKey && slug) byName.set(nameKey, slug);
+  }
+
+  return { byId, byName, slugs };
+}
+
+export function resolveTeamFranchiseHref(team, lookup) {
+  if (!team || !lookup) return null;
+
+  const directSlug = String(team.leagueTeamSlug || team.league_team_slug || "").trim();
+  if (directSlug) return `/league/${encodeURIComponent(directSlug)}`;
+
+  const leagueTeamId = team.leagueTeamId || team.league_team_id;
+  if (leagueTeamId && lookup.byId?.get(leagueTeamId)) {
+    return `/league/${encodeURIComponent(lookup.byId.get(leagueTeamId))}`;
+  }
+
+  const nameKey = String(team.name || "").trim().toLowerCase();
+  if (nameKey && lookup.byName?.get(nameKey)) {
+    return `/league/${encodeURIComponent(lookup.byName.get(nameKey))}`;
+  }
+
+  const guessed = slugifyLeagueTeamName(team.name);
+  if (guessed && lookup.slugs?.has(guessed)) {
+    return `/league/${encodeURIComponent(guessed)}`;
+  }
+
+  return null;
+}

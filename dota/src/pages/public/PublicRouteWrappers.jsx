@@ -19,9 +19,6 @@ import {
   TermsAndConditionsPage,
 } from "./LegalPolicyPages.jsx";
 
-const PublicTeamsPage = lazy(() =>
-  import("../../components/teams/PublicTeamsPage.jsx").then((module) => ({ default: module.PublicTeamsPage })),
-);
 const LeagueTeamsPage = lazy(() =>
   import("../league/LeagueTeamsPage.jsx").then((module) => ({ default: module.LeagueTeamsPage })),
 );
@@ -76,17 +73,7 @@ export function PublicScheduleRoute() {
 }
 
 export function PublicTeamsRoute() {
-  const { event, message } = usePublicTournament();
-  const navigate = useNavigate();
-  return (
-    <PublicEventGate label="Loading teams…">
-      <PageContentShell path="/teams">
-        <Suspense fallback={<PageLoadingSpinner label="Loading teams…" compact />}>
-          <PublicTeamsPage event={event} message={message} navigate={navigate} />
-        </Suspense>
-      </PageContentShell>
-    </PublicEventGate>
-  );
+  return <Navigate to="/league?view=rosters" replace />;
 }
 
 export function PublicLeagueRoute() {

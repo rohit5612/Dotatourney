@@ -1,30 +1,37 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { SITE_BRAND_SHORT } from "../../constants/siteMeta.js";
 import { useSiteContent } from "../../hooks/useSiteContent.js";
-import { compareSemverDesc } from "../../utils/websiteVersionSchema.js";
+import {
+  compareSemverDesc,
+  isMajorReleaseVersion,
+  majorReleaseEntries,
+} from "../../utils/websiteVersionSchema.js";
+import { WhatsNewChangelogModal } from "./WhatsNewChangelogModal.jsx";
 import { WhatsNewReleaseBlock } from "./WhatsNewReleaseBlock.jsx";
 
 const FILTER_ALL = "all";
 const INITIAL_VISIBLE_VH = 150;
 
-const FALLBACK_ENTRIES = [
+const FALLBACK_MAJOR_ENTRIES = [
   {
     id: "vh-season-3",
     version: "3.0.0",
     seasonLabel: "Season 3",
+    releasedAt: "2026-09-25",
     summary: "League team lores, new public player profiles with stats, and ongoing Season 3 improvements.",
   },
   {
     id: "vh-season-2",
     version: "2.0.0",
     seasonLabel: "Season 2",
-    summary: "Hostinger deployment — season card system, player accounts, online checkout.",
+    releasedAt: "2026-06-15",
+    summary: "Hostinger deployment — season card system, player accounts, and dashboard checkout.",
   },
   {
     id: "vh-season-1",
     version: "1.0.0",
     seasonLabel: "Season 1",
+    releasedAt: "2026-04-24",
     summary: "First website on Render — static site, manual registration flow.",
   },
 ];
@@ -40,22 +47,36 @@ function versionFromHash() {
   return "";
 }
 
+function majorFilterLabel(entry) {
+  const parts = entry.version.split(".");
+  const x = parts[0] || entry.version;
+  if (entry.seasonLabel) return `${entry.seasonLabel} (v${x}.0.0)`;
+  return `Version ${x}`;
+}
+
+function resolveMajorFilter(paramVersion, entries) {
+  const fromUrl = paramVersion || versionFromHash();
+  if (fromUrl && entries.some((e) => e.version === fromUrl)) return fromUrl;
+  return entries[0]?.version || FILTER_ALL;
+}
+
 export function WhatsNewPage() {
-  const { versionHistory } = useSiteContent();
+  const { versionHistory, versionChangeLog } = useSiteContent();
   const [searchParams, setSearchParams] = useSearchParams();
-  const entries = useMemo(() => {
-    const rows = versionHistory?.entries?.length ? versionHistory.entries : FALLBACK_ENTRIES;
+
+  const majorEntries = useMemo(() => {
+    const history = versionHistory?.entries?.length ? versionHistory : { entries: FALLBACK_MAJOR_ENTRIES };
+    const majors = majorReleaseEntries(history);
+    const rows = majors.length ? majors : FALLBACK_MAJOR_ENTRIES;
     return [...rows].sort((a, b) => compareSemverDesc(a.version, b.version));
   }, [versionHistory]);
 
   const paramVersion = searchParams.get("v")?.trim() || "";
-  const [filter, setFilter] = useState(() => {
-    const fromUrl = paramVersion || versionFromHash();
-    if (fromUrl && entries.some((e) => e.version === fromUrl)) return fromUrl;
-    return FILTER_ALL;
-  });
+  const [filter, setFilter] = useState(() => resolveMajorFilter(paramVersion, majorEntries));
 
   const [visibleBudgetVh, setVisibleBudgetVh] = useState(INITIAL_VISIBLE_VH);
+  const [changelogOpen, setChangelogOpen] = useState(false);
+  const userChoseAllRef = useRef(false);
 
   const syncFilterToUrl = useCallback(
     (next) => {
@@ -71,16 +92,29 @@ export function WhatsNewPage() {
 
   useEffect(() => {
     const fromUrl = paramVersion || versionFromHash();
-    if (!fromUrl) return;
-    if (entries.some((e) => e.version === fromUrl)) {
-      setFilter(fromUrl);
+    if (fromUrl && isMajorReleaseVersion(fromUrl)) {
+      if (majorEntries.some((e) => e.version === fromUrl)) {
+        setFilter(fromUrl);
+        userChoseAllRef.current = false;
+      }
+      return;
     }
-  }, [paramVersion, entries]);
+    if (userChoseAllRef.current) {
+      setFilter(FILTER_ALL);
+      return;
+    }
+    const latest = majorEntries[0]?.version;
+    if (!latest) return;
+    setFilter(latest);
+    if (!paramVersion && !versionFromHash()) {
+      setSearchParams({ v: latest }, { replace: true });
+    }
+  }, [paramVersion, majorEntries, setSearchParams]);
 
   const filteredEntries = useMemo(() => {
-    if (filter === FILTER_ALL) return entries;
-    return entries.filter((e) => e.version === filter);
-  }, [entries, filter]);
+    if (filter === FILTER_ALL) return majorEntries;
+    return majorEntries.filter((e) => e.version === filter);
+  }, [majorEntries, filter]);
 
   const visibleEntries = useMemo(() => {
     if (filter !== FILTER_ALL) return filteredEntries;
@@ -88,15 +122,14 @@ export function WhatsNewPage() {
     const picked = [];
     for (const entry of filteredEntries) {
       picked.push(entry);
-      const estimatedVh = entry.version === "2.0.0" ? 120 : entry.version === "3.0.0" ? 24 : 18;
+      const estimatedVh = entry.version === "2.0.0" ? 95 : entry.version === "3.0.0" ? 110 : 18;
       usedVh += estimatedVh;
       if (usedVh >= visibleBudgetVh) break;
     }
     return picked.length ? picked : filteredEntries.slice(0, 1);
   }, [filteredEntries, filter, visibleBudgetVh]);
 
-  const hasMore =
-    filter === FILTER_ALL && visibleEntries.length < filteredEntries.length;
+  const hasMore = filter === FILTER_ALL && visibleEntries.length < filteredEntries.length;
 
   useEffect(() => {
     if (filter === FILTER_ALL) return;
@@ -111,6 +144,7 @@ export function WhatsNewPage() {
 
   function handleFilterChange(event) {
     const next = event.target.value;
+    userChoseAllRef.current = next === FILTER_ALL;
     syncFilterToUrl(next);
     if (next === FILTER_ALL) {
       setVisibleBudgetVh(INITIAL_VISIBLE_VH);
@@ -131,8 +165,22 @@ export function WhatsNewPage() {
             What&apos;s new
           </h1>
           <p className="community-page__hero-lead">
-            Browse every {SITE_BRAND_SHORT} website release — filter by version or scroll the full changelog.
+            Major releases by season — filter below or open the changelog for patch notes.
           </p>
+          <ul className="whats-new-page__hero-chips" aria-label="Release highlights">
+            <li className="whats-new-page__hero-chip">
+              <span className="whats-new-page__hero-chip-label">Season 3</span>
+              <span className="whats-new-page__hero-chip-value">League, profiles, card deck</span>
+            </li>
+            <li className="whats-new-page__hero-chip">
+              <span className="whats-new-page__hero-chip-label">Season 2</span>
+              <span className="whats-new-page__hero-chip-value">Cards, accounts, checkout</span>
+            </li>
+            <li className="whats-new-page__hero-chip">
+              <span className="whats-new-page__hero-chip-label">Patches</span>
+              <span className="whats-new-page__hero-chip-value">Full changelog in toolbar</span>
+            </li>
+          </ul>
         </div>
       </section>
 
@@ -140,30 +188,38 @@ export function WhatsNewPage() {
         <div className="whats-new-page__shell">
           <div className="whats-new-page__toolbar">
             <label className="whats-new-page__filter">
-              <span className="whats-new-page__filter-label">Version</span>
+              <span className="whats-new-page__filter-label">Major release</span>
               <select
                 className="whats-new-page__filter-select"
                 value={filter}
                 onChange={handleFilterChange}
-                aria-label="Filter by website version"
+                aria-label="Filter by major website version"
               >
-                <option value={FILTER_ALL}>All versions</option>
-                {entries.map((entry) => (
+                <option value={FILTER_ALL}>All major releases</option>
+                {majorEntries.map((entry) => (
                   <option key={entry.id || entry.version} value={entry.version}>
-                    v{entry.version}
-                    {entry.seasonLabel ? ` — ${entry.seasonLabel}` : ""}
+                    {majorFilterLabel(entry)}
                   </option>
                 ))}
               </select>
             </label>
-            <p className="whats-new-page__filter-hint">
-              {filter === FILTER_ALL
-                ? `Showing ${visibleEntries.length} of ${entries.length} releases`
-                : `Showing release v${filter}`}
-            </p>
+            <div className="whats-new-page__toolbar-actions">
+              <p className="whats-new-page__filter-hint">
+                {filter === FILTER_ALL
+                  ? `Showing ${visibleEntries.length} of ${majorEntries.length} major releases`
+                  : `Showing ${majorFilterLabel(majorEntries.find((e) => e.version === filter) || { version: filter })}`}
+              </p>
+              <button
+                type="button"
+                className="whats-new-page__changelog-link"
+                onClick={() => setChangelogOpen(true)}
+              >
+                View changelog
+              </button>
+            </div>
           </div>
 
-          <div className="whats-new-page__releases" aria-label="Release history">
+          <div className="whats-new-page__releases" aria-label="Major release pages">
             {visibleEntries.map((entry) => (
               <WhatsNewReleaseBlock
                 key={entry.id || entry.version}
@@ -180,6 +236,13 @@ export function WhatsNewPage() {
               </button>
             </div>
           ) : null}
+
+          <WhatsNewChangelogModal
+            open={changelogOpen}
+            onClose={() => setChangelogOpen(false)}
+            versionHistory={versionHistory}
+            versionChangeLog={versionChangeLog}
+          />
         </div>
       </div>
     </div>

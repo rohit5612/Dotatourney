@@ -62,7 +62,7 @@ const AUTH_HIGHLIGHTS = [
   },
   {
     id: "payments",
-    text: "Secure payment gateway for deposits & withdrawals",
+    text: "UPI registration payments with proof verification",
     tone: "accent",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">

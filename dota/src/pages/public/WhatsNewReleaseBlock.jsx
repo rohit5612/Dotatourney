@@ -1,4 +1,6 @@
+import { formatReleaseDate } from "../../utils/websiteVersionSchema.js";
 import { WhatsNewSeason2Content } from "./WhatsNewSeason2Content.jsx";
+import { WhatsNewSeason3Content } from "./WhatsNewSeason3Content.jsx";
 
 function releaseTitle(entry) {
   if (entry?.seasonLabel) return entry.seasonLabel;
@@ -19,11 +21,7 @@ function VersionRichContent({ version }) {
     return <WhatsNewSeason2Content />;
   }
   if (version === "3.0.0") {
-    return (
-      <p className="whats-new-page__version-placeholder">
-        Season 3 release notes will be added here. Follow Discord and News for the latest in the meantime.
-      </p>
-    );
+    return <WhatsNewSeason3Content />;
   }
   return null;
 }
@@ -40,9 +38,16 @@ export function WhatsNewReleaseBlock({ entry, highlighted = false }) {
       data-version={version}
     >
       <header className="whats-new-page__release-head">
-        <span className="whats-new-page__version-badge">v{version}</span>
+        <div className="whats-new-page__release-meta">
+          <span className="whats-new-page__version-badge">v{version}</span>
+          {entry.releasedAt ? (
+            <time className="whats-new-page__release-date" dateTime={entry.releasedAt}>
+              {formatReleaseDate(entry.releasedAt)}
+            </time>
+          ) : null}
+        </div>
         <h2 className="whats-new-page__release-title">{title}</h2>
-        {entry.summary && hasRichContent ? (
+        {entry.summary && !hasRichContent ? (
           <p className="whats-new-page__release-lead">{entry.summary}</p>
         ) : null}
       </header>

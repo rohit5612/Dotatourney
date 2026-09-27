@@ -332,6 +332,58 @@ export async function sendPlayerRegistrationSubmittedEmail({ to, name, tournamen
   await sendMail({ to, subject, text, html });
 }
 
+export async function sendManualPaymentProofReceivedEmail({
+  to,
+  name,
+  tournamentName,
+  publicCode,
+  targetTier = "",
+  kind = "upgrade",
+}) {
+  const tour = tournamentName || DEFAULT_TOURNAMENT_NAME;
+  const code = publicCode || "";
+  const tierLabel = targetTier ? String(targetTier) : "";
+  const isUpgrade = kind === "upgrade";
+  const isSponsor = kind === "sponsor";
+  const subject = isSponsor
+    ? `Sponsorship payment proof received — ${tour}`
+    : isUpgrade
+      ? `Card upgrade payment proof received — ${tour}`
+      : `Payment proof received — ${tour}`;
+  const text = [
+    `Hi ${name},`,
+    ``,
+    isSponsor
+      ? `We received your sponsorship payment proof (reference ${code}). Admins will verify your UPI payment shortly.`
+      : isUpgrade
+      ? `We received your payment proof for a card upgrade (${tierLabel}) under ID ${code}. Admins will verify your UPI payment shortly.`
+      : `We received your payment proof for registration ${code}. Admins will verify your UPI payment shortly.`,
+    `You will receive another email once your payment is confirmed.`,
+    ``,
+    `— ${tour}`,
+  ].join("\n");
+  const innerHtml = `
+    <p style="margin:0;font-size:15px;color:#d4d4d8;">Hi <strong style="color:#fff;">${escapeHtml(name)}</strong>,</p>
+    <p style="margin:16px 0 0;font-size:14px;color:#a1a1aa;">${
+      isSponsor
+        ? `We received your sponsorship payment proof (reference <strong style="color:#fff;">${escapeHtml(code)}</strong>). Admins will verify your UPI payment shortly.`
+        : `We received your payment proof${
+            isUpgrade && tierLabel
+              ? ` for a <strong style="color:#fff;">${escapeHtml(tierLabel)}</strong> card upgrade`
+              : ""
+          } under ID <strong style="color:#fff;">${escapeHtml(code)}</strong>. Admins will verify your UPI payment shortly.`
+    }</p>
+    <p style="margin:16px 0 0;font-size:14px;color:#71717a;">You will receive another email once your payment is confirmed.</p>
+  `;
+  const html = baseEmailWrapper({
+    title: "Payment proof received",
+    preheader: "Your payment is under review.",
+    innerHtml,
+    audience: "player",
+  });
+  await sendMail({ to, subject, text, html });
+}
+
 /** @returns {{ title: string; subject: string; textBody: string; htmlParagraphs: string; footerHtml: string }} */
 function buildPlayerRegistrationStatusEmailContent({
   name,
@@ -608,7 +660,7 @@ function sponsorReceiptTableHtml({
         <td style="padding:8px 0;color:#fff;font-size:15px;font-weight:600;">Amount paid</td>
         <td style="padding:8px 0;color:#e9a84a;font-size:15px;font-weight:600;text-align:right;">₹${paidRupee}</td>
       </tr>
-      <tr><td colspan="2" style="padding:8px 0 0;color:#71717a;font-size:12px;">Transaction ID: ${escapeHtml(paymentRef || "—")}<br />Receipt / Order: ${escapeHtml(orderId || "—")}<br />${provider ? `Gateway: ${escapeHtml(provider)}<br />` : ""}Paid: ${escapeHtml(paidAtLabel)}</td></tr>
+      <tr><td colspan="2" style="padding:8px 0 0;color:#71717a;font-size:12px;">Transaction ID: ${escapeHtml(paymentRef || "—")}<br />Receipt / Order: ${escapeHtml(orderId || "—")}<br />Paid: ${escapeHtml(paidAtLabel)}</td></tr>
     </table>
     <p style="margin:12px 0 0;font-size:12px;color:#71717a;">This is a payment receipt, not a tax invoice.</p>
   `;
@@ -931,7 +983,6 @@ export async function sendSponsorPaymentConfirmedEmail({
     `Amount paid: ₹${paidRupee}`,
     `Transaction ID: ${paymentRef || "—"}`,
     `Receipt / Order: ${orderId || "—"}`,
-    provider ? `Gateway: ${provider}` : "",
     `Paid: ${paidAtLabel}`,
     ``,
     `Share your logo and social links on Discord: ${inviteUrl}`,

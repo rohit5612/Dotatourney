@@ -127,10 +127,10 @@ export function TermsAndConditionsPage() {
 
       <LegalSection title="5. Payments">
         <p>
-          Payments are processed through authorised payment gateways (for example Cashfree).
-          You agree to provide valid payment details and authorise charges for the amount shown at
-          checkout. Failed or reversed transactions may result in registration being withheld until
-          payment is successfully completed.
+          Registration and sponsorship payments are completed via UPI using the payee details and amount
+          shown at checkout. You may be required to upload payment proof for organiser verification.
+          Registration or perks may be withheld until payment is confirmed by admins. Failed, incorrect,
+          or unverifiable transfers may delay or cancel your entry.
         </p>
         <p>
           You are responsible for any bank charges, currency conversion fees, or network declines

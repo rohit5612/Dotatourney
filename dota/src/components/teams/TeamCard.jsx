@@ -1,5 +1,5 @@
-import { memo } from "react";
-import { Link } from "react-router-dom";
+import { memo, useCallback } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { HiOutlineChartBar, HiOutlineTrophy } from "react-icons/hi2";
 import { TeamLogoImg } from "../TeamLogoImg.jsx";
 import { useInView } from "../../hooks/useInView.js";
@@ -23,7 +23,8 @@ function CrownIcon() {
   );
 }
 
-export const TeamCard = memo(function TeamCard({ team, index = 0, profileBack = null }) {
+export const TeamCard = memo(function TeamCard({ team, index = 0, profileBack = null, franchiseHref = null }) {
+  const navigate = useNavigate();
   const { ref, inView } = useInView({ rootMargin: "280px 0px", threshold: 0.04 });
   const logo = team.logoUrl || team.logo_url || "";
   const logoUrl = normalizeTeamLogoUrl(logo);
@@ -34,10 +35,38 @@ export const TeamCard = memo(function TeamCard({ team, index = 0, profileBack = 
   const roster = team.players?.length ? team.players : [{ name: "Roster TBA", role: "Player" }];
   const staggerMs = inView && index < 9 ? Math.min(index, 8) * 55 : 0;
 
+  const openFranchise = useCallback(
+    (event) => {
+      if (!franchiseHref) return;
+      if (event.target.closest("a, button")) return;
+      navigate(franchiseHref);
+    },
+    [franchiseHref, navigate],
+  );
+
+  const onFranchiseKeyDown = useCallback(
+    (event) => {
+      if (!franchiseHref) return;
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      navigate(franchiseHref);
+    },
+    [franchiseHref, navigate],
+  );
+
+  const franchiseSpotlightProps = franchiseHref
+    ? {
+        onClick: openFranchise,
+        onKeyDown: onFranchiseKeyDown,
+        tabIndex: 0,
+        role: "link",
+      }
+    : {};
+
   return (
     <article
       ref={ref}
-      className={`teams-card${logoUrl ? " teams-card--has-logo-bg" : ""}${hasCustomAccent ? " teams-card--custom-accent" : ""}${inView ? " teams-card--in-view" : ""}`}
+      className={`teams-card${logoUrl ? " teams-card--has-logo-bg" : ""}${hasCustomAccent ? " teams-card--custom-accent" : ""}${inView ? " teams-card--in-view" : ""}${franchiseHref ? " teams-card--franchise-link" : ""}`}
       style={{
         ...accentStyle,
         "--teams-stagger": `${staggerMs}ms`,
@@ -58,7 +87,11 @@ export const TeamCard = memo(function TeamCard({ team, index = 0, profileBack = 
         </div>
       ) : null}
 
-      <section className="teams-card__spotlight" aria-label={`${team.name} team spotlight`}>
+      <section
+        className="teams-card__spotlight teams-card__franchise-hit"
+        aria-label={franchiseHref ? `View ${team.name} franchise` : `${team.name} team spotlight`}
+        {...franchiseSpotlightProps}
+      >
         <div className="teams-card__spotlight-scrim" aria-hidden />
         {inView ? <div className="teams-card__spotlight-shine" aria-hidden /> : null}
 
@@ -100,7 +133,7 @@ export const TeamCard = memo(function TeamCard({ team, index = 0, profileBack = 
         </div>
       </section>
 
-      <section className="teams-card__panel" aria-label={`${team.name} roster`}>
+      <section className="teams-card__panel teams-card__panel--interactive" aria-label={`${team.name} roster`}>
         <ul className="teams-card__roster">
           {roster.map((player) => {
             const isCaptain = Boolean(player.isCaptain);
@@ -147,7 +180,10 @@ export const TeamCard = memo(function TeamCard({ team, index = 0, profileBack = 
         </ul>
       </section>
 
-      <footer className="teams-card__strip">
+      <footer
+        className="teams-card__strip teams-card__franchise-hit"
+        {...(franchiseHref ? { onClick: openFranchise } : {})}
+      >
         <div className="teams-card__strip-stat">
           <HiOutlineChartBar aria-hidden />
           <span className="teams-card__strip-label">Win rate</span>
@@ -177,6 +213,12 @@ export const TeamCard = memo(function TeamCard({ team, index = 0, profileBack = 
             )}
           </div>
         </div>
+        {franchiseHref ? (
+          <span className="teams-card__franchise-cta" aria-hidden>
+            Franchise
+            <span className="teams-card__franchise-cta-arrow">→</span>
+          </span>
+        ) : null}
       </footer>
     </article>
   );

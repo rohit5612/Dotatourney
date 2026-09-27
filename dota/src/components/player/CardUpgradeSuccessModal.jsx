@@ -2,7 +2,7 @@ import { CardTierBadge, cardTierDisplayLabel } from "../cards/CardTierBadge.jsx"
 import { CardTierPreviewImage } from "../cards/CardTierPreviewImage.jsx";
 import { useBodyScrollLock } from "../../hooks/useBodyScrollLock.js";
 
-export function CardUpgradeSuccessModal({ open, targetTier, tournamentName, onClose }) {
+export function CardUpgradeSuccessModal({ open, targetTier, tournamentName, underReview = false, onClose }) {
   useBodyScrollLock(open);
 
   if (!open || !targetTier) return null;
@@ -25,15 +25,27 @@ export function CardUpgradeSuccessModal({ open, targetTier, tournamentName, onCl
           </svg>
         </div>
         <h2 id="upgrade-success-title" className="player-modal__title player-reg__success-title">
-          Card upgraded
+          {underReview ? "Payment proof received" : "Card upgraded"}
         </h2>
         <p className="player-modal__lead">
-          Payment confirmed. Your card tier is now <CardTierBadge tier={targetTier} /> for{" "}
-          <strong>{tournamentName || "this season"}</strong>.
+          {underReview ? (
+            <>
+              We received your UPI payment proof for a <CardTierBadge tier={targetTier} /> upgrade on{" "}
+              <strong>{tournamentName || "this season"}</strong>. Admins will verify your payment and email you once it
+              is confirmed.
+            </>
+          ) : (
+            <>
+              Payment confirmed. Your card tier is now <CardTierBadge tier={targetTier} /> for{" "}
+              <strong>{tournamentName || "this season"}</strong>.
+            </>
+          )}
         </p>
-        <p className="player-modal__hint">
-          Your profile and the community directory now show your <strong>{tierLabel}</strong> tier.
-        </p>
+        {!underReview ? (
+          <p className="player-modal__hint">
+            Your profile and the community directory now show your <strong>{tierLabel}</strong> tier.
+          </p>
+        ) : null}
         {isPremiumCard ? (
           <p className="player-modal__hint">
             Our admins will process and upload your custom card within <strong>48 hours</strong>. Until then, your

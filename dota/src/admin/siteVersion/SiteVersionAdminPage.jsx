@@ -1,14 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AdminGlassPanel } from "../components/AdminGlassPanel.jsx";
 import { PageLoadingSpinner } from "../../components/PageLoadingSpinner.jsx";
 import { api } from "../../lib/api";
 import { clearCache } from "../../lib/requestCache.js";
 import { useAdminAccess } from "../context/AdminAccessContext.jsx";
+import { MajorReleaseEntryModal } from "./MajorReleaseEntryModal.jsx";
 import {
+  createEmptyVersionChangeLogLine,
   createEmptyVersionHistoryEntry,
+  formatReleaseDate,
   formatWebsiteVersion,
+  normalizeVersionChangeLog,
   normalizeVersionHistory,
   normalizeWebsiteVersion,
+  truncateText,
 } from "../../utils/websiteVersionSchema.js";
 
 function inputClassName() {
@@ -33,8 +38,11 @@ export function SiteVersionAdminPage() {
   const [message, setMessage] = useState("");
   const [websiteVersion, setWebsiteVersion] = useState({ major: 3, minor: 0, patch: 0 });
   const [entries, setEntries] = useState([]);
+  const [changelogLines, setChangelogLines] = useState([]);
   const [savingVersion, setSavingVersion] = useState(false);
   const [savingHistory, setSavingHistory] = useState(false);
+  const [savingChangelog, setSavingChangelog] = useState(false);
+  const [releaseModal, setReleaseModal] = useState({ open: false, mode: "create", index: -1 });
 
   function load() {
     setLoading(true);
@@ -43,6 +51,7 @@ export function SiteVersionAdminPage() {
       .then((data) => {
         setWebsiteVersion(normalizeWebsiteVersion(data?.websiteVersion));
         setEntries(normalizeVersionHistory(data?.versionHistory || {}).entries);
+        setChangelogLines(normalizeVersionChangeLog(data?.versionChangeLog || {}).lines);
         setMessage("");
       })
       .catch((err) => setMessage(err.message))
@@ -52,6 +61,13 @@ export function SiteVersionAdminPage() {
   useEffect(() => {
     load();
   }, []);
+
+  const releaseModalEntry = useMemo(() => {
+    if (releaseModal.mode === "edit" && releaseModal.index >= 0) {
+      return entries[releaseModal.index] || null;
+    }
+    return createEmptyVersionHistoryEntry();
+  }, [releaseModal, entries]);
 
   function bumpField(field, delta) {
     setWebsiteVersion((prev) => ({
@@ -83,41 +99,80 @@ export function SiteVersionAdminPage() {
     }
   }
 
-  function updateEntry(index, patch) {
-    setEntries((list) => list.map((row, i) => (i === index ? { ...row, ...patch } : row)));
-  }
-
-  function removeEntry(index) {
-    setEntries((list) => list.filter((_, i) => i !== index));
-  }
-
-  function addEntry() {
-    setEntries((list) => [createEmptyVersionHistoryEntry(), ...list]);
-  }
-
-  function moveEntry(index, direction) {
-    const next = index + direction;
-    if (next < 0 || next >= entries.length) return;
-    setEntries((list) => {
-      const copy = [...list];
-      const [row] = copy.splice(index, 1);
-      copy.splice(next, 0, row);
-      return copy;
-    });
-  }
-
-  async function saveVersionHistory() {
+  async function persistMajorReleases(nextEntries) {
     setSavingHistory(true);
     setMessage("");
     try {
-      const { versionHistory } = await api.updateAdminVersionHistory({ entries });
-      setEntries(normalizeVersionHistory(versionHistory).entries);
+      const { versionHistory } = await api.updateAdminVersionHistory({ entries: nextEntries });
+      const normalized = normalizeVersionHistory(versionHistory).entries;
+      setEntries(normalized);
       clearCache("public:site-content");
-      setMessage("Saved version history.");
+      setMessage("Saved major releases.");
+      setReleaseModal({ open: false, mode: "create", index: -1 });
+      return normalized;
+    } catch (err) {
+      setMessage(err.message);
+      throw err;
+    } finally {
+      setSavingHistory(false);
+    }
+  }
+
+  async function handleReleaseModalSave(draft) {
+    const row = {
+      ...draft,
+      id: draft.id || `vh-${Date.now()}`,
+      releasedAt: draft.releasedAt?.trim() || undefined,
+      seasonLabel: draft.seasonLabel?.trim() || undefined,
+      notes: draft.notes?.trim() || undefined,
+    };
+    let next;
+    if (releaseModal.mode === "create") {
+      next = [row, ...entries];
+    } else {
+      next = entries.map((entry, i) => (i === releaseModal.index ? row : entry));
+    }
+    await persistMajorReleases(next);
+  }
+
+  async function handleReleaseModalDelete() {
+    if (releaseModal.mode !== "edit" || releaseModal.index < 0) return;
+    const next = entries.filter((_, i) => i !== releaseModal.index);
+    await persistMajorReleases(next);
+  }
+
+  function openCreateRelease() {
+    setReleaseModal({ open: true, mode: "create", index: -1 });
+  }
+
+  function openEditRelease(index) {
+    setReleaseModal({ open: true, mode: "edit", index });
+  }
+
+  function updateChangelogLine(index, patch) {
+    setChangelogLines((list) => list.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  }
+
+  function removeChangelogLine(index) {
+    setChangelogLines((list) => list.filter((_, i) => i !== index));
+  }
+
+  function addChangelogLine() {
+    setChangelogLines((list) => [createEmptyVersionChangeLogLine(), ...list]);
+  }
+
+  async function saveVersionChangeLog() {
+    setSavingChangelog(true);
+    setMessage("");
+    try {
+      const { versionChangeLog } = await api.updateAdminVersionChangeLog({ lines: changelogLines });
+      setChangelogLines(normalizeVersionChangeLog(versionChangeLog).lines);
+      clearCache("public:site-content");
+      setMessage("Saved text changelog.");
     } catch (err) {
       setMessage(err.message);
     } finally {
-      setSavingHistory(false);
+      setSavingChangelog(false);
     }
   }
 
@@ -185,85 +240,133 @@ export function SiteVersionAdminPage() {
       <AdminGlassPanel className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <h2 className="text-lg font-semibold">Version history</h2>
+            <h2 className="text-lg font-semibold">Major releases</h2>
             <p className="text-sm text-muted-foreground">
-              Internal changelog for major releases. Entries are sorted by version on save (newest first).
+              x.0.0 entries for the public What&apos;s New page. Edit a row or add a new release.
             </p>
           </div>
           {canEdit ? (
-            <button type="button" className="btn btn-outline btn-sm" onClick={addEntry}>
-              Add entry
+            <button type="button" className="btn btn-outline btn-sm" onClick={openCreateRelease}>
+              Add release
             </button>
           ) : null}
         </div>
 
-        <div className="space-y-3">
-          {entries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No changelog entries yet.</p>
+        <div className="overflow-x-auto rounded-lg border border-border/70">
+          <table className="w-full min-w-[40rem] text-left text-sm">
+            <thead className="border-b border-border/70 bg-background/50 text-xs uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2 font-medium">Version</th>
+                <th className="px-3 py-2 font-medium">Label</th>
+                <th className="px-3 py-2 font-medium">Summary</th>
+                <th className="px-3 py-2 font-medium">Date</th>
+                <th className="px-3 py-2 font-medium">Notes</th>
+                {canEdit ? <th className="px-3 py-2 font-medium text-right">Actions</th> : null}
+              </tr>
+            </thead>
+            <tbody>
+              {entries.length === 0 ? (
+                <tr>
+                  <td colSpan={canEdit ? 6 : 5} className="px-3 py-6 text-center text-muted-foreground">
+                    No major releases yet.
+                  </td>
+                </tr>
+              ) : (
+                entries.map((entry, index) => (
+                  <tr key={entry.id || entry.version} className="border-b border-border/50 last:border-0">
+                    <td className="px-3 py-2.5 font-mono text-xs font-semibold whitespace-nowrap">v{entry.version}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">{entry.seasonLabel || "—"}</td>
+                    <td className="px-3 py-2.5 max-w-[14rem] text-muted-foreground">{truncateText(entry.summary, 80)}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">{formatReleaseDate(entry.releasedAt)}</td>
+                    <td className="px-3 py-2.5 max-w-[10rem] text-muted-foreground">{truncateText(entry.notes, 48) || "—"}</td>
+                    {canEdit ? (
+                      <td className="px-3 py-2.5 text-right">
+                        <button type="button" className="btn btn-outline btn-xs" onClick={() => openEditRelease(index)}>
+                          Edit
+                        </button>
+                      </td>
+                    ) : null}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </AdminGlassPanel>
+
+      <MajorReleaseEntryModal
+        open={releaseModal.open && canEdit}
+        mode={releaseModal.mode}
+        initialEntry={releaseModalEntry}
+        saving={savingHistory}
+        onClose={() => setReleaseModal({ open: false, mode: "create", index: -1 })}
+        onSave={(draft) => void handleReleaseModalSave(draft)}
+        onDelete={releaseModal.mode === "edit" ? () => void handleReleaseModalDelete() : undefined}
+      />
+
+      <AdminGlassPanel className="space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-semibold">Text changelog (y / z and all versions)</h2>
+            <p className="text-sm text-muted-foreground">
+              One line per version for the public text sheet (last 50 shown). Add rows for{" "}
+              <strong>3.0.1</strong>, <strong>3.1.0</strong>, etc. Major x.0.0 summaries are included automatically if
+              not listed here.
+            </p>
+          </div>
+          {canEdit ? (
+            <button type="button" className="btn btn-outline btn-sm" onClick={addChangelogLine}>
+              Add line
+            </button>
+          ) : null}
+        </div>
+
+        <div className="space-y-2">
+          {changelogLines.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No changelog lines yet.</p>
           ) : (
-            entries.map((entry, index) => (
+            changelogLines.map((line, index) => (
               <div
-                key={entry.id || `${entry.version}-${index}`}
-                className="rounded-lg border border-border/70 bg-background/40 p-4 space-y-3"
+                key={line.id || `${line.version}-${index}`}
+                className="grid gap-2 rounded-lg border border-border/70 bg-background/40 p-3 sm:grid-cols-[7rem_1fr_auto]"
               >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-mono text-sm font-medium">v{entry.version || "0.0.0"}</span>
-                  {canEdit ? (
-                    <div className="flex gap-1">
-                      <button type="button" className="btn btn-outline btn-xs" onClick={() => moveEntry(index, -1)} aria-label="Move up">
-                        ↑
-                      </button>
-                      <button type="button" className="btn btn-outline btn-xs" onClick={() => moveEntry(index, 1)} aria-label="Move down">
-                        ↓
-                      </button>
-                      <button type="button" className="btn btn-outline btn-xs text-destructive" onClick={() => removeEntry(index)}>
-                        Remove
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Version (x.y.z)">
-                    <input
-                      className={inputClassName()}
-                      value={entry.version}
-                      disabled={!canEdit}
-                      onChange={(e) => updateEntry(index, { version: e.target.value })}
-                    />
-                  </Field>
-                  <Field label="Season label">
-                    <input
-                      className={inputClassName()}
-                      value={entry.seasonLabel || ""}
-                      disabled={!canEdit}
-                      onChange={(e) => updateEntry(index, { seasonLabel: e.target.value })}
-                    />
-                  </Field>
-                </div>
-                <Field label="Summary">
-                  <textarea
-                    className={`${inputClassName()} min-h-[4rem]`}
-                    value={entry.summary}
-                    disabled={!canEdit}
-                    onChange={(e) => updateEntry(index, { summary: e.target.value })}
-                  />
-                </Field>
-                <Field label="Notes (optional)">
-                  <textarea
-                    className={`${inputClassName()} min-h-[5rem]`}
-                    value={entry.notes || ""}
-                    disabled={!canEdit}
-                    onChange={(e) => updateEntry(index, { notes: e.target.value })}
-                  />
-                </Field>
+                <input
+                  className={inputClassName()}
+                  value={line.version}
+                  disabled={!canEdit}
+                  aria-label="Version"
+                  onChange={(e) => updateChangelogLine(index, { version: e.target.value })}
+                />
+                <input
+                  className={inputClassName()}
+                  value={line.text}
+                  disabled={!canEdit}
+                  aria-label="Changelog text"
+                  placeholder="Short description of this release"
+                  onChange={(e) => updateChangelogLine(index, { text: e.target.value })}
+                />
+                {canEdit ? (
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-xs text-destructive shrink-0"
+                    onClick={() => removeChangelogLine(index)}
+                  >
+                    Remove
+                  </button>
+                ) : null}
               </div>
             ))
           )}
         </div>
 
         {canEdit ? (
-          <button type="button" className="btn btn-primary btn-sm" disabled={savingHistory} onClick={() => void saveVersionHistory()}>
-            {savingHistory ? "Saving…" : "Save changelog"}
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            disabled={savingChangelog}
+            onClick={() => void saveVersionChangeLog()}
+          >
+            {savingChangelog ? "Saving…" : "Save text changelog"}
           </button>
         ) : null}
       </AdminGlassPanel>

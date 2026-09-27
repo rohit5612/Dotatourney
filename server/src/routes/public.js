@@ -901,4 +901,20 @@ router.get("/sponsors/checkout/:id/status", async (req, res, next) => {
   }
 });
 
+router.post("/sponsors/checkout/:id/submit-proof", async (req, res, next) => {
+  try {
+    const body = z
+      .object({
+        paymentScreenshot: z.string().min(1),
+        notes: z.string().optional().default(""),
+      })
+      .parse(req.body);
+    const { submitSponsorManualProof } = await import("../services/sponsorContributionService.js");
+    const result = await submitSponsorManualProof(req.params.id, body);
+    return res.status(201).json(result);
+  } catch (error) {
+    return next(error);
+  }
+});
+
 export default router;

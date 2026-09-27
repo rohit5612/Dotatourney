@@ -14,8 +14,16 @@ function normalizeRolesArray(roles, role) {
   return single ? [single] : [];
 }
 
+function parsePortraitCropMap(row) {
+  const raw = row.pa_avatar_portrait_crop ?? row.avatar_portrait_crop;
+  if (!raw || typeof raw !== "object") return {};
+  return raw;
+}
+
 function mapRosterPlayerRow(row) {
   const name = row.display_name || row.name;
+  const customAvatar = String(row.pa_avatar_url || row.avatar_url || "").trim();
+  const steamAvatar = String(row.pa_steam_avatar_url || row.steam_avatar_url || "").trim();
   return {
     id: row.id,
     name,
@@ -27,7 +35,47 @@ function mapRosterPlayerRow(row) {
     playerAccountId: row.player_account_id || null,
     slug: row.player_slug || null,
     bpcId: row.bpc_id || null,
+    avatarUrl: customAvatar || steamAvatar,
+    steamAvatarUrl: steamAvatar,
+    avatarPortraitCrop: parsePortraitCropMap(row),
   };
+}
+
+const PLAYER_PORTRAIT_COLS = `pa.avatar_url AS pa_avatar_url,
+              pa.steam_avatar_url AS pa_steam_avatar_url,
+              pa.avatar_portrait_crop AS pa_avatar_portrait_crop`;
+
+const LEAGUE_TEAM_SLUG_SQL = `COALESCE(
+  lt.slug,
+  (SELECT lt2.slug FROM league_teams lt2 WHERE lower(trim(lt2.name)) = lower(trim(rst.name)) LIMIT 1)
+) AS league_team_slug`;
+
+function mapSnapshotTeamFromRow(row) {
+  return {
+    id: row.team_id,
+    name: row.team_name,
+    logoUrl: row.logo_url || "",
+    accentColor: row.accent_color || "",
+    captain: row.captain || "",
+    leagueTeamSlug: row.league_team_slug || "",
+  };
+}
+
+function mapCurrentPlayerFromRow(row) {
+  const player = {
+    id: row.player_id,
+    name: row.display_name || row.name,
+    displayName: row.display_name || row.name,
+    role: row.role,
+    roles: normalizeRolesArray(row.roles, row.role),
+    mmr: row.mmr,
+    isCaptain: Boolean(row.is_captain),
+  };
+  return applyCaptainFlagsToPlayers([player], row.captain)[0];
+}
+
+function mapTeammatesForTeam(rows, captainName) {
+  return applyCaptainFlagsToPlayers(rows.map(mapRosterPlayerRow), captainName);
 }
 
 function normalizeCaptainLabel(value) {
@@ -75,7 +123,7 @@ export async function loadActiveTeamPlayers(rosterId, teamId, client = pool) {
   if (hasMemberships) {
     const { rows } = await client.query(
       `SELECT rsp.id, rsp.player_account_id, rsp.display_name, rsp.name, rsp.role, rsp.roles, rsp.mmr,
-              rsp.is_captain, pa.slug AS player_slug, pa.bpc_id
+              rsp.is_captain, pa.slug AS player_slug, pa.bpc_id, ${PLAYER_PORTRAIT_COLS}
        FROM roster_snapshot_team_memberships rstm
        JOIN roster_snapshot_players rsp ON rsp.id = rstm.snapshot_player_id
        LEFT JOIN player_accounts pa ON pa.id = rsp.player_account_id
@@ -90,7 +138,7 @@ export async function loadActiveTeamPlayers(rosterId, teamId, client = pool) {
 
   const { rows } = await client.query(
     `SELECT rsp.id, rsp.player_account_id, rsp.display_name, rsp.name, rsp.role, rsp.roles, rsp.mmr,
-            rsp.is_captain, pa.slug AS player_slug, pa.bpc_id
+            rsp.is_captain, pa.slug AS player_slug, pa.bpc_id, ${PLAYER_PORTRAIT_COLS}
      FROM roster_snapshot_team_players rstp
      JOIN roster_snapshot_players rsp ON rsp.id = rstp.player_id
      LEFT JOIN player_accounts pa ON pa.id = rsp.player_account_id
@@ -116,7 +164,7 @@ export async function loadLineupPlayersForTeam(rosterId, teamName, client = pool
   if (team.eliminated_at) {
     const { rows } = await client.query(
       `SELECT rsp.id, rsp.player_account_id, rsp.display_name, rsp.name, rsp.role, rsp.roles, rsp.mmr,
-              rsp.is_captain, pa.slug AS player_slug, pa.bpc_id
+              rsp.is_captain, pa.slug AS player_slug, pa.bpc_id, ${PLAYER_PORTRAIT_COLS}
        FROM roster_snapshot_team_elimination_players ep
        JOIN roster_snapshot_players rsp ON rsp.id = ep.snapshot_player_id
        LEFT JOIN player_accounts pa ON pa.id = rsp.player_account_id
@@ -142,7 +190,7 @@ export async function loadFormerTeamPlayers(rosterId, teamId, client = pool) {
 
   const { rows } = await client.query(
     `SELECT rsp.id, rsp.player_account_id, rsp.display_name, rsp.name, rsp.role, rsp.roles, rsp.mmr,
-            rsp.is_captain, pa.slug AS player_slug, pa.bpc_id,
+            rsp.is_captain, pa.slug AS player_slug, pa.bpc_id, ${PLAYER_PORTRAIT_COLS},
             rstm.started_at, rstm.ended_at
      FROM roster_snapshot_team_memberships rstm
      JOIN roster_snapshot_players rsp ON rsp.id = rstm.snapshot_player_id
@@ -212,6 +260,11 @@ export async function loadAllMembershipStintsForAccount(playerAccountId) {
             rst.logo_url,
             rst.accent_color,
             rst.eliminated_at,
+            rst.league_team_id,
+            COALESCE(
+              lt.slug,
+              (SELECT lt2.slug FROM league_teams lt2 WHERE lower(trim(lt2.name)) = lower(trim(rst.name)) LIMIT 1)
+            ) AS league_team_slug,
             t.id AS tournament_id,
             t.name AS tournament_name,
             t.slug AS tournament_slug,
@@ -224,6 +277,7 @@ export async function loadAllMembershipStintsForAccount(playerAccountId) {
      JOIN roster_snapshots rs ON rs.id = rstm.roster_snapshot_id AND rs.status = 'approved'
      JOIN roster_snapshot_teams rst ON rst.id = rstm.snapshot_team_id
      JOIN tournaments t ON t.id = rs.tournament_id
+     LEFT JOIN league_teams lt ON lt.id = rst.league_team_id
      LEFT JOIN seasons s ON s.tournament_id = t.id
      LEFT JOIN player_registrations pr ON pr.id = rsp.registration_id
      WHERE rsp.player_account_id = $1
@@ -323,11 +377,13 @@ export async function findActivePlayerTeamOnTournament(playerAccountId, tourname
   const hasMemberships = await rosterHasMemberships(rosterId);
   if (hasMemberships) {
     const { rows } = await pool.query(
-      `SELECT rsp.id AS player_id, rsp.name, rsp.display_name, rsp.role, rsp.roles, rsp.mmr,
-              rst.id AS team_id, rst.name AS team_name, rst.logo_url, rst.accent_color, rst.captain
+      `SELECT rsp.id AS player_id, rsp.name, rsp.display_name, rsp.role, rsp.roles, rsp.mmr, rsp.is_captain,
+              rst.id AS team_id, rst.name AS team_name, rst.logo_url, rst.accent_color, rst.captain,
+              ${LEAGUE_TEAM_SLUG_SQL}
        FROM roster_snapshot_team_memberships rstm
        JOIN roster_snapshot_players rsp ON rsp.id = rstm.snapshot_player_id
        JOIN roster_snapshot_teams rst ON rst.id = rstm.snapshot_team_id
+       LEFT JOIN league_teams lt ON lt.id = rst.league_team_id
        WHERE rstm.roster_snapshot_id = $1
          AND rstm.status = 'active'
          AND rsp.player_account_id = $2
@@ -341,22 +397,9 @@ export async function findActivePlayerTeamOnTournament(playerAccountId, tourname
     return {
       tournamentId,
       rosterSnapshotId: rosterId,
-      team: {
-        id: row.team_id,
-        name: row.team_name,
-        logoUrl: row.logo_url || "",
-        accentColor: row.accent_color || "",
-        captain: row.captain || "",
-      },
-      player: {
-        id: row.player_id,
-        name: row.display_name || row.name,
-        displayName: row.display_name || row.name,
-        role: row.role,
-        roles: normalizeRolesArray(row.roles, row.role),
-        mmr: row.mmr,
-      },
-      teammates: teammates.map(mapRosterPlayerRow),
+      team: mapSnapshotTeamFromRow(row),
+      player: mapCurrentPlayerFromRow(row),
+      teammates: mapTeammatesForTeam(teammates, row.captain),
       formerTeammates: (await loadFormerTeamPlayers(rosterId, row.team_id)).map((p) => ({
         ...mapRosterPlayerRow(p),
         startedAt: p.started_at,
@@ -366,11 +409,13 @@ export async function findActivePlayerTeamOnTournament(playerAccountId, tourname
   }
 
   const { rows } = await pool.query(
-    `SELECT rsp.id AS player_id, rsp.name, rsp.display_name, rsp.role, rsp.roles, rsp.mmr,
-            rst.id AS team_id, rst.name AS team_name, rst.logo_url, rst.accent_color, rst.captain
+    `SELECT rsp.id AS player_id, rsp.name, rsp.display_name, rsp.role, rsp.roles, rsp.mmr, rsp.is_captain,
+            rst.id AS team_id, rst.name AS team_name, rst.logo_url, rst.accent_color, rst.captain,
+            ${LEAGUE_TEAM_SLUG_SQL}
      FROM roster_snapshot_players rsp
      JOIN roster_snapshot_team_players rstp ON rstp.player_id = rsp.id
      JOIN roster_snapshot_teams rst ON rst.id = rstp.team_id
+     LEFT JOIN league_teams lt ON lt.id = rst.league_team_id
      WHERE rst.roster_snapshot_id = $1 AND rsp.player_account_id = $2
      LIMIT 1`,
     [rosterId, playerAccountId],
@@ -382,22 +427,9 @@ export async function findActivePlayerTeamOnTournament(playerAccountId, tourname
   return {
     tournamentId,
     rosterSnapshotId: rosterId,
-    team: {
-      id: row.team_id,
-      name: row.team_name,
-      logoUrl: row.logo_url || "",
-      accentColor: row.accent_color || "",
-      captain: row.captain || "",
-    },
-    player: {
-      id: row.player_id,
-      name: row.display_name || row.name,
-      displayName: row.display_name || row.name,
-      role: row.role,
-      roles: normalizeRolesArray(row.roles, row.role),
-      mmr: row.mmr,
-    },
-    teammates: teammates.map(mapRosterPlayerRow),
+    team: mapSnapshotTeamFromRow(row),
+    player: mapCurrentPlayerFromRow(row),
+    teammates: mapTeammatesForTeam(teammates, row.captain),
     formerTeammates: [],
   };
 }

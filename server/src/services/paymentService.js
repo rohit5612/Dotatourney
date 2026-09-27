@@ -20,8 +20,19 @@ import {
   publicCommerceConfig,
 } from "./commerceConfigRepository.js";
 import { resolveBundleLineItem, resolveUpgradeLineItem, getUpgradeableTiers, getHighestEnabledTier, tierRank, enrichCardTiers } from "./commerceBundle.js";
-import { sendPaidRegistrationEmail } from "./emailService.js";
+import {
+  sendPaidRegistrationEmail,
+  sendPlayerRegistrationSubmittedEmail,
+  sendManualPaymentProofReceivedEmail,
+} from "./emailService.js";
 import { logAction, logError, logWarn } from "../utils/serverLogger.js";
+import {
+  assertCheckoutProviderAvailable,
+  allowSimulateManualPayment,
+  publicPaymentFlags,
+  resolveCheckoutProvider,
+} from "./paymentProvider.js";
+import { buildManualUpiPayload } from "../utils/upiPayUri.js";
 
 export const CARD_TIERS = ["default", "player", "gold", "holo"];
 
@@ -185,7 +196,23 @@ export async function previewCheckout(account, tournamentSlug, body) {
     cardTier,
     ...totals,
     coinBalance,
-    provider: cashfreeConfigured() ? "cashfree" : "manual",
+    ...publicPaymentFlags(),
+    provider: resolveCheckoutProvider() || "unavailable",
+  };
+}
+
+function manualUpiForAccount(account, amountRupees, orderType) {
+  const bpcId = account.bpc_id || account.bpcId || "BPC";
+  return buildManualUpiPayload({ bpcId, amountRupees, orderType });
+}
+
+function attachManualCheckoutFields(account, preview, base, orderType) {
+  const provider = base.provider;
+  if (provider !== "manual") return base;
+  return {
+    ...base,
+    manualMode: true,
+    upi: manualUpiForAccount(account, preview.totalRupees, orderType),
   };
 }
 
@@ -337,7 +364,8 @@ export async function previewUpgrade(account, tournamentSlug, body) {
     targetTier,
     ...totals,
     coinBalance,
-    provider: cashfreeConfigured() ? "cashfree" : "manual",
+    ...publicPaymentFlags(),
+    provider: resolveCheckoutProvider() || "unavailable",
     orderType: "upgrade",
   };
 }
@@ -363,7 +391,7 @@ export async function confirmUpgrade(account, tournamentSlug, body) {
     await expireStaleCheckoutOrders(client, tournament.id, account.id);
 
     const orderId = randomUUID();
-    const provider = cashfreeConfigured() ? "cashfree" : "manual";
+    const provider = assertCheckoutProviderAvailable();
 
     const { rows: orderRows } = await client.query(
       `INSERT INTO checkout_orders (
@@ -434,18 +462,23 @@ export async function confirmUpgrade(account, tournamentSlug, body) {
       fromTier: currentTier,
     });
 
-    return {
-      orderId,
-      provider,
-      amount: preview.totalPaise,
-      currency: preview.currency,
-      paymentSessionId,
-      cashfreeMode: publicCashfreeMode(),
-      lineItems: preview.lineItems,
-      coinDiscount: preview.coinDiscount,
-      manualMode: provider === "manual",
-      orderType: "upgrade",
-    };
+    return attachManualCheckoutFields(
+      account,
+      preview,
+      {
+        orderId,
+        provider,
+        amount: preview.totalPaise,
+        currency: preview.currency,
+        paymentSessionId,
+        cashfreeMode: publicCashfreeMode(),
+        lineItems: preview.lineItems,
+        coinDiscount: preview.coinDiscount,
+        manualMode: provider === "manual",
+        orderType: "upgrade",
+      },
+      "upgrade",
+    );
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -498,7 +531,7 @@ export async function confirmCheckout(account, tournamentSlug, body) {
     await expireStaleCheckoutOrders(client, tournament.id, account.id);
 
     const orderId = randomUUID();
-    const provider = cashfreeConfigured() ? "cashfree" : "manual";
+    const provider = assertCheckoutProviderAvailable();
 
     const { rows: orderRows } = await client.query(
       `INSERT INTO checkout_orders (
@@ -565,17 +598,22 @@ export async function confirmCheckout(account, tournamentSlug, body) {
       cardTier: body.cardTier || "default",
     });
 
-    return {
-      orderId,
-      provider,
-      amount: preview.totalPaise,
-      currency: preview.currency,
-      paymentSessionId,
-      cashfreeMode: publicCashfreeMode(),
-      lineItems: preview.lineItems,
-      coinDiscount: preview.coinDiscount,
-      manualMode: provider === "manual",
-    };
+    return attachManualCheckoutFields(
+      account,
+      preview,
+      {
+        orderId,
+        provider,
+        amount: preview.totalPaise,
+        currency: preview.currency,
+        paymentSessionId,
+        cashfreeMode: publicCashfreeMode(),
+        lineItems: preview.lineItems,
+        coinDiscount: preview.coinDiscount,
+        manualMode: provider === "manual",
+      },
+      "checkout",
+    );
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -909,10 +947,10 @@ export async function fulfillPaidCheckout({
   }
 }
 
-/** Dev/manual provider: simulate payment when Cashfree keys are absent. */
+/** Dev/manual provider: simulate payment when allowed (local testing only). */
 export async function simulateManualPayment(orderId, playerAccountId) {
-  if (cashfreeConfigured() && env.nodeEnv === "production") {
-    const err = new Error("Manual payment simulation is disabled in production");
+  if (!allowSimulateManualPayment()) {
+    const err = new Error("Manual payment simulation is disabled");
     err.status = 403;
     throw err;
   }
@@ -937,6 +975,249 @@ export async function simulateManualPayment(orderId, playerAccountId) {
     paymentProvider: "manual",
     paymentRef: `manual-${orderId}`,
   });
+}
+
+export async function submitManualCheckoutProof(orderId, playerAccountId, { paymentScreenshot, notes = "" }) {
+  const screenshot = String(paymentScreenshot || "").trim();
+  if (!screenshot) {
+    const err = new Error("Payment screenshot is required");
+    err.status = 400;
+    throw err;
+  }
+
+  const client = await pool.connect();
+  let registrationId = null;
+  let orderType = "checkout";
+  let tournamentName = "BPC League — Bharat Pro Circuit League";
+  let playerEmail = "";
+  let playerName = "";
+  let publicCode = "";
+  let targetTier = "";
+
+  try {
+    await client.query("BEGIN");
+
+    const { rows: orderRows } = await client.query(
+      `SELECT * FROM checkout_orders WHERE id = $1 AND player_account_id = $2 FOR UPDATE`,
+      [orderId, playerAccountId],
+    );
+    const order = orderRows[0];
+    if (!order) {
+      const err = new Error("Checkout order not found");
+      err.status = 404;
+      throw err;
+    }
+    if (order.provider !== "manual") {
+      const err = new Error("This order uses online checkout; payment proof is not accepted here");
+      err.status = 400;
+      throw err;
+    }
+    if (order.status === "paid") {
+      const err = new Error("This payment was already confirmed");
+      err.status = 409;
+      throw err;
+    }
+    if (order.status === "awaiting_review") {
+      const err = new Error("Payment proof was already submitted and is under review");
+      err.status = 409;
+      throw err;
+    }
+    if (order.status !== "pending") {
+      const err = new Error("This checkout order is no longer open for payment proof");
+      err.status = 400;
+      throw err;
+    }
+
+    const { rows: accountRows } = await client.query(`SELECT * FROM player_accounts WHERE id = $1`, [
+      order.player_account_id,
+    ]);
+    const account = accountRows[0];
+    if (!account) {
+      const err = new Error("Player account not found");
+      err.status = 404;
+      throw err;
+    }
+
+    const { rows: tourRows } = await client.query(`SELECT name FROM tournaments WHERE id = $1`, [order.tournament_id]);
+    tournamentName = tourRows[0]?.name || tournamentName;
+
+    const isUpgrade = order.order_type === "upgrade";
+    orderType = isUpgrade ? "upgrade" : "checkout";
+    targetTier = order.card_tier || "default";
+
+    let existing = order.registration_id
+      ? (await client.query(`SELECT * FROM player_registrations WHERE id = $1`, [order.registration_id])).rows[0]
+      : await findActiveRegistration(client, order.tournament_id, order.player_account_id);
+
+    const {
+      displayName,
+      regLocation: location,
+      regRoles: roles,
+      regMmr: mmr,
+      regPhone: phone,
+      steamName,
+      steamProfile,
+      discordHandle,
+    } = registrationTextFields(account);
+
+    playerEmail = String(account.email || "");
+    playerName = displayName;
+    const notesText = String(notes || "").trim();
+
+    if (!existing) {
+      registrationId = randomUUID();
+      const bpcId = account.bpc_id || (await allocateBpcId(client));
+      publicCode = bpcId;
+      await client.query(
+        `INSERT INTO player_registrations (
+          id, tournament_id, player_account_id, email, name, display_name,
+          location, roles, mmr, steam_name, steam_profile, discord_handle, phone_number,
+          payment_screenshot, notes, payment_status, registration_status, registration_flow_stage,
+          email_verified_at, card_tier, checkout_order_id, payment_provider, public_code, substitute_flag
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6,
+          $7, $8::jsonb, $9, $10, $11, $12, $13,
+          $14, $15, 'unpaid', 'pending', 'submitted',
+          NOW(), $16, $17, 'manual', $18, FALSE
+        )`,
+        [
+          registrationId,
+          order.tournament_id,
+          account.id,
+          playerEmail,
+          displayName,
+          displayName,
+          location,
+          JSON.stringify(roles),
+          mmr,
+          steamName,
+          steamProfile,
+          discordHandle,
+          phone,
+          screenshot,
+          notesText,
+          order.card_tier,
+          order.id,
+          bpcId,
+        ],
+      );
+    } else {
+      registrationId = existing.id;
+      publicCode = existing.public_code || account.bpc_id || "";
+      if (isUpgrade) {
+        await client.query(
+          `UPDATE player_registrations
+           SET payment_screenshot = $2,
+               notes = CASE WHEN $3 <> '' THEN $3 ELSE notes END,
+               checkout_order_id = $4,
+               payment_provider = 'manual',
+               updated_at = NOW()
+           WHERE id = $1`,
+          [registrationId, screenshot, notesText, order.id],
+        );
+      } else {
+        await client.query(
+          `UPDATE player_registrations
+           SET payment_screenshot = $2,
+               notes = CASE WHEN $3 <> '' THEN $3 ELSE notes END,
+               payment_status = 'unpaid',
+               registration_status = 'pending',
+               registration_flow_stage = 'submitted',
+               card_tier = $4,
+               checkout_order_id = $5,
+               payment_provider = 'manual',
+               location = COALESCE(NULLIF($6, ''), location),
+               roles = CASE WHEN $7::jsonb <> '[]'::jsonb THEN $7::jsonb ELSE roles END,
+               mmr = COALESCE($8, mmr),
+               phone_number = COALESCE(NULLIF($9, ''), phone_number),
+               steam_name = COALESCE(NULLIF($10, ''), steam_name),
+               steam_profile = COALESCE(NULLIF($11, ''), steam_profile),
+               updated_at = NOW()
+           WHERE id = $1`,
+          [
+            registrationId,
+            screenshot,
+            notesText,
+            order.card_tier,
+            order.id,
+            location,
+            JSON.stringify(roles),
+            mmr,
+            phone,
+            steamName,
+            steamProfile,
+          ],
+        );
+      }
+    }
+
+    await client.query(
+      `UPDATE checkout_orders
+       SET status = 'awaiting_review', registration_id = $2, updated_at = NOW()
+       WHERE id = $1`,
+      [order.id, registrationId],
+    );
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  logAction("payment", "checkout.proof_submitted", {
+    orderId,
+    playerId: playerAccountId,
+    registrationId,
+    orderType,
+  });
+
+  if (playerEmail && !playerEmail.includes("@migrated.")) {
+    try {
+      if (orderType === "upgrade") {
+        await sendManualPaymentProofReceivedEmail({
+          to: playerEmail,
+          name: playerName,
+          tournamentName,
+          publicCode,
+          targetTier,
+          kind: "upgrade",
+        });
+      } else {
+        await sendPlayerRegistrationSubmittedEmail({
+          to: playerEmail,
+          name: playerName,
+          tournamentName,
+          publicCode,
+        });
+      }
+    } catch (emailErr) {
+      logError("email", "manual checkout proof mail failed", emailErr, { orderId, registrationId });
+    }
+  }
+
+  return { ok: true, orderId, registrationId, status: "awaiting_review" };
+}
+
+export async function tryFulfillManualOrderOnAdminPaid(tournamentId, registrationId) {
+  const { rows } = await pool.query(
+    `SELECT pr.checkout_order_id, co.status, co.provider, co.id AS order_id
+     FROM player_registrations pr
+     LEFT JOIN checkout_orders co ON co.id = pr.checkout_order_id
+     WHERE pr.tournament_id = $1 AND pr.id = $2`,
+    [tournamentId, registrationId],
+  );
+  const link = rows[0];
+  if (!link?.checkout_order_id || link.provider !== "manual" || link.status !== "awaiting_review") {
+    return { fulfilled: false };
+  }
+  const result = await fulfillPaidCheckout({
+    checkoutOrderId: link.order_id,
+    paymentProvider: "manual",
+    paymentRef: "admin-verified",
+  });
+  return { fulfilled: true, ...result };
 }
 
 export async function handleCashfreeWebhook(rawBody, signature, timestamp) {
