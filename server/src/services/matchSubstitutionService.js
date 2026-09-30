@@ -112,14 +112,22 @@ async function loadMatchContext(matchId) {
 }
 
 async function ensureLineupsSeeded(tournamentId, matchId, matchRow) {
-  const lineupRows = await getMatchLineupRows(matchId);
-  const starters = lineupRows.filter((row) => row.is_substitute !== true);
-  if (!starters.length) {
-    await seedMatchLineupsForTournament(tournamentId, [matchId]);
-    return;
-  }
-  if (matchLineupNeedsReseed(starters, matchRow.team1, matchRow.team2)) {
-    await reseedMatchLineups(tournamentId, matchId);
+  try {
+    const lineupRows = await getMatchLineupRows(matchId);
+    const starters = lineupRows.filter((row) => row.is_substitute !== true);
+    if (!starters.length) {
+      await seedMatchLineupsForTournament(tournamentId, [matchId]);
+      return;
+    }
+    if (matchLineupNeedsReseed(starters, matchRow.team1, matchRow.team2)) {
+      await reseedMatchLineups(tournamentId, matchId);
+    }
+  } catch (error) {
+    console.error("[match-lineup] ensureLineupsSeeded failed", {
+      tournamentId,
+      matchId,
+      message: error?.message || String(error),
+    });
   }
 }
 

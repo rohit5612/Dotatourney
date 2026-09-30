@@ -47,15 +47,99 @@ async function getApprovedRosterId(tournamentId) {
   return rows[0]?.id || null;
 }
 
-async function loadTeamLineupFromSnapshot(rosterId, teamName) {
+async function loadValidPlayerAccountIds(tournamentId, rosterId) {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT pa.id
+     FROM player_accounts pa
+     WHERE pa.id IN (
+       SELECT pr.player_account_id
+       FROM player_registrations pr
+       WHERE pr.tournament_id = $1 AND pr.player_account_id IS NOT NULL
+       UNION
+       SELECT rsp.player_account_id
+       FROM roster_snapshot_players rsp
+       WHERE rsp.roster_snapshot_id = $2 AND rsp.player_account_id IS NOT NULL
+     )`,
+    [tournamentId, rosterId],
+  );
+  return new Set(rows.map((row) => row.id));
+}
+
+async function loadRegistrationAccountMaps(tournamentId, validAccountIds) {
+  const { rows } = await pool.query(
+    `SELECT id, player_account_id, display_name, name, steam_name
+     FROM player_registrations
+     WHERE tournament_id = $1
+       AND archived_at IS NULL
+       AND player_account_id IS NOT NULL
+     ORDER BY substitute_flag ASC, created_at DESC`,
+    [tournamentId],
+  );
+  const byName = new Map();
+  const byRegistrationId = new Map();
+  for (const row of rows) {
+    if (!validAccountIds.has(row.player_account_id)) continue;
+    byRegistrationId.set(row.id, row.player_account_id);
+    for (const label of [row.display_name, row.name, row.steam_name]) {
+      const key = String(label || "").trim().toLowerCase();
+      if (key && !byName.has(key)) byName.set(key, row.player_account_id);
+    }
+  }
+  return { byName, byRegistrationId, validAccountIds };
+}
+
+async function loadSnapshotRegistrationIds(snapshotPlayerIds) {
+  if (!snapshotPlayerIds.length) return new Map();
+  const { rows } = await pool.query(
+    `SELECT id, registration_id, player_account_id
+     FROM roster_snapshot_players
+     WHERE id = ANY($1::uuid[])`,
+    [snapshotPlayerIds],
+  );
+  return new Map(rows.map((row) => [row.id, row]));
+}
+
+function resolveLineupPlayerAccountId(player, snapshotMeta, maps) {
+  const accept = (accountId) =>
+    accountId && maps.validAccountIds.has(accountId) ? accountId : null;
+
+  const direct = accept(player.player_account_id);
+  if (direct) return direct;
+  const meta = snapshotMeta.get(player.id);
+  const fromMeta = accept(meta?.player_account_id);
+  if (fromMeta) return fromMeta;
+  const registrationId = meta?.registration_id || player.registration_id;
+  if (registrationId && maps.byRegistrationId.has(registrationId)) {
+    return accept(maps.byRegistrationId.get(registrationId));
+  }
+  for (const label of [player.display_name, player.name]) {
+    const key = String(label || "").trim().toLowerCase();
+    const accountId = key ? maps.byName.get(key) : null;
+    const resolved = accept(accountId);
+    if (resolved) return resolved;
+  }
+  return null;
+}
+
+async function loadTeamLineupFromSnapshot(rosterId, teamName, accountMaps) {
   const players = await loadActiveTeamPlayersByName(rosterId, teamName);
-  return players.map((p) => ({
-    player_account_id: p.player_account_id,
-    display_name: p.display_name,
-    name: p.name,
-    roles: p.roles,
-    mmr: p.mmr,
-  }));
+  const snapshotMeta = await loadSnapshotRegistrationIds(players.map((p) => p.id));
+  const resolved = [];
+
+  for (const p of players) {
+    const player_account_id = resolveLineupPlayerAccountId(p, snapshotMeta, accountMaps);
+    if (!player_account_id) continue;
+    resolved.push({
+      player_account_id,
+      display_name: p.display_name,
+      name: p.name,
+      roles: p.roles,
+      mmr: p.mmr,
+    });
+    if (resolved.length >= ROSTER_TEAM_SIZE) break;
+  }
+
+  return resolved;
 }
 
 export async function seedMatchLineupsForTournament(tournamentId, matchIds = null) {
@@ -69,6 +153,8 @@ export async function seedMatchLineupsForTournament(tournamentId, matchIds = nul
     sql += ` AND id = ANY($2::uuid[])`;
   }
   const { rows: matches } = await pool.query(sql, params);
+  const validAccountIds = await loadValidPlayerAccountIds(tournamentId, rosterId);
+  const accountMaps = await loadRegistrationAccountMaps(tournamentId, validAccountIds);
 
   let seeded = 0;
   for (const match of matches) {
@@ -83,9 +169,10 @@ export async function seedMatchLineupsForTournament(tournamentId, matchIds = nul
     for (const teamName of [match.team1, match.team2]) {
       if (!teamName?.trim()) continue;
 
-      const players = await loadTeamLineupFromSnapshot(rosterId, teamName);
+      const players = await loadTeamLineupFromSnapshot(rosterId, teamName, accountMaps);
       let slotIndex = 0;
       for (const player of players) {
+        if (!player.player_account_id) continue;
         await pool.query(
           `INSERT INTO match_lineup_players (
             id, match_id, tournament_id, team_name, player_account_id, display_name, roles, mmr,

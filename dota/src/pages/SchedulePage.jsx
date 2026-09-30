@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SeasonArchiveEmbedsEditor } from "../admin/seasons/SeasonArchiveEmbedsEditor.jsx";
 import {
   buildStageTabLabels,
@@ -16,6 +16,13 @@ import { normalizeArchiveEmbeds } from "../utils/seasonContentSchema.js";
 import { datetimeLocalToIso, toDatetimeLocalValue } from "../utils/datetime.js";
 import { isValidScheduleInstant, resolveScheduleStatus } from "../utils/schedule.js";
 import { resolveDisplayTeamName } from "../utils/playoffPresentation.js";
+import {
+  buildScheduleCsvExportRows,
+  downloadScheduleCsv,
+  mergeScheduleCsvImport,
+  parseScheduleCsv,
+  rowsToScheduleCsv,
+} from "../utils/scheduleCsv.js";
 
 const PHASE_TABS = [
   { id: SCHEDULE_PHASE_GROUPS, label: "Groups", shortLabel: "Groups" },
@@ -498,6 +505,9 @@ export function SchedulePage({
   const [sectionPages, setSectionPages] = useState(() =>
     Object.fromEntries(SECTION_KEYS.map((key) => [key, 1])),
   );
+  const [csvMessage, setCsvMessage] = useState("");
+  const [importingCsv, setImportingCsv] = useState(false);
+  const csvInputRef = useRef(null);
 
 
   const savedSlots = useMemo(
@@ -856,6 +866,75 @@ export function SchedulePage({
     }
   }
 
+  function handleExportCsv() {
+    setCsvMessage("");
+    const exportRows = buildScheduleCsvExportRows({
+      matches: state?.matches || [],
+      schedule: state?.schedule || [],
+      stageLabels,
+      formatRound: (match) => formatMatchRoundSummary(match, roundStructureAll),
+      resolveTeam1: (match) => resolveDisplayTeamName(match, 1, state?.matches || []),
+      resolveTeam2: (match) => resolveDisplayTeamName(match, 2, state?.matches || []),
+    });
+    const slug = String(state?.tournament?.slug || state?.tournament?.id || "tournament").replace(/[^\w-]+/g, "-");
+    const csv = rowsToScheduleCsv(exportRows);
+    downloadScheduleCsv(`${slug}-schedule.csv`, csv);
+    setCsvMessage(`Exported ${exportRows.length} matches. Dates and times use your local timezone (dd/mm/yyyy).`);
+  }
+
+  async function handleImportCsvFile(file) {
+    if (!file) return;
+    setCsvMessage("");
+    setValidationHint("");
+    setImportingCsv(true);
+    try {
+      const text = await file.text();
+      const { rows: parsed, errors: parseErrors } = parseScheduleCsv(text);
+      if (parseErrors.length && !parsed.length) {
+        setCsvMessage(parseErrors.join(" "));
+        return;
+      }
+
+      const validMatchIds = new Set((state?.matches || []).map((m) => m.id));
+      const existingRows = allRowsForPersist();
+      const { rows: merged, updated, skipped, failed } = mergeScheduleCsvImport(existingRows, parsed, validMatchIds);
+
+      if (failed.length) {
+        const sample = failed[0];
+        setCsvMessage(
+          `${failed.length} row(s) could not be parsed. Example — match_id ${sample.match_id}: Date="${sample.date}", Time="${sample.time}". Use dd/mm/yyyy (or yyyy-mm-dd) and HH:mm; avoid Excel changing columns to locale dates, or format Date/Time cells as Text before saving.`,
+        );
+        return;
+      }
+
+      if (!updated) {
+        const parts = [];
+        if (parseErrors.length) parts.push(parseErrors.join(" "));
+        if (skipped.length) parts.push(skipped.slice(0, 5).join(" "));
+        setCsvMessage(parts.join(" ") || "No date/time updates found in CSV.");
+        return;
+      }
+
+      const { payload } = buildSchedulePayload(merged, { requiredMatchIds: null });
+      await saveCustomSchedule(payload);
+      setDraft({});
+      setEditingMatchIds(new Set());
+      setRowMessages({});
+
+      const summary = [`Imported ${updated} match time(s) and saved schedule.`];
+      if (parseErrors.length) summary.push(parseErrors.join(" "));
+      if (skipped.length) {
+        summary.push(`Skipped: ${skipped.slice(0, 3).join("; ")}${skipped.length > 3 ? "…" : ""}`);
+      }
+      setCsvMessage(summary.join(" "));
+    } catch (error) {
+      setCsvMessage(error?.message || "Import failed.");
+    } finally {
+      setImportingCsv(false);
+      if (csvInputRef.current) csvInputRef.current.value = "";
+    }
+  }
+
   async function handleSaveAll() {
     setValidationHint("");
     const rows = allRowsForPersist();
@@ -986,18 +1065,46 @@ export function SchedulePage({
           <h2 className="font-serif text-xl">Schedule</h2>
           <p className="text-sm text-muted-foreground">
             Only saved matches appear in Live, Scheduled, and Finished. Set a date and time, then save — list order updates after
-            save. Use the filters (section, bracket, round, team) and pagination below each list.
+            save. Export CSV to edit Round, Teams, Bracket, Date (dd/mm/yyyy), and Time (local HH:mm) in a spreadsheet; keep{" "}
+            <span className="font-medium text-foreground">match_id</span> when re-importing.
           </p>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary shrink-0"
-          disabled={savingAll || savingMatchId !== null || !anyDirty}
-          onClick={() => void handleSaveAll()}
-        >
-          {savingAll ? "Saving all…" : "Save all changes"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className="btn btn-outline shrink-0" onClick={handleExportCsv}>
+            Export CSV
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline shrink-0"
+            disabled={importingCsv || savingAll}
+            onClick={() => csvInputRef.current?.click()}
+          >
+            {importingCsv ? "Importing…" : "Import CSV"}
+          </button>
+          <input
+            ref={csvInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void handleImportCsvFile(file);
+            }}
+          />
+          <button
+            type="button"
+            className="btn btn-primary shrink-0"
+            disabled={savingAll || savingMatchId !== null || !anyDirty}
+            onClick={() => void handleSaveAll()}
+          >
+            {savingAll ? "Saving all…" : "Save all changes"}
+          </button>
+        </div>
       </div>
+
+      {csvMessage ? (
+        <p className="rounded-md border border-border bg-background p-2 text-sm text-secondary">{csvMessage}</p>
+      ) : null}
 
       {validationHint ? <p className="rounded-md border border-border bg-background p-2 text-sm text-secondary">{validationHint}</p> : null}
 
