@@ -1,7 +1,7 @@
 /** Public logo path served from site root (`public/bpcl.png` in repo). Crawlers read absolute URL from built `index.html` when `VITE_SITE_URL` is set at build time. */
 export const SITE_SHARING_IMAGE_PATH = "/bpcl.png";
 
-/** Full rulebook PDF (`public/bpcl rules.pdf`). */
+/** Legacy PDF in `public/` (superseded by generated Season 3 HTML download on /rules). */
 export const RULEBOOK_PDF_PATH = "/bpcl%20rules.pdf";
 
 export const SITE_BRAND_SHORT = "BPC League";

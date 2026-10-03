@@ -42,7 +42,8 @@ import {
   PLAYER_RULES_SECTIONS,
 } from "../constants/playerRules.js";
 import { COOKIE_CONSENT_KEY, PUBLIC_CONTACT_EMAIL, TRADE_NAME } from "../constants/legal.js";
-import { RULEBOOK_PDF_PATH, SITE_BRAND_FULL, SITE_BRAND_LINE, SITE_BRAND_SHORT, SITE_ORIGIN } from "../constants/siteMeta.js";
+import { SITE_BRAND_FULL, SITE_BRAND_LINE, SITE_BRAND_SHORT, SITE_ORIGIN } from "../constants/siteMeta.js";
+import { downloadRulebookHtml, RULEBOOK_DOWNLOAD_FILENAME } from "../lib/rulebookDownloadHtml.js";
 import { LegalLink, LegalPageLayout, LegalSection } from "../components/legal/LegalPageLayout.jsx";
 import { roles } from "../constants/tournament";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock.js";
@@ -1900,6 +1901,11 @@ export function GeneralRulesPage({ discordUrl }) {
   const invite = (discordUrl || discordInviteUrl).trim();
   const sectionCount = PLAYER_RULES_SECTIONS.length;
 
+  function handleRulebookDownload(event) {
+    event.preventDefault();
+    downloadRulebookHtml({ discordUrl: invite });
+  }
+
   return (
     <div className="rules-page-layout">
       <section className="rules-page__hero-band" aria-labelledby="rules-page-title">
@@ -1917,8 +1923,12 @@ export function GeneralRulesPage({ discordUrl }) {
             <span className="rules-page__stat">
               {sectionCount} rule section{sectionCount === 1 ? "" : "s"}
             </span>
-            <a className="rules-page__stat" href={RULEBOOK_PDF_PATH} download="BPC-League-Rulebook.pdf">
-              Download PDF rulebook →
+            <a
+              className="rules-page__stat rules-page__stat--download"
+              href="#"
+              onClick={handleRulebookDownload}
+            >
+              Download rulebook (HTML) →
             </a>
           </div>
         </div>
@@ -1928,13 +1938,22 @@ export function GeneralRulesPage({ discordUrl }) {
         <article className="rules-page__document rules-glass rules-glass--strong" aria-label="Player rulebook">
           <header className="rules-page__doc-cover">
             <p className="rules-page__doc-edition">{SITE_BRAND_FULL}</p>
+            <p className="rules-page__doc-season" aria-label="Rulebook edition">
+              Season 3
+            </p>
             <h2 className="rules-page__doc-title">Official Player Rulebook</h2>
             <p className="rules-page__doc-subtitle">{PLAYER_RULES_REGISTRATION_NOTICE}</p>
-            <a className="rules-page__doc-download" href={RULEBOOK_PDF_PATH} download="BPC-League-Rulebook.pdf">
+            <a
+              className="rules-page__doc-download"
+              href="#"
+              onClick={handleRulebookDownload}
+              title={RULEBOOK_DOWNLOAD_FILENAME}
+            >
               <HiOutlineDocumentText className="rules-page__doc-download-icon" aria-hidden />
-              Download PDF rulebook
+              Download rulebook
               <HiOutlineArrowDownTray className="rules-page__doc-download-arrow" aria-hidden />
             </a>
+            <p className="rules-page__doc-download-hint">Offline HTML · same rules as this page · {RULEBOOK_DOWNLOAD_FILENAME}</p>
           </header>
 
           <nav className="rules-page__toc" aria-label="Table of contents">
