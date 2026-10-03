@@ -359,6 +359,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  syncGoogleSheetsSubstitutePool: (id, payload) =>
+    request(`/tournaments/${id}/google-sheets/sync-substitute-pool`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   getRegistrations: (id) => request(`/tournaments/${id}/registrations`),
   getEliminationSuggestions: (id) => request(`/tournaments/${id}/elimination/suggestions`),
   getTransferPool: (id) => request(`/tournaments/${id}/transfer-pool`),

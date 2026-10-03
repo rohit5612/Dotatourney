@@ -4,6 +4,9 @@ const sheetIdKey = (tournamentId) => `bpcl-google-sheet-id:${tournamentId}`;
 const sheetTabKey = (tournamentId) => `bpcl-google-sheet-tab:${tournamentId}`;
 const legacySheetIdKey = (tournamentId) => `bpcl-google-sheet:${tournamentId}`;
 
+const subSheetIdKey = (tournamentId) => `bpcl-sub-google-sheet-id:${tournamentId}`;
+const subSheetTabKey = (tournamentId) => `bpcl-sub-google-sheet-tab:${tournamentId}`;
+
 export const CRM_SHEET_COLUMN_HINT =
   "C name · D Steam name · E MMR · F roles · G Discord · H phone · I Steam profile link · J status · K notes";
 
@@ -42,6 +45,41 @@ export function setGoogleSheetPrefs(tournamentId, { spreadsheetId = "", sheetTab
   } catch {
     // Ignore storage write errors.
   }
+}
+
+export const SUB_POOL_SHEET_COLUMN_HINT =
+  "A player name · B Steam name · C MMR · D roles · E availability notes";
+
+export function getSubstitutePoolGoogleSheetPrefs(tournamentId) {
+  if (!tournamentId) return { spreadsheetId: "", sheetTabName: "" };
+  try {
+    const spreadsheetId = parseSpreadsheetId(window.localStorage.getItem(subSheetIdKey(tournamentId)) || "");
+    const sheetTabName = window.localStorage.getItem(subSheetTabKey(tournamentId))?.trim() || "";
+    return { spreadsheetId, sheetTabName };
+  } catch {
+    return { spreadsheetId: "", sheetTabName: "" };
+  }
+}
+
+export function setSubstitutePoolGoogleSheetPrefs(tournamentId, { spreadsheetId = "", sheetTabName = "" } = {}) {
+  if (!tournamentId) return;
+  try {
+    window.localStorage.setItem(subSheetIdKey(tournamentId), parseSpreadsheetId(spreadsheetId));
+    window.localStorage.setItem(subSheetTabKey(tournamentId), String(sheetTabName || "").trim());
+  } catch {
+    // Ignore storage write errors.
+  }
+}
+
+export function buildSubstitutePoolSheetSyncConfirmMessage({ rowCount, sheetTabName }) {
+  const tabHint = sheetTabName ? `the “${sheetTabName}” tab` : "the first worksheet tab";
+  const endRow = rowCount > 0 ? 1 + rowCount : 2;
+  const rangeHint = rowCount > 0 ? `A2:E${endRow}` : "the existing A2:E… block";
+  return (
+    `Sync ${rowCount} substitute pool row(s) to Google Sheets?\n\n` +
+    `${tabHint} will be cleared for ${rangeHint}, then filled from row 2:\n` +
+    SUB_POOL_SHEET_COLUMN_HINT
+  );
 }
 
 export function buildCrmSheetSyncConfirmMessage({ rowCount, sheetTabName }) {

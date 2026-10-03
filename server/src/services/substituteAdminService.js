@@ -85,6 +85,28 @@ export async function listSubstitutePool(tournamentId, { search = "", limit = 25
   };
 }
 
+/** All non-archived substitute pool rows for export (e.g. Google Sheets). */
+export async function listAllSubstitutePoolEntries(tournamentId) {
+  const { rows } = await pool.query(
+    `${substituteListSelect}
+     FROM player_registrations r
+     LEFT JOIN player_accounts pa ON pa.id = r.player_account_id
+     WHERE r.tournament_id = $1
+       AND r.substitute_flag = TRUE
+       AND r.archived_at IS NULL
+     ORDER BY
+       CASE r.registration_status
+         WHEN 'pending' THEN 0
+         WHEN 'waitlisted' THEN 1
+         WHEN 'approved' THEN 2
+         ELSE 3
+       END,
+       r.created_at DESC`,
+    [tournamentId],
+  );
+  return rows.map((row) => mapRegistrationRow(row));
+}
+
 export async function updateSubstitutePoolRegistration(tournamentId, registrationId, payload) {
   const existing = await getPlayerRegistrationById(tournamentId, registrationId);
   if (!existing) return null;

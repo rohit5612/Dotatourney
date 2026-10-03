@@ -2,6 +2,13 @@ import { useEffect, useState } from "react";
 import { api } from "../../lib/api.js";
 import { AdminGlassPanel } from "../components/AdminGlassPanel.jsx";
 import { sortRolesByDefault } from "../../utils/teamPage.js";
+import {
+  buildSubstitutePoolSheetSyncConfirmMessage,
+  getSubstitutePoolGoogleSheetPrefs,
+  parseSpreadsheetId,
+  setSubstitutePoolGoogleSheetPrefs,
+  SUB_POOL_SHEET_COLUMN_HINT,
+} from "../../utils/googleSheetPrefs.js";
 import "../../styles/player-crm.css";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
@@ -758,6 +765,61 @@ export function SubstituteCrmPage({ tournamentId, setMessage, canWrite = true })
   const [adminNotes, setAdminNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [manualAssignOpen, setManualAssignOpen] = useState(false);
+  const [subSheetId, setSubSheetId] = useState("");
+  const [subSheetTabName, setSubSheetTabName] = useState("");
+  const [subSheetSyncPending, setSubSheetSyncPending] = useState(false);
+
+  useEffect(() => {
+    if (!tournamentId) {
+      setSubSheetId("");
+      setSubSheetTabName("");
+      return;
+    }
+    const prefs = getSubstitutePoolGoogleSheetPrefs(tournamentId);
+    setSubSheetId(prefs.spreadsheetId);
+    setSubSheetTabName(prefs.sheetTabName);
+  }, [tournamentId]);
+
+  function persistSubSheetPrefs() {
+    if (!tournamentId) return;
+    setSubstitutePoolGoogleSheetPrefs(tournamentId, {
+      spreadsheetId: subSheetId,
+      sheetTabName: subSheetTabName,
+    });
+    setMessage?.("Substitute pool sheet link saved for this season.");
+  }
+
+  async function syncSubPoolToGoogleSheet() {
+    if (!tournamentId || subSheetSyncPending) return;
+    const spreadsheetId = parseSpreadsheetId(subSheetId);
+    if (!spreadsheetId) {
+      setMessage?.("Enter a spreadsheet ID or full Google Sheets link, then try again.");
+      return;
+    }
+    const sheetTab = subSheetTabName.trim();
+    setSubstitutePoolGoogleSheetPrefs(tournamentId, {
+      spreadsheetId: subSheetId,
+      sheetTabName: subSheetTabName,
+    });
+    const confirmed = window.confirm(
+      buildSubstitutePoolSheetSyncConfirmMessage({ rowCount: total, sheetTabName: sheetTab }),
+    );
+    if (!confirmed) return;
+    setMessage?.("");
+    setSubSheetSyncPending(true);
+    try {
+      const payload = { spreadsheetId };
+      if (sheetTab) payload.sheetName = sheetTab;
+      const result = await api.syncGoogleSheetsSubstitutePool(tournamentId, payload);
+      setMessage?.(
+        `Substitute pool sheet updated — tab “${result.sheetTitle}”, ${result.rowsWritten} row(s) written (${result.range}).`,
+      );
+    } catch (error) {
+      setMessage?.(error.message || "Google Sheets sync failed.");
+    } finally {
+      setSubSheetSyncPending(false);
+    }
+  }
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -879,11 +941,66 @@ export function SubstituteCrmPage({ tournamentId, setMessage, canWrite = true })
       </AdminGlassPanel>
 
       <AdminGlassPanel>
-        <h2 className="admin-section-title">Substitute pool</h2>
-        <p className="mb-3 text-sm text-muted-foreground">
-          Review substitute signups — internal approval only, no player emails. Approved subs appear in match
-          assignment dropdowns.
-        </p>
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="admin-section-title">Substitute pool</h2>
+            <p className="text-sm text-muted-foreground">
+              Review substitute signups — internal approval only, no player emails. Approved subs appear in match
+              assignment dropdowns.
+            </p>
+          </div>
+        </div>
+
+        <div className="player-crm__sheet-sync mb-4 rounded-lg border border-border/60 bg-muted/20 p-4">
+          <h3 className="text-sm font-medium">Google Sheet export (this season)</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Sync the full substitute pool to a worksheet — data from row 2: {SUB_POOL_SHEET_COLUMN_HINT}. Share the
+            sheet with your Google service account as Editor (same as registration CRM).
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label className="block text-sm sm:col-span-2">
+              <span className="player-crm__field-label">Spreadsheet link or ID</span>
+              <input
+                className="mt-1 w-full rounded-md border border-input bg-background p-2 text-sm"
+                placeholder="https://docs.google.com/spreadsheets/d/…"
+                value={subSheetId}
+                disabled={!canWrite}
+                onChange={(event) => setSubSheetId(event.target.value)}
+                onBlur={persistSubSheetPrefs}
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="player-crm__field-label">Worksheet tab name</span>
+              <input
+                className="mt-1 w-full rounded-md border border-input bg-background p-2 text-sm"
+                placeholder="Sheet1"
+                value={subSheetTabName}
+                disabled={!canWrite}
+                onChange={(event) => setSubSheetTabName(event.target.value)}
+                onBlur={persistSubSheetPrefs}
+              />
+            </label>
+            <div className="flex flex-wrap items-end gap-2">
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                disabled={!canWrite || !tournamentId}
+                onClick={persistSubSheetPrefs}
+              >
+                Save link
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={!canWrite || !tournamentId || subSheetSyncPending || !subSheetId.trim()}
+                onClick={() => void syncSubPoolToGoogleSheet()}
+              >
+                {subSheetSyncPending ? "Syncing…" : "Sync pool to sheet"}
+              </button>
+            </div>
+          </div>
+        </div>
+
         <input
           className="w-full max-w-md rounded border border-input bg-background/80 p-2 text-sm"
           placeholder="Search name, email, BPC ID, notes…"

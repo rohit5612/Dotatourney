@@ -42,7 +42,7 @@ import { buildGroupedStandings, buildStandings } from "../services/standingsEngi
 import { buildGroupedStandingsWithSeeding } from "../services/groupStandingsOverrides.js";
 import { requireAdmin, requirePermission, requireSuperadmin } from "../services/authService.js";
 import { createManualAdminRegistration } from "../services/manualAdminRegistrationService.js";
-import { syncCrmRegistrationsToGoogleSheet } from "../services/googleSheetsSync.js";
+import { syncCrmRegistrationsToGoogleSheet, syncSubstitutePoolToGoogleSheet } from "../services/googleSheetsSync.js";
 import { invalidatePublicCache } from "../services/publicCache.js";
 import { writeAuditLog } from "../services/auditLogService.js";
 import { logAction, logError } from "../utils/serverLogger.js";
@@ -322,6 +322,23 @@ router.post("/:id/google-sheets/sync-registrations", async (req, res, next) => {
       .parse(req.body);
     const result = await syncCrmRegistrationsToGoogleSheet(req.params.id, payload.spreadsheetId.trim(), {
       registrationIds: payload.registrationIds,
+      sheetName: payload.sheetName,
+    });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/:id/google-sheets/sync-substitute-pool", async (req, res, next) => {
+  try {
+    const payload = z
+      .object({
+        spreadsheetId: z.string().min(1),
+        sheetName: z.string().min(1).optional(),
+      })
+      .parse(req.body);
+    const result = await syncSubstitutePoolToGoogleSheet(req.params.id, payload.spreadsheetId.trim(), {
       sheetName: payload.sheetName,
     });
     res.json(result);

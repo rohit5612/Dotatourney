@@ -3,6 +3,7 @@ import { google } from "googleapis";
 import { env } from "../config/env.js";
 import { filterRegistrationCrmEligible, isRegistrationCrmEligible } from "../utils/registrationCrmEligibility.js";
 import { listPlayerRegistrations } from "./registrationRepository.js";
+import { listAllSubstitutePoolEntries } from "./substituteAdminService.js";
 import { getTournament } from "./tournamentRepository.js";
 
 const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
@@ -11,6 +12,9 @@ const CELL_MAX = 49000;
 
 /** First data row for CRM layout (1-based). Columns C–K only. */
 const CRM_SHEET_START_ROW = 5;
+
+/** First data row for substitute pool export (1-based). Columns A–D. */
+const SUB_POOL_SHEET_START_ROW = 2;
 
 function assertGoogleSheetsConfigured() {
   if (
@@ -163,10 +167,10 @@ function escapeSheetTitleForRange(title) {
  * Last CRM data row (any of C–K) from startRow downward.
  * @returns {number} 1-based row index, or startRow - 1 when the block is empty
  */
-async function findLastPopulatedCrmRow(sheetsApi, spreadsheetId, safeTitle, startRow) {
+async function findLastPopulatedRowInColumns(sheetsApi, spreadsheetId, safeTitle, startRow, startCol, endCol) {
   const { data } = await sheetsApi.spreadsheets.values.get({
     spreadsheetId,
-    range: `'${safeTitle}'!C${startRow}:K`,
+    range: `'${safeTitle}'!${startCol}${startRow}:${endCol}`,
   });
   const rows = data.values || [];
   for (let i = rows.length - 1; i >= 0; i--) {
@@ -176,6 +180,24 @@ async function findLastPopulatedCrmRow(sheetsApi, spreadsheetId, safeTitle, star
     }
   }
   return startRow - 1;
+}
+
+async function findLastPopulatedCrmRow(sheetsApi, spreadsheetId, safeTitle, startRow) {
+  return findLastPopulatedRowInColumns(sheetsApi, spreadsheetId, safeTitle, startRow, "C", "K");
+}
+
+async function resolveSheetTitle(sheetsApi, spreadsheetId, sheetName) {
+  let sheetTitle = sheetName?.trim() || "";
+  if (!sheetTitle) {
+    const { data: ss } = await sheetsApi.spreadsheets.get({ spreadsheetId });
+    sheetTitle = ss.sheets?.[0]?.properties?.title || "";
+  }
+  if (!sheetTitle) {
+    const err = new Error("Spreadsheet has no worksheet tabs");
+    err.status = 400;
+    throw err;
+  }
+  return sheetTitle;
 }
 
 /**
@@ -216,16 +238,7 @@ export async function syncCrmRegistrationsToGoogleSheet(tournamentId, spreadshee
 
   const sheetsApi = await getSheetsClient();
 
-  let sheetTitle = options.sheetName?.trim() || "";
-  if (!sheetTitle) {
-    const { data: ss } = await sheetsApi.spreadsheets.get({ spreadsheetId });
-    sheetTitle = ss.sheets?.[0]?.properties?.title || "";
-  }
-  if (!sheetTitle) {
-    const err = new Error("Spreadsheet has no worksheet tabs");
-    err.status = 400;
-    throw err;
-  }
+  const sheetTitle = await resolveSheetTitle(sheetsApi, spreadsheetId, options.sheetName);
 
   const safeTitle = escapeSheetTitleForRange(sheetTitle);
   const start = CRM_SHEET_START_ROW;
@@ -268,6 +281,76 @@ export async function syncCrmRegistrationsToGoogleSheet(tournamentId, spreadshee
       spreadsheetId,
       sheetTitle,
       range: rowCount ? `C${start}:K${writeEndRow}` : `C${start}:K${clearEndRow} (cleared)`,
+      rowsWritten: rowCount,
+      syncedAt: new Date().toISOString(),
+    };
+  } catch (err) {
+    throw mapGoogleSheetsApiError(err);
+  }
+}
+
+/**
+ * Writes substitute pool rows to A{start}:E{start+n-1} on one worksheet tab.
+ *
+ * @param {string} tournamentId
+ * @param {string} spreadsheetId
+ * @param {{ sheetName?: string | null }} [options]
+ */
+export async function syncSubstitutePoolToGoogleSheet(tournamentId, spreadsheetId, options = {}) {
+  const data = await getTournament(tournamentId);
+  if (!data) {
+    const err = new Error("Tournament not found");
+    err.status = 404;
+    throw err;
+  }
+
+  const substitutes = await listAllSubstitutePoolEntries(tournamentId);
+  const sheetsApi = await getSheetsClient();
+  const sheetTitle = await resolveSheetTitle(sheetsApi, spreadsheetId, options.sheetName);
+  const safeTitle = escapeSheetTitleForRange(sheetTitle);
+  const start = SUB_POOL_SHEET_START_ROW;
+
+  const values = substitutes.map((r) => [
+    cellValue(r.displayName || r.name),
+    cellValue(r.steamName),
+    cellValue(r.mmr),
+    Array.isArray(r.roles) ? r.roles.join("; ") : cellValue(r.roles),
+    cellValue(r.notes),
+  ]);
+
+  const rowCount = values.length;
+  const writeEndRow = rowCount > 0 ? start + rowCount - 1 : start - 1;
+
+  try {
+    const lastExistingRow = await findLastPopulatedRowInColumns(
+      sheetsApi,
+      spreadsheetId,
+      safeTitle,
+      start,
+      "A",
+      "E",
+    );
+    const clearEndRow = Math.max(writeEndRow, lastExistingRow, start);
+
+    await sheetsApi.spreadsheets.values.clear({
+      spreadsheetId,
+      range: `'${safeTitle}'!A${start}:E${clearEndRow}`,
+    });
+
+    if (rowCount > 0) {
+      await sheetsApi.spreadsheets.values.update({
+        spreadsheetId,
+        range: `'${safeTitle}'!A${start}:E${writeEndRow}`,
+        valueInputOption: "RAW",
+        resource: { values },
+      });
+    }
+
+    return {
+      ok: true,
+      spreadsheetId,
+      sheetTitle,
+      range: rowCount ? `A${start}:E${writeEndRow}` : `A${start}:E${clearEndRow} (cleared)`,
       rowsWritten: rowCount,
       syncedAt: new Date().toISOString(),
     };
