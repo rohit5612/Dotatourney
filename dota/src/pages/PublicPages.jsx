@@ -42,8 +42,8 @@ import {
   PLAYER_RULES_SECTIONS,
 } from "../constants/playerRules.js";
 import { COOKIE_CONSENT_KEY, PUBLIC_CONTACT_EMAIL, TRADE_NAME } from "../constants/legal.js";
-import { SITE_BRAND_FULL, SITE_BRAND_LINE, SITE_BRAND_SHORT, SITE_ORIGIN } from "../constants/siteMeta.js";
-import { downloadRulebookHtml, RULEBOOK_DOWNLOAD_FILENAME } from "../lib/rulebookDownloadHtml.js";
+import { RULEBOOK_DOWNLOAD_FILENAME, RULEBOOK_HTML_PATH, SITE_BRAND_FULL, SITE_BRAND_LINE, SITE_BRAND_SHORT, SITE_ORIGIN } from "../constants/siteMeta.js";
+import { isEmeraldThemeEnabled } from "../utils/applyPublicThemeDocument.js";
 import { LegalLink, LegalPageLayout, LegalSection } from "../components/legal/LegalPageLayout.jsx";
 import { roles } from "../constants/tournament";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock.js";
@@ -1900,10 +1900,32 @@ export function CookiePolicyPage() {
 export function GeneralRulesPage({ discordUrl }) {
   const invite = (discordUrl || discordInviteUrl).trim();
   const sectionCount = PLAYER_RULES_SECTIONS.length;
+  const rulebookHref = isEmeraldThemeEnabled()
+    ? `${RULEBOOK_HTML_PATH}?season=emerald`
+    : RULEBOOK_HTML_PATH;
 
-  function handleRulebookDownload(event) {
+  async function handleRulebookDownload(event) {
     event.preventDefault();
-    downloadRulebookHtml({ discordUrl: invite });
+    try {
+      let html = await fetch(RULEBOOK_HTML_PATH).then((response) => {
+        if (!response.ok) throw new Error("Rulebook file not found");
+        return response.text();
+      });
+      if (isEmeraldThemeEnabled()) {
+        html = html.replace("<html lang=\"en\">", "<html lang=\"en\" data-season=\"emerald\">");
+      }
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = RULEBOOK_DOWNLOAD_FILENAME;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch {
+      window.location.assign(rulebookHref);
+    }
   }
 
   return (
@@ -1924,11 +1946,12 @@ export function GeneralRulesPage({ discordUrl }) {
               {sectionCount} rule section{sectionCount === 1 ? "" : "s"}
             </span>
             <a
-              className="rules-page__stat rules-page__stat--download"
-              href="#"
+              className="rules-page__stat"
+              href={rulebookHref}
+              download={RULEBOOK_DOWNLOAD_FILENAME}
               onClick={handleRulebookDownload}
             >
-              Download rulebook (HTML) →
+              Download rulebook →
             </a>
           </div>
         </div>
@@ -1938,22 +1961,18 @@ export function GeneralRulesPage({ discordUrl }) {
         <article className="rules-page__document rules-glass rules-glass--strong" aria-label="Player rulebook">
           <header className="rules-page__doc-cover">
             <p className="rules-page__doc-edition">{SITE_BRAND_FULL}</p>
-            <p className="rules-page__doc-season" aria-label="Rulebook edition">
-              Season 3
-            </p>
             <h2 className="rules-page__doc-title">Official Player Rulebook</h2>
             <p className="rules-page__doc-subtitle">{PLAYER_RULES_REGISTRATION_NOTICE}</p>
             <a
               className="rules-page__doc-download"
-              href="#"
+              href={rulebookHref}
+              download={RULEBOOK_DOWNLOAD_FILENAME}
               onClick={handleRulebookDownload}
-              title={RULEBOOK_DOWNLOAD_FILENAME}
             >
               <HiOutlineDocumentText className="rules-page__doc-download-icon" aria-hidden />
               Download rulebook
               <HiOutlineArrowDownTray className="rules-page__doc-download-arrow" aria-hidden />
             </a>
-            <p className="rules-page__doc-download-hint">Offline HTML · same rules as this page · {RULEBOOK_DOWNLOAD_FILENAME}</p>
           </header>
 
           <nav className="rules-page__toc" aria-label="Table of contents">
