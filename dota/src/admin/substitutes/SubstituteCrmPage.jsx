@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api.js";
+import { PrimaryViewTabs } from "../../components/navigation/TournamentTabs.jsx";
 import { AdminGlassPanel } from "../components/AdminGlassPanel.jsx";
 import { sortRolesByDefault } from "../../utils/teamPage.js";
 import {
@@ -13,6 +14,11 @@ import "../../styles/player-crm.css";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
+const SUB_CRM_TABS = [
+  { id: "requests", label: "Requests" },
+  { id: "pool", label: "Sub pool" },
+];
+
 function formatDate(value) {
   if (!value) return "—";
   return new Date(value).toLocaleString(undefined, {
@@ -24,15 +30,58 @@ function formatDate(value) {
   });
 }
 
-function formatMatchLabel(request) {
+function formatMatchNo(request) {
   const parts = [];
   if (request.stage_key) parts.push(request.stage_key);
   if (request.round_index != null) parts.push(`R${Number(request.round_index) + 1}`);
   if (request.match_index != null) parts.push(`M${Number(request.match_index) + 1}`);
-  const stage = parts.join(" · ");
-  const teams = request.team1 && request.team2 ? `${request.team1} vs ${request.team2}` : "";
-  const time = request.match_start_at ? new Date(request.match_start_at).toLocaleString() : "";
-  return [stage, teams, time].filter(Boolean).join(" — ");
+  return parts.join(" · ") || "—";
+}
+
+function formatMatchDateTime(request) {
+  if (!request.match_start_at) return "—";
+  return new Date(request.match_start_at).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatTeamsLabel(request) {
+  if (request.team1 && request.team2) return `${request.team1} vs ${request.team2}`;
+  return "—";
+}
+
+function formatMatchLabel(request) {
+  return [formatMatchNo(request), formatTeamsLabel(request), formatMatchDateTime(request)]
+    .filter((part) => part && part !== "—")
+    .join(" — ");
+}
+
+function getAvailabilityText(entry) {
+  const raw = String(entry?.notes || "").trim();
+  if (!raw) return "";
+  const availabilityParts = [];
+  for (const line of raw.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (/^availability:/i.test(trimmed)) {
+      availabilityParts.push(trimmed.replace(/^availability:\s*/i, ""));
+    }
+  }
+  if (availabilityParts.length) return availabilityParts.join("; ");
+  return raw;
+}
+
+function truncateText(text, max = 120) {
+  if (!text || text === "—") return "—";
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+function playerDisplayName(entry) {
+  return entry.displayName || entry.steamName || entry.name || "—";
 }
 
 function statusBadgeClass(status) {
@@ -64,6 +113,7 @@ function DetailField({ label, value, mono = false }) {
 function SubstituteDetailModal({
   entry,
   canWrite,
+  readOnly = false,
   adminNotes,
   registrationStatus,
   onAdminNotesChange,
@@ -73,6 +123,7 @@ function SubstituteDetailModal({
   saving,
 }) {
   if (!entry) return null;
+  const canEditReview = canWrite && !readOnly;
 
   return (
     <div
@@ -86,7 +137,7 @@ function SubstituteDetailModal({
         <header className="flex shrink-0 items-start justify-between gap-3 border-b border-border/60 px-4 py-4 sm:px-5">
           <div className="min-w-0">
             <h3 id="substitute-crm-modal-title" className="truncate font-serif text-xl">
-              {entry.displayName || entry.steamName || entry.name || "Substitute pool entry"}
+              {readOnly ? "Substitute details" : "Review substitute"} — {playerDisplayName(entry)}
             </h3>
             <p className="mt-0.5 font-mono text-xs text-muted-foreground">
               {entry.playerBpcId || "—"}
@@ -127,7 +178,14 @@ function SubstituteDetailModal({
               ) : null}
             </section>
 
-            {entry.notes ? (
+            {getAvailabilityText(entry) ? (
+              <section className="player-crm__modal-section">
+                <h4 className="player-crm__section-title">Availability notes</h4>
+                <p className="text-sm whitespace-pre-wrap">{getAvailabilityText(entry)}</p>
+              </section>
+            ) : null}
+
+            {entry.notes && getAvailabilityText(entry) !== entry.notes ? (
               <section className="player-crm__modal-section">
                 <h4 className="player-crm__section-title">Player notes</h4>
                 <p className="text-sm whitespace-pre-wrap">{entry.notes}</p>
@@ -137,37 +195,51 @@ function SubstituteDetailModal({
             <section className="player-crm__modal-section player-crm__modal-section--notes">
               <h4 className="player-crm__section-title">Pool review</h4>
               <p className="mb-3 text-xs text-muted-foreground">Internal only — no emails are sent to the player.</p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block text-sm">
-                  <span className="player-crm__field-label">Status</span>
-                  <select
-                    className="mt-1 w-full rounded-md border border-input bg-background p-2 text-sm"
-                    value={registrationStatus}
-                    disabled={!canWrite}
-                    onChange={(event) => onRegistrationStatusChange(event.target.value)}
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="approved">Approved</option>
-                    <option value="waitlisted">Waitlisted</option>
-                    <option value="rejected">Rejected</option>
-                  </select>
-                </label>
-                <label className="block text-sm sm:col-span-2">
-                  <span className="player-crm__field-label">Admin notes</span>
-                  <textarea
-                    className="mt-1 min-h-24 w-full rounded-md border border-input bg-background p-3 text-sm"
-                    value={adminNotes}
-                    disabled={!canWrite}
-                    placeholder="Internal context for other admins…"
-                    onChange={(event) => onAdminNotesChange(event.target.value)}
-                  />
-                </label>
-              </div>
-              <div className="mt-3 flex justify-end">
-                <button type="button" className="btn btn-primary btn-sm" disabled={!canWrite || saving} onClick={onSave}>
-                  {saving ? "Saving…" : "Save review"}
-                </button>
-              </div>
+              {readOnly ? (
+                <div className="player-crm__field-grid">
+                  <DetailField label="Status" value={entry.registrationStatus || "pending"} />
+                  <DetailField label="Admin notes" value={entry.adminNotes} />
+                </div>
+              ) : (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block text-sm">
+                      <span className="player-crm__field-label">Status</span>
+                      <select
+                        className="mt-1 w-full rounded-md border border-input bg-background p-2 text-sm"
+                        value={registrationStatus}
+                        disabled={!canEditReview}
+                        onChange={(event) => onRegistrationStatusChange(event.target.value)}
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="waitlisted">Waitlisted</option>
+                        <option value="rejected">Rejected</option>
+                      </select>
+                    </label>
+                    <label className="block text-sm sm:col-span-2">
+                      <span className="player-crm__field-label">Admin notes</span>
+                      <textarea
+                        className="mt-1 min-h-24 w-full rounded-md border border-input bg-background p-3 text-sm"
+                        value={adminNotes}
+                        disabled={!canEditReview}
+                        placeholder="Internal context for other admins…"
+                        onChange={(event) => onAdminNotesChange(event.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={!canEditReview || saving}
+                      onClick={onSave}
+                    >
+                      {saving ? "Saving…" : "Save review"}
+                    </button>
+                  </div>
+                </>
+              )}
             </section>
           </div>
         </div>
@@ -599,13 +671,71 @@ function SubstitutionPlayersLine({ request }) {
   );
 }
 
-function RequestRow({ request, eligible, tournamentId, canWrite, onDone, setMessage }) {
+function RequestViewModal({ request, onClose }) {
+  if (!request) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="substitution-request-view-title"
+    >
+      <button type="button" className="absolute inset-0 cursor-default" aria-label="Close dialog" onClick={onClose} />
+      <div className="player-crm__modal relative z-10 flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border border-border bg-card shadow-2xl sm:rounded-2xl">
+        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-border/60 px-4 py-4 sm:px-5">
+          <div className="min-w-0">
+            <h3 id="substitution-request-view-title" className="font-serif text-xl">Substitution request</h3>
+            <p className="mt-1 text-sm text-muted-foreground">{formatMatchLabel(request)}</p>
+          </div>
+          <StatusBadge status={request.status} />
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+          <div className="player-crm__field-grid">
+            <DetailField label="Player requesting sub" value={formatPlayerLabel(request.requester_name, request.requester_bpc_id)} />
+            <DetailField label="Team" value={request.team_name} />
+            <DetailField label="Match no." value={formatMatchNo(request)} />
+            <DetailField label="Match time" value={formatMatchDateTime(request)} />
+            <DetailField label="Teams" value={formatTeamsLabel(request)} />
+            <DetailField label="Reason" value={request.reason} />
+            <DetailField label="Preferred substitute" value={request.preferred_substitute_name} />
+            <DetailField
+              label="Assigned substitute"
+              value={
+                request.substitute_name
+                  ? formatPlayerLabel(request.substitute_name, request.substitute_bpc_id)
+                  : null
+              }
+            />
+            <DetailField label="Admin notes" value={request.admin_notes} />
+            <DetailField label="Requested" value={formatDate(request.created_at)} />
+            <DetailField label="Updated" value={formatDate(request.updated_at)} />
+          </div>
+        </div>
+        <footer className="flex shrink-0 justify-end border-t border-border/60 px-4 py-4 sm:px-5">
+          <button type="button" className="btn btn-outline btn-sm" onClick={onClose}>Close</button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function RequestEditModal({ request, eligible, tournamentId, canWrite, onClose, onDone, setMessage }) {
   const [assigneeId, setAssigneeId] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [adminNotes, setAdminNotes] = useState(request.admin_notes || "");
+  const [adminNotes, setAdminNotes] = useState(request?.admin_notes || "");
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    if (request) setAdminNotes(request.admin_notes || "");
+    setAssigneeId("");
+  }, [request?.id]);
+
+  if (!request) return null;
+
   const selectedPlayer = (eligible || []).find((player) => player.registrationId === assigneeId) || null;
+  const canCancel = canWrite && (request.status === "pending" || request.status === "approved");
+  const canAssignPending = canWrite && request.status === "pending";
 
   async function assign() {
     if (!assigneeId) {
@@ -618,6 +748,7 @@ function RequestRow({ request, eligible, tournamentId, canWrite, onDone, setMess
         substituteRegistrationId: assigneeId,
         adminNotes: adminNotes.trim() || undefined,
       });
+      onClose();
       await onDone();
     } catch (e) {
       setMessage?.(e.message);
@@ -633,6 +764,7 @@ function RequestRow({ request, eligible, tournamentId, canWrite, onDone, setMess
         status: "rejected",
         adminNotes: adminNotes.trim(),
       });
+      onClose();
       await onDone();
     } catch (e) {
       setMessage?.(e.message);
@@ -650,6 +782,7 @@ function RequestRow({ request, eligible, tournamentId, canWrite, onDone, setMess
         adminNotes: adminNotes.trim() || undefined,
       });
       setMessage?.("Substitution cancelled.");
+      onClose();
       await onDone();
     } catch (e) {
       setMessage?.(e.message);
@@ -658,97 +791,99 @@ function RequestRow({ request, eligible, tournamentId, canWrite, onDone, setMess
     }
   }
 
-  const canCancel = canWrite && (request.status === "pending" || request.status === "approved");
-
   return (
-    <div className="player-crm__request-card space-y-2">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="font-medium text-sm">
-            {request.requester_name || request.requester_bpc_id || "Player"}
-            {request.team_name ? ` · ${request.team_name}` : ""}
-          </p>
-          <p className="text-xs text-muted-foreground">{formatMatchLabel(request)}</p>
-          <SubstitutionPlayersLine request={request} />
-          {request.reason ? <p className="text-sm mt-1">Reason: {request.reason}</p> : null}
-          {request.preferred_substitute_name ? (
-            <p className="text-xs text-muted-foreground mt-1">
-              Preferred: {request.preferred_substitute_name}
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="substitution-request-edit-title"
+    >
+      <button type="button" className="absolute inset-0 cursor-default" aria-label="Close dialog" onClick={onClose} />
+      <div className="player-crm__modal relative z-10 flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border border-border bg-card shadow-2xl sm:rounded-2xl">
+        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-border/60 px-4 py-4 sm:px-5">
+          <div className="min-w-0">
+            <h3 id="substitution-request-edit-title" className="font-serif text-xl">Manage request</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {formatPlayerLabel(request.requester_name, request.requester_bpc_id)} · {formatMatchNo(request)}
             </p>
+          </div>
+          <button type="button" className="btn btn-outline btn-sm shrink-0" onClick={onClose} disabled={busy}>
+            Close
+          </button>
+        </header>
+
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
+          <SubstitutionPlayersLine request={request} />
+          {request.reason ? <p className="text-sm text-muted-foreground">Reason: {request.reason}</p> : null}
+
+          {canAssignPending ? (
+            <div className="player-crm__modal-section">
+              <h4 className="player-crm__section-title">Assign substitute</h4>
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" className="btn btn-outline btn-sm" onClick={() => setPickerOpen(true)}>
+                  {selectedPlayer ? "Change selection" : "Select player…"}
+                </button>
+                {selectedPlayer ? (
+                  <span className="text-sm">
+                    {selectedPlayer.displayName}
+                    {selectedPlayer.mmr != null ? ` · ${selectedPlayer.mmr} MMR` : ""}
+                  </span>
+                ) : null}
+              </div>
+              <AssignSubstitutePickerModal
+                open={pickerOpen}
+                eligible={eligible}
+                selectedId={assigneeId}
+                onSelect={setAssigneeId}
+                onClose={() => setPickerOpen(false)}
+              />
+            </div>
+          ) : null}
+
+          {(canAssignPending || canCancel) && canWrite ? (
+            <label className="block text-sm">
+              <span className="player-crm__field-label">Admin notes</span>
+              <textarea
+                className="mt-1 min-h-20 w-full rounded-md border border-input bg-background p-3 text-sm"
+                value={adminNotes}
+                disabled={!canWrite || busy}
+                placeholder="Optional internal notes"
+                onChange={(e) => setAdminNotes(e.target.value)}
+              />
+            </label>
           ) : null}
         </div>
-        <StatusBadge status={request.status} />
-      </div>
 
-      {request.status === "pending" && canWrite ? (
-        <div className="space-y-2 pt-1">
-          <div className="block text-xs text-muted-foreground">
-            <span>Assign substitute</span>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <button type="button" className="btn btn-outline btn-sm" onClick={() => setPickerOpen(true)}>
-                {selectedPlayer ? "Change selection" : "Select player…"}
+        <footer className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-border/60 px-4 py-4 sm:px-5">
+          {canAssignPending ? (
+            <>
+              <button type="button" className="btn btn-primary btn-sm" onClick={assign} disabled={busy}>
+                {busy ? "Working…" : "Approve & assign"}
               </button>
-              {selectedPlayer ? (
-                <span className="text-sm text-foreground">
-                  {selectedPlayer.displayName}
-                  {selectedPlayer.mmr != null ? ` · ${selectedPlayer.mmr} MMR` : ""}
-                </span>
-              ) : null}
-            </div>
-          </div>
-          <AssignSubstitutePickerModal
-            open={pickerOpen}
-            eligible={eligible}
-            selectedId={assigneeId}
-            onSelect={setAssigneeId}
-            onClose={() => setPickerOpen(false)}
-          />
-          <label className="block text-xs text-muted-foreground">
-            Admin notes
-            <input
-              className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
-              value={adminNotes}
-              onChange={(e) => setAdminNotes(e.target.value)}
-              placeholder="Optional notes"
-            />
-          </label>
-          <div className="player-crm__inline-actions">
-            <button type="button" className="btn btn-primary btn-sm" onClick={assign} disabled={busy}>
-              Approve & assign
-            </button>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={reject} disabled={busy}>
-              Reject
-            </button>
-            <button type="button" className="btn btn-outline btn-sm" onClick={cancel} disabled={busy}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      ) : canCancel ? (
-        <div className="space-y-2 pt-1">
-          <label className="block text-xs text-muted-foreground">
-            Admin notes
-            <input
-              className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
-              value={adminNotes}
-              onChange={(e) => setAdminNotes(e.target.value)}
-              placeholder="Optional notes"
-            />
-          </label>
-          <div className="player-crm__inline-actions">
+              <button type="button" className="btn btn-secondary btn-sm" onClick={reject} disabled={busy}>
+                Reject
+              </button>
+              <button type="button" className="btn btn-outline btn-sm" onClick={cancel} disabled={busy}>
+                Cancel request
+              </button>
+            </>
+          ) : canCancel ? (
             <button type="button" className="btn btn-secondary btn-sm" onClick={cancel} disabled={busy}>
               Cancel substitution
             </button>
-          </div>
-        </div>
-      ) : request.admin_notes ? (
-        <p className="text-xs text-muted-foreground">Notes: {request.admin_notes}</p>
-      ) : null}
+          ) : (
+            <button type="button" className="btn btn-outline btn-sm" onClick={onClose}>
+              Close
+            </button>
+          )}
+        </footer>
+      </div>
     </div>
   );
 }
 
 export function SubstituteCrmPage({ tournamentId, setMessage, canWrite = true }) {
+  const [crmTab, setCrmTab] = useState("requests");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [substitutes, setSubstitutes] = useState([]);
@@ -761,6 +896,9 @@ export function SubstituteCrmPage({ tournamentId, setMessage, canWrite = true })
   const [loadingPool, setLoadingPool] = useState(true);
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [selectedEntry, setSelectedEntry] = useState(null);
+  const [poolModalReadOnly, setPoolModalReadOnly] = useState(false);
+  const [viewRequest, setViewRequest] = useState(null);
+  const [editRequest, setEditRequest] = useState(null);
   const [registrationStatus, setRegistrationStatus] = useState("pending");
   const [adminNotes, setAdminNotes] = useState("");
   const [saving, setSaving] = useState(false);
@@ -868,7 +1006,15 @@ export function SubstituteCrmPage({ tournamentId, setMessage, canWrite = true })
     loadPool(page).catch(() => {});
   }, [tournamentId, debouncedSearch, page, pageSize]);
 
-  function openDetail(entry) {
+  function openPoolView(entry) {
+    setPoolModalReadOnly(true);
+    setSelectedEntry(entry);
+    setRegistrationStatus(entry.registrationStatus || "pending");
+    setAdminNotes(entry.adminNotes || "");
+  }
+
+  function openPoolEdit(entry) {
+    setPoolModalReadOnly(false);
     setSelectedEntry(entry);
     setRegistrationStatus(entry.registrationStatus || "pending");
     setAdminNotes(entry.adminNotes || "");
@@ -876,6 +1022,7 @@ export function SubstituteCrmPage({ tournamentId, setMessage, canWrite = true })
 
   function closeDetail() {
     setSelectedEntry(null);
+    setPoolModalReadOnly(false);
     setAdminNotes("");
   }
 
@@ -906,224 +1053,287 @@ export function SubstituteCrmPage({ tournamentId, setMessage, canWrite = true })
     );
   }
 
+  const pendingRequestCount = (requests || []).filter((r) => r.status === "pending").length;
+
   return (
     <div className="admin-page-stack player-crm">
-      <AdminGlassPanel>
-        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+      <AdminGlassPanel className="space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="admin-section-title">Substitution requests</h2>
+            <h2 className="admin-section-title">Substitutions</h2>
             <p className="text-sm text-muted-foreground">
-              Match-day requests from rostered players — or use manual assign for Discord requests.
+              Match-day substitution requests and the substitute player pool for this season.
             </p>
           </div>
-          {canWrite ? (
+          {crmTab === "requests" && canWrite ? (
             <button type="button" className="btn btn-primary btn-sm shrink-0" onClick={() => setManualAssignOpen(true)}>
               Manual assign
             </button>
           ) : null}
         </div>
-        <div className="player-crm__request-panel">
-          {(requests || []).map((request) => (
-            <RequestRow
-              key={request.id}
-              request={request}
-              eligible={eligible}
-              tournamentId={tournamentId}
-              canWrite={canWrite}
-              onDone={() => loadPool(currentPage)}
-              setMessage={setMessage}
-            />
-          ))}
-          {!loadingRequests && !requests?.length ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">No substitution requests.</p>
-          ) : null}
-        </div>
+        <PrimaryViewTabs
+          value={crmTab}
+          onChange={setCrmTab}
+          tabs={SUB_CRM_TABS.map((tab) => ({
+            id: tab.id,
+            label: tab.id === "requests" && pendingRequestCount ? `${tab.label} (${pendingRequestCount})` : tab.label,
+          }))}
+          ariaLabel="Substitution CRM sections"
+        />
       </AdminGlassPanel>
 
-      <AdminGlassPanel>
-        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="admin-section-title">Substitute pool</h2>
-            <p className="text-sm text-muted-foreground">
-              Review substitute signups — internal approval only, no player emails. Approved subs appear in match
-              assignment dropdowns.
-            </p>
-          </div>
-        </div>
-
-        <div className="player-crm__sheet-sync mb-4 rounded-lg border border-border/60 bg-muted/20 p-4">
-          <h3 className="text-sm font-medium">Google Sheet export (this season)</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Sync the full substitute pool to a worksheet — data from row 2: {SUB_POOL_SHEET_COLUMN_HINT}. Share the
-            sheet with your Google service account as Editor (same as registration CRM).
+      {crmTab === "requests" ? (
+        <AdminGlassPanel>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Requests from rostered players who need a sub — use Edit to assign, reject, or cancel.
           </p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <label className="block text-sm sm:col-span-2">
-              <span className="player-crm__field-label">Spreadsheet link or ID</span>
-              <input
-                className="mt-1 w-full rounded-md border border-input bg-background p-2 text-sm"
-                placeholder="https://docs.google.com/spreadsheets/d/…"
-                value={subSheetId}
-                disabled={!canWrite}
-                onChange={(event) => setSubSheetId(event.target.value)}
-                onBlur={persistSubSheetPrefs}
-              />
-            </label>
-            <label className="block text-sm">
-              <span className="player-crm__field-label">Worksheet tab name</span>
-              <input
-                className="mt-1 w-full rounded-md border border-input bg-background p-2 text-sm"
-                placeholder="Sheet1"
-                value={subSheetTabName}
-                disabled={!canWrite}
-                onChange={(event) => setSubSheetTabName(event.target.value)}
-                onBlur={persistSubSheetPrefs}
-              />
-            </label>
-            <div className="flex flex-wrap items-end gap-2">
+          <div className="player-crm__table-wrap">
+            <table className="player-crm__table player-crm__table--list">
+              <thead>
+                <tr>
+                  <th>Player</th>
+                  <th>Match time</th>
+                  <th>Match no.</th>
+                  <th>Teams</th>
+                  <th>Reason</th>
+                  <th>Status</th>
+                  <th aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {(requests || []).map((request) => (
+                  <tr key={request.id}>
+                    <td className="font-medium">{request.requester_name || request.requester_bpc_id || "—"}</td>
+                    <td className="text-xs whitespace-nowrap">{formatMatchDateTime(request)}</td>
+                    <td className="text-xs">{formatMatchNo(request)}</td>
+                    <td className="max-w-[10rem] truncate text-xs" title={formatTeamsLabel(request)}>
+                      {formatTeamsLabel(request)}
+                    </td>
+                    <td>
+                      <span className="player-crm__notes-preview max-w-[12rem]" title={request.reason || ""}>
+                        {truncateText(request.reason || "—", 80)}
+                      </span>
+                    </td>
+                    <td>
+                      <StatusBadge status={request.status} />
+                    </td>
+                    <td>
+                      <div className="player-crm__actions-cell">
+                        <button type="button" className="btn btn-outline btn-sm" onClick={() => setViewRequest(request)}>
+                          View
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          onClick={() => setEditRequest(request)}
+                          disabled={!canWrite}
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!loadingRequests && !requests?.length ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">No substitution requests.</p>
+            ) : null}
+          </div>
+        </AdminGlassPanel>
+      ) : null}
+
+      {crmTab === "pool" ? (
+        <>
+          <AdminGlassPanel>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Substitute signups — approve internally (no player emails). Approved players appear in assignment pickers.
+            </p>
+
+            <div className="player-crm__sheet-sync mb-4 rounded-lg border border-border/60 bg-muted/20 p-4">
+              <h3 className="text-sm font-medium">Google Sheet export (this season)</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Sync the full substitute pool to a worksheet — data from row 2: {SUB_POOL_SHEET_COLUMN_HINT}. Share the
+                sheet with your Google service account as Editor (same as registration CRM).
+              </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="block text-sm sm:col-span-2">
+                  <span className="player-crm__field-label">Spreadsheet link or ID</span>
+                  <input
+                    className="mt-1 w-full rounded-md border border-input bg-background p-2 text-sm"
+                    placeholder="https://docs.google.com/spreadsheets/d/…"
+                    value={subSheetId}
+                    disabled={!canWrite}
+                    onChange={(event) => setSubSheetId(event.target.value)}
+                    onBlur={persistSubSheetPrefs}
+                  />
+                </label>
+                <label className="block text-sm">
+                  <span className="player-crm__field-label">Worksheet tab name</span>
+                  <input
+                    className="mt-1 w-full rounded-md border border-input bg-background p-2 text-sm"
+                    placeholder="Sheet1"
+                    value={subSheetTabName}
+                    disabled={!canWrite}
+                    onChange={(event) => setSubSheetTabName(event.target.value)}
+                    onBlur={persistSubSheetPrefs}
+                  />
+                </label>
+                <div className="flex flex-wrap items-end gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    disabled={!canWrite || !tournamentId}
+                    onClick={persistSubSheetPrefs}
+                  >
+                    Save link
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={!canWrite || !tournamentId || subSheetSyncPending || !subSheetId.trim()}
+                    onClick={() => void syncSubPoolToGoogleSheet()}
+                  >
+                    {subSheetSyncPending ? "Syncing…" : "Sync pool to sheet"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <input
+              className="w-full max-w-md rounded border border-input bg-background/80 p-2 text-sm"
+              placeholder="Search name, email, BPC ID, notes…"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            <p className="mt-2 text-xs text-muted-foreground">
+              {loadingPool
+                ? "Loading…"
+                : `${summary.pending ?? 0} pending · ${summary.approved ?? 0} approved · Showing ${total ? pageStart + 1 : 0}-${pageEnd} of ${total}`}
+            </p>
+
+            <div className="player-crm__table-wrap mt-4">
+              <table className="player-crm__table player-crm__table--list">
+                <thead>
+                  <tr>
+                    <th>Player</th>
+                    <th>Discord</th>
+                    <th>MMR</th>
+                    <th>Availability notes</th>
+                    <th>Status</th>
+                    <th aria-label="Actions" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {substitutes.map((entry) => {
+                    const availability = getAvailabilityText(entry);
+                    return (
+                      <tr key={entry.id}>
+                        <td className="font-medium">{playerDisplayName(entry)}</td>
+                        <td className="max-w-[8rem] truncate text-xs">{entry.discordHandle || "—"}</td>
+                        <td>{entry.mmr ?? "—"}</td>
+                        <td>
+                          <span className="player-crm__notes-preview max-w-[14rem]" title={availability}>
+                            {truncateText(availability || "—")}
+                          </span>
+                        </td>
+                        <td>
+                          <StatusBadge status={entry.registrationStatus} />
+                        </td>
+                        <td>
+                          <div className="player-crm__actions-cell">
+                            <button type="button" className="btn btn-outline btn-sm" onClick={() => openPoolView(entry)}>
+                              View
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              onClick={() => openPoolEdit(entry)}
+                              disabled={!canWrite}
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {!loadingPool && !substitutes.length ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  No substitute pool entries match your search.
+                </p>
+              ) : null}
+            </div>
+          </AdminGlassPanel>
+
+          <AdminGlassPanel subtle className="flex flex-wrap items-center justify-between gap-3 text-sm">
+            <div className="text-muted-foreground">
+              {loadingPool
+                ? "Loading pool…"
+                : `Showing ${total ? pageStart + 1 : 0}-${pageEnd} of ${total} pool entries`}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-2 text-muted-foreground">
+                Per page
+                <select
+                  className="rounded-md border border-input bg-background p-2 text-foreground"
+                  value={pageSize}
+                  onChange={(event) => setPageSize(Number(event.target.value))}
+                >
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <button
                 type="button"
                 className="btn btn-outline btn-sm"
-                disabled={!canWrite || !tournamentId}
-                onClick={persistSubSheetPrefs}
+                onClick={() => setPage(1)}
+                disabled={currentPage === 1 || loadingPool}
               >
-                Save link
+                First
               </button>
               <button
                 type="button"
-                className="btn btn-primary btn-sm"
-                disabled={!canWrite || !tournamentId || subSheetSyncPending || !subSheetId.trim()}
-                onClick={() => void syncSubPoolToGoogleSheet()}
+                className="btn btn-outline btn-sm"
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                disabled={currentPage === 1 || loadingPool}
               >
-                {subSheetSyncPending ? "Syncing…" : "Sync pool to sheet"}
+                Previous
+              </button>
+              <span className="rounded-md border border-border px-3 py-2 text-muted-foreground">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages || loadingPool}
+              >
+                Next
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => setPage(totalPages)}
+                disabled={currentPage === totalPages || loadingPool}
+              >
+                Last
               </button>
             </div>
-          </div>
-        </div>
-
-        <input
-          className="w-full max-w-md rounded border border-input bg-background/80 p-2 text-sm"
-          placeholder="Search name, email, BPC ID, notes…"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
-        <p className="mt-2 text-xs text-muted-foreground">
-          {loadingPool
-            ? "Loading…"
-            : `${summary.pending ?? 0} pending · ${summary.approved ?? 0} approved · Showing ${total ? pageStart + 1 : 0}-${pageEnd} of ${total}`}
-        </p>
-
-        <div className="player-crm__table-wrap mt-4">
-          <table className="player-crm__table">
-            <thead>
-              <tr>
-                <th>BPC ID</th>
-                <th>Player</th>
-                <th>Email</th>
-                <th>Roles</th>
-                <th>MMR</th>
-                <th>Status</th>
-                <th>Notes</th>
-                <th>Joined</th>
-                <th aria-label="Actions" />
-              </tr>
-            </thead>
-            <tbody>
-              {substitutes.map((entry) => (
-                <tr key={entry.id}>
-                  <td className="font-mono text-xs">{entry.playerBpcId || "—"}</td>
-                  <td>
-                    <div className="player-crm__name-cell">
-                      <span>{entry.displayName || entry.steamName || entry.name || "—"}</span>
-                    </div>
-                  </td>
-                  <td className="max-w-48 truncate text-xs">{entry.email}</td>
-                  <td className="max-w-36 truncate text-xs">
-                    {sortRolesByDefault(entry.roles).join(", ") || "—"}
-                  </td>
-                  <td>{entry.mmr ?? "—"}</td>
-                  <td>
-                    <StatusBadge status={entry.registrationStatus} />
-                  </td>
-                  <td>
-                    <span className="player-crm__notes-preview" title={entry.notes || entry.adminNotes || ""}>
-                      {entry.notes || entry.adminNotes || "—"}
-                    </span>
-                  </td>
-                  <td className="text-xs text-muted-foreground">{formatDate(entry.createdAt).split(",")[0]}</td>
-                  <td>
-                    <button type="button" className="btn btn-outline btn-sm" onClick={() => openDetail(entry)}>
-                      Review
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {!loadingPool && !substitutes.length ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">No substitute pool entries match your search.</p>
-          ) : null}
-        </div>
-      </AdminGlassPanel>
-
-      <AdminGlassPanel subtle className="flex flex-wrap items-center justify-between gap-3 text-sm">
-        <div className="text-muted-foreground">
-          {loadingPool
-            ? "Loading pool…"
-            : `Showing ${total ? pageStart + 1 : 0}-${pageEnd} of ${total} pool entries`}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2 text-muted-foreground">
-            Per page
-            <select
-              className="rounded-md border border-input bg-background p-2 text-foreground"
-              value={pageSize}
-              onChange={(event) => setPageSize(Number(event.target.value))}
-            >
-              {PAGE_SIZE_OPTIONS.map((size) => (
-                <option key={size} value={size}>
-                  {size}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="button" className="btn btn-outline btn-sm" onClick={() => setPage(1)} disabled={currentPage === 1 || loadingPool}>
-            First
-          </button>
-          <button
-            type="button"
-            className="btn btn-outline btn-sm"
-            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-            disabled={currentPage === 1 || loadingPool}
-          >
-            Previous
-          </button>
-          <span className="rounded-md border border-border px-3 py-2 text-muted-foreground">
-            Page {currentPage} of {totalPages}
-          </span>
-          <button
-            type="button"
-            className="btn btn-outline btn-sm"
-            onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-            disabled={currentPage === totalPages || loadingPool}
-          >
-            Next
-          </button>
-          <button
-            type="button"
-            className="btn btn-outline btn-sm"
-            onClick={() => setPage(totalPages)}
-            disabled={currentPage === totalPages || loadingPool}
-          >
-            Last
-          </button>
-        </div>
-      </AdminGlassPanel>
+          </AdminGlassPanel>
+        </>
+      ) : null}
 
       {selectedEntry ? (
         <SubstituteDetailModal
           entry={selectedEntry}
           canWrite={canWrite}
+          readOnly={poolModalReadOnly}
           adminNotes={adminNotes}
           registrationStatus={registrationStatus}
           onAdminNotesChange={setAdminNotes}
@@ -1131,6 +1341,22 @@ export function SubstituteCrmPage({ tournamentId, setMessage, canWrite = true })
           onClose={closeDetail}
           onSave={saveDetail}
           saving={saving}
+        />
+      ) : null}
+
+      {viewRequest ? (
+        <RequestViewModal request={viewRequest} onClose={() => setViewRequest(null)} />
+      ) : null}
+
+      {editRequest ? (
+        <RequestEditModal
+          request={editRequest}
+          eligible={eligible}
+          tournamentId={tournamentId}
+          canWrite={canWrite}
+          onClose={() => setEditRequest(null)}
+          onDone={() => loadPool(currentPage)}
+          setMessage={setMessage}
         />
       ) : null}
 

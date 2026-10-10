@@ -800,3 +800,16 @@
 .player-crm__list--rows li:last-child {
   border-bottom: none;
 }
+
+.player-crm__actions-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
+  min-width: 7.5rem;
+}
+
+.player-crm__table--list th:last-child,
+.player-crm__table--list td:last-child {
+  text-align: right;
+}
