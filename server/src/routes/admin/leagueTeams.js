@@ -57,7 +57,7 @@ router.post("/", requireAdmin, requirePermission("teams.update"), async (req, re
   try {
     const payload = createSchema.parse(req.body);
     const team = await createLeagueTeam(payload);
-    invalidatePublicCache();
+    invalidatePublicCache({ redis: false });
     await writeAuditLog({
       adminUserId: req.adminUser.id,
       action: "league_team.create",
@@ -76,7 +76,7 @@ router.patch("/:id", requireAdmin, requirePermission("teams.update"), async (req
     const payload = patchSchema.parse(req.body);
     const team = await updateLeagueTeam(req.params.id, payload);
     if (!team) return res.status(404).json({ message: "League team not found" });
-    invalidatePublicCache();
+    invalidatePublicCache({ redis: false });
     await writeAuditLog({
       adminUserId: req.adminUser.id,
       action: "league_team.update",

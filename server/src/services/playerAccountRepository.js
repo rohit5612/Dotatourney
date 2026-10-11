@@ -423,7 +423,7 @@ export async function updatePlayerAccount(id, patch, db = pool) {
       },
       db,
     );
-    invalidatePublicCache();
+    invalidatePublicCache({ redis: false });
   }
 
   return account;

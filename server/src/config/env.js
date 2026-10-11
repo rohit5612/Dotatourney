@@ -109,10 +109,23 @@ export const env = {
   /** Upstash REST credentials — used when set (production); overrides REDIS_URL. */
   upstashRedisRestUrl: process.env.UPSTASH_REDIS_REST_URL?.trim() || "",
   upstashRedisRestToken: process.env.UPSTASH_REDIS_REST_TOKEN?.trim() || "",
-  /** L1 in-process TTL for public JSON (ms). */
-  publicCacheL1TtlMs: toNumber(process.env.PUBLIC_CACHE_L1_TTL_MS, 8_000),
+  /** L1 in-process TTL for Redis-backed public JSON (ms). */
+  publicCacheL1TtlMs: toNumber(process.env.PUBLIC_CACHE_L1_TTL_MS, 15_000),
+  /** L1 TTL for memory-only public JSON (players, matches, cards, league; ms). */
+  publicCacheMemoryL1TtlMs: toNumber(process.env.PUBLIC_CACHE_MEMORY_L1_TTL_MS, 45_000),
   /** L2 Redis TTL for public JSON (ms). */
-  publicCacheRedisTtlMs: toNumber(process.env.PUBLIC_CACHE_REDIS_TTL_MS, 45_000),
+  publicCacheRedisTtlMs: toNumber(process.env.PUBLIC_CACHE_REDIS_TTL_MS, 90_000),
+  /** Optional longer Redis TTL for /public/community responses (ms). 0 = use PUBLIC_CACHE_REDIS_TTL_MS. */
+  publicCacheRedisCommunityTtlMs: toNumber(process.env.PUBLIC_CACHE_REDIS_COMMUNITY_TTL_MS, 120_000),
+  /** When false, Redis is only used for invalidation bookkeeping if configured (normally leave true). */
+  publicCacheRedisL2Enabled: process.env.PUBLIC_CACHE_REDIS_L2_ENABLED !== "false",
+  /**
+   * Comma-separated logical cache key prefixes stored in Redis L2.
+   * Default: tournament:published, site-content, seasons:, community
+   */
+  publicCacheRedisKeyPrefixes: process.env.PUBLIC_CACHE_REDIS_KEY_PREFIXES?.trim() || "",
+  /** How long to reuse the last fetched Redis generation counter locally (ms). */
+  publicCacheGenerationLocalTtlMs: toNumber(process.env.PUBLIC_CACHE_GENERATION_LOCAL_TTL_MS, 30_000),
   /** Writable directory for hosted holo portrait GIFs (default: dota/public/cards/gifs). */
   portraitGifDir: process.env.PORTRAIT_GIF_DIR?.trim() || "",
   /**

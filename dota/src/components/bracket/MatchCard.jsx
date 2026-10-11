@@ -6,6 +6,11 @@ import {
 } from "./bracketLayout.js";
 import { BracketTokenHelp } from "./BracketTokenHelp.jsx";
 import { datetimeLocalToIso, toDatetimeLocalValue } from "../../utils/datetime.js";
+import {
+  formatScheduleMatchDate,
+  formatScheduleMatchTime,
+  isValidScheduleInstant,
+} from "../../utils/schedule.js";
 import { resolveDisplayWinToken, resolveDisplayTeamName } from "../../utils/playoffPresentation.js";
 
 /** 1-based round index from bracket win-token prefixes → Quarterfinals / Semifinals / Finals when applicable */
@@ -252,6 +257,7 @@ export function MatchCard({
   blastBracketDepths,
   blastVariant = null,
   allMatches = null,
+  scheduledStartAt = null,
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -278,6 +284,12 @@ export function MatchCard({
   const scoreWinner = scoreComplete ? (leftScore > rightScore ? match.team1 : match.team2) : "";
 
   const displayStatus = match.winner || match.status === "finished" ? "finished" : match.status || "upcoming";
+  const whenIso =
+    (match.slotAt && isValidScheduleInstant(match.slotAt) ? match.slotAt : null) ||
+    (scheduledStartAt && isValidScheduleInstant(scheduledStartAt) ? scheduledStartAt : null);
+  const showPublicWhen = !editable && displayStatus === "finished" && whenIso;
+  const publicWhenDate = showPublicWhen ? formatScheduleMatchDate(whenIso) : "";
+  const publicWhenTime = showPublicWhen ? formatScheduleMatchTime(whenIso) : "";
   const teamLinesReadOnly = !editable || !isEditing;
   const lockedBodyClass = editable && !isEditing ? "opacity-60" : "";
 
@@ -382,6 +394,13 @@ export function MatchCard({
         />
       </div>
       {match.winner ? <div className="mt-2 text-xs text-secondary">Winner: {match.winner}</div> : null}
+      {showPublicWhen && (publicWhenDate || publicWhenTime) ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          {publicWhenDate}
+          {publicWhenDate && publicWhenTime ? " · " : null}
+          {publicWhenTime}
+        </p>
+      ) : null}
 
       {editable && isEditing ? (
         <div className="mt-3 space-y-2">

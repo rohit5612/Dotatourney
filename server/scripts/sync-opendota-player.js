@@ -79,7 +79,7 @@ async function main() {
   }
 
   console.log(JSON.stringify({ account: account.slug, steam32, profile, leagues }, null, 2));
-  invalidatePublicCache();
+  invalidatePublicCache({ redis: false });
   await pool.end();
 }
 

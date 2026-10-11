@@ -24,6 +24,8 @@ export function BracketDiagram({
   blastSeedMatches = null,
   /** `glass` — frosted public shell on bracket & schedule pages */
   appearance = "default",
+  /** @type {Record<string, string>} match id → ISO start from schedule slots */
+  scheduleStartByMatchId = null,
 }) {
   const shellClass =
     appearance === "glass"
@@ -83,6 +85,7 @@ export function BracketDiagram({
           updateMatch={updateMatch}
           playoffFeedMatches={playoffFeedMatches || undefined}
           blastVariant={blastVariant}
+          scheduleStartByMatchId={scheduleStartByMatchId}
         />
       </div>
     );
@@ -106,6 +109,7 @@ export function BracketDiagram({
                       key={match.id}
                       match={match}
                       allMatches={matches}
+                      scheduledStartAt={scheduleStartByMatchId?.[match.id] ?? null}
                       editable={editable}
                       scoreDraft={scores[match.id] || {}}
                       setScoreDraft={(patch) =>

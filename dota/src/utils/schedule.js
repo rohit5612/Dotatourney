@@ -22,6 +22,20 @@ function ordinalSuffix(day) {
   }
 }
 
+/** Compact date for match cards (e.g. "Sat, 23 May"). */
+export function formatScheduleMatchDate(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
+/** Time only — pair with day heading or formatScheduleMatchDate. */
+export function formatScheduleMatchTime(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
 /** e.g. "Saturday 23rd May 2026" */
 export function formatScheduleDayHeading(iso) {
   const d = new Date(iso);

@@ -77,6 +77,7 @@ const PUBLIC_ROUTE_STYLES = {
 };
 import { PrimaryViewTabs, SchedulePhaseTabs } from "../components/navigation/TournamentTabs.jsx";
 import {
+  formatScheduleMatchTime,
   getMatchDisplayScores,
   groupScheduleSlotsByDate,
   isValidScheduleInstant,
@@ -1068,10 +1069,7 @@ const PublicScheduleMatchCard = memo(function PublicScheduleMatchCard({
   const isFinished = effectiveStatus === "finished";
   const logoPriority = isLive ? "high" : effectiveStatus === "upcoming" ? "auto" : "low";
   const streamUrl = typeof slot.streamUrl === "string" ? slot.streamUrl.trim() : "";
-  const start = new Date(slot.startAt);
-  const timeLabel = Number.isNaN(start.getTime())
-    ? ""
-    : start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const timeLabel = formatScheduleMatchTime(slot.startAt);
   const team1 = match?.team1;
   const team2 = match?.team2;
   const displayTeam1 = match ? resolveDisplayTeamName(match, 1, allMatches) : team1;
@@ -1358,6 +1356,15 @@ export function PublicSchedule({ event, message }) {
     [event?.matches],
   );
 
+  const scheduleStartByMatchId = useMemo(() => {
+    const map = {};
+    for (const slot of event?.schedule || []) {
+      if (!slot?.matchId || !isValidScheduleInstant(slot.startAt)) continue;
+      map[slot.matchId] = slot.startAt;
+    }
+    return map;
+  }, [event?.schedule]);
+
   const phaseTabOrder = useMemo(() => getSchedulePhaseTabOrder(event?.matches || []), [event?.matches]);
 
   const preferredPhaseTab = useMemo(
@@ -1614,6 +1621,7 @@ export function PublicSchedule({ event, message }) {
                       appearance="glass"
                       matches={matches}
                       blastSeedMatches={event?.matches ?? []}
+                      scheduleStartByMatchId={scheduleStartByMatchId}
                       playoffFeedMatches={
                         tab.id === "blast-qualifiers"
                           ? (groupedMatches["blast-playoffs"] || []).filter((m) => (m.roundIndex ?? 0) === 0)
@@ -1659,11 +1667,12 @@ export function PublicSchedule({ event, message }) {
             <PublicScheduleMatchListSection
               key={`finished-${phaseTab}`}
               title="Finished"
-              subtitle="Completed matches in start-time order."
+              subtitle="Grouped by match day."
               show={scheduleByStatus.finished.length > 0}
               slots={scheduleByStatus.finished}
               matches={event?.matches}
               teamOptions={scheduleTeamOptions}
+              grouped
               renderScheduleSlot={renderScheduleSlot}
             />
 

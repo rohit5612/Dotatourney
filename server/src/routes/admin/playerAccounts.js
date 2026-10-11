@@ -208,7 +208,7 @@ router.post("/:id/dota-stats/sync", requireAdmin, requirePermission("playerCrm.a
           });
           return;
         }
-        invalidatePublicCache();
+        invalidatePublicCache({ redis: false });
         await writeAuditLog({
           adminUserId,
           action: "player_account.dota_stats_sync",
