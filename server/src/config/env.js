@@ -1,6 +1,10 @@
 import dotenv from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-dotenv.config();
+/** Load server/.env regardless of PM2 cwd (dotenv defaults to process.cwd()). */
+const serverRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+dotenv.config({ path: path.join(serverRoot, ".env") });
 
 function toNumber(value, fallback) {
   const parsed = Number(value);

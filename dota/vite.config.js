@@ -1,6 +1,58 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+
+const CASE_STUDY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "public/case-study");
+
+/** Gitignored static case study — must win over SPA fallback for /case-study and /case-study/ */
+function caseStudyPublicPlugin() {
+  const MIME = {
+    ".css": "text/css; charset=utf-8",
+    ".html": "text/html; charset=utf-8",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".txt": "text/plain; charset=utf-8",
+  };
+
+  function serve(req, res, next) {
+    if (!fs.existsSync(CASE_STUDY_ROOT)) return next();
+
+    const pathname = (req.url || "").split("?")[0];
+    if (!pathname.startsWith("/case-study")) return next();
+
+    let rel = pathname.slice("/case-study".length) || "/";
+    if (rel === "/" || rel.endsWith("/")) {
+      rel = `${rel.replace(/\/$/, "")}/index.html`;
+    }
+    if (!rel.startsWith("/")) rel = `/${rel}`;
+
+    const filePath = path.normalize(path.join(CASE_STUDY_ROOT, rel));
+    if (!filePath.startsWith(CASE_STUDY_ROOT) || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+      return next();
+    }
+
+    const ext = path.extname(filePath).toLowerCase();
+    res.statusCode = 200;
+    if (MIME[ext]) res.setHeader("Content-Type", MIME[ext]);
+    fs.createReadStream(filePath).pipe(res);
+  }
+
+  return {
+    name: "case-study-public",
+    enforce: "pre",
+    configureServer(server) {
+      server.middlewares.use(serve);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(serve);
+    },
+  };
+}
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -62,6 +114,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     plugins: [
+      caseStudyPublicPlugin(),
       fixBackdropFilterMinify(),
       {
         name: "inject-sharing-meta",
