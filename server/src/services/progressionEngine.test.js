@@ -97,6 +97,33 @@ describe("progressionEngine", () => {
     assert.equal(corrected.find((m) => m.id === "sf1").team2, "Team Beta");
   });
 
+  it("reapplyAllProgression does not feed middle Play-In winners into crossover rows", () => {
+    const middle = {
+      id: "pi-m0",
+      stageKey: "blast-playin",
+      roundIndex: 0,
+      matchIndex: 0,
+      team1: "Group A #3",
+      team2: "Group B #4",
+      winner: "Team Mid",
+      status: "finished",
+      meta: { winToken: "PIR1M1W", seriesRuleKey: "blast-mp-semifinal" },
+    };
+    const cross = {
+      id: "pi-x0",
+      stageKey: "blast-playin",
+      roundIndex: 1,
+      matchIndex: 0,
+      team1: "Group A #2",
+      team2: "LCR1M1W",
+      winner: null,
+      status: "upcoming",
+      meta: { winToken: "PIR2M1W", seriesRuleKey: "blast-playin-cross", blastSlot1: "Group A #2" },
+    };
+    const corrected = reapplyAllProgression([middle, cross]);
+    assert.equal(corrected.find((m) => m.id === "pi-x0").team1, "Group A #2");
+  });
+
   it("reapplyAllProgression ignores unrelated group wins with the same team name", () => {
     const groupWin = {
       id: "ga1",

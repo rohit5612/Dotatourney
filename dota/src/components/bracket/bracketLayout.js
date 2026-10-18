@@ -423,6 +423,15 @@ function inferFeedTokenFromStructure(producer, consumer, side, allMatches) {
 
   if (consumerRound !== producerRound + 1) return null;
 
+  if (
+    isBlastPlayInCrossMatch(consumer) &&
+    consumer.stageKey === "blast-playin" &&
+    producer.stageKey === "blast-playin" &&
+    producer.meta?.seriesRuleKey === "blast-mp-semifinal"
+  ) {
+    return null;
+  }
+
   if (consumerMatch === producerMatch) {
     return token;
   }
@@ -777,11 +786,7 @@ export function buildBlastQualifierDisplayColumns(matches, baselinePairs) {
 
   const midKey = matchRoundKey({ stageKey: "blast-playin", roundIndex: midRounds[0] });
   const crossKey = matchRoundKey({ stageKey: "blast-playin", roundIndex: crossRounds[0] });
-  if (midKey === crossKey) {
-    return { pairs: baselinePairs, tieredComposite: false, lastLcKey: null };
-  }
-
-  const omit = new Set([midKey, crossKey]);
+  const omit = new Set(midKey === crossKey ? [midKey] : [midKey, crossKey]);
   const lcPairs = baselinePairs.filter(([k]) => k.startsWith("blast-lastchance"));
   const tail = baselinePairs.filter(([k]) => !omit.has(k) && !k.startsWith("blast-lastchance"));
   const lastLcKey = lcPairs.length ? lcPairs[lcPairs.length - 1][0] : null;

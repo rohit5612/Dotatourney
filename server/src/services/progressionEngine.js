@@ -67,6 +67,18 @@ function slotKey(matchId, side) {
   return `${matchId}:${side}`;
 }
 
+function isBlastPlayInCrossMatch(match) {
+  if (match?.stageKey !== "blast-playin") return false;
+  const key = match?.meta?.seriesRuleKey || match?.meta?.presentationSeriesRuleKey;
+  return key === "blast-playin-cross";
+}
+
+function isBlastMiddlePlayInMatch(match) {
+  if (match?.stageKey !== "blast-playin") return false;
+  const key = match?.meta?.seriesRuleKey || match?.meta?.presentationSeriesRuleKey;
+  return key === "blast-mp-semifinal";
+}
+
 function inferFeedTokenFromStructure(producer, consumer, side, allMatches) {
   const token = producer.meta?.winToken;
   if (!token || compareMatchOrder(producer, consumer) >= 0) return null;
@@ -105,6 +117,11 @@ function inferFeedTokenFromStructure(producer, consumer, side, allMatches) {
   }
 
   if (consumerRound !== producerRound + 1) return null;
+
+  // BLAST n=12: crossover is #2 vs LC — not the next hop from middle Play-In at the same match index.
+  if (isBlastPlayInCrossMatch(consumer) && isBlastMiddlePlayInMatch(producer)) {
+    return null;
+  }
 
   if (consumerMatch === producerMatch) {
     return token;
