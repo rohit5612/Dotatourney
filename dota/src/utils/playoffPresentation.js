@@ -342,8 +342,6 @@ export function resolveDisplayTeamName(match, side, allMatches = null) {
     return feeder.winner;
   }
 
-  const pending = matchupLabelFromMatch(feeder, allMatches);
-  if (pending) return pending;
-
+  // Upstream round not decided — keep bracket tags (QFR… / SFR… / PIR…) for open slots.
   return displayToken;
 }
