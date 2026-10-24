@@ -174,7 +174,56 @@ function consumerSideFedByProducer(consumer, side, producer, allMatches) {
   return false;
 }
 
+function findMatchByWinToken(allMatches, token) {
+  const t = String(token || "").trim();
+  if (!t) return null;
+  return (allMatches || []).find((m) => m.meta?.winToken === t) || null;
+}
+
+function matchupLabelFromUpstreamToken(token, allMatches, depth = 0) {
+  if (depth >= 4) return null;
+  const upstream = findMatchByWinToken(allMatches, token);
+  if (!upstream) return null;
+  return matchupLabelFromMatch(upstream, allMatches, depth + 1);
+}
+
+/**
+ * Human-readable label for an unfinished feeder match (team names or nested matchup).
+ */
+export function matchupLabelFromMatch(match, allMatches, depth = 0) {
+  if (!match || depth >= 4) return null;
+  if (match.winner) return String(match.winner);
+
+  const t1 = String(match.team1 || "").trim();
+  const t2 = String(match.team2 || "").trim();
+  const tok1 = TEAM_TOKEN_REGEX.test(t1);
+  const tok2 = TEAM_TOKEN_REGEX.test(t2);
+
+  if (!tok1 && !tok2) return `${t1} vs ${t2}`;
+
+  if (!tok1 && tok2) {
+    const sub = matchupLabelFromUpstreamToken(t2, allMatches, depth);
+    if (sub && sub.includes(" vs ") && !t1) return sub;
+    return sub ? `${t1} vs ${sub}` : t1;
+  }
+  if (tok1 && !tok2) {
+    const sub = matchupLabelFromUpstreamToken(t1, allMatches, depth);
+    return sub ? `${sub} vs ${t2}` : t2;
+  }
+
+  const sub1 = matchupLabelFromUpstreamToken(t1, allMatches, depth);
+  const sub2 = matchupLabelFromUpstreamToken(t2, allMatches, depth);
+  if (sub1 && sub2) return `${sub1} vs ${sub2}`;
+  return sub1 || sub2;
+}
+
 function findFeederMatchForConsumerSlot(consumer, side, allMatches) {
+  const slotToken = String(consumer?.[side] || "").trim();
+  if (TEAM_TOKEN_REGEX.test(slotToken)) {
+    const direct = findMatchByWinToken(allMatches, slotToken);
+    if (direct && compareMatchOrder(direct, consumer) < 0) return direct;
+  }
+
   const sorted = [...(allMatches || [])].sort(compareMatchOrder);
   for (let index = sorted.length - 1; index >= 0; index -= 1) {
     const candidate = sorted[index];
@@ -269,13 +318,25 @@ export function resolveDisplayTeamName(match, side, allMatches = null) {
 
   if (!allMatches?.length) return displayToken;
 
-  const feeder = findFeederMatchForConsumerSlot(match, slotSide, allMatches);
+  let feeder =
+    findFeederMatchForConsumerSlot(match, slotSide, allMatches) ||
+    findMatchByWinToken(allMatches, raw);
+
+  // Token slots (QF/SF feeders) → show the upstream match, not the whole semifinal row.
+  if (feeder && TEAM_TOKEN_REGEX.test(String(raw || "").trim())) {
+    const byToken = findMatchByWinToken(allMatches, raw);
+    if (byToken) feeder = byToken;
+  }
+
   if (feeder?.winner) {
     if (String(displayToken).endsWith("L")) {
       return feeder.winner === feeder.team1 ? feeder.team2 : feeder.team1;
     }
     return feeder.winner;
   }
+
+  const pending = matchupLabelFromMatch(feeder, allMatches);
+  if (pending) return pending;
 
   return displayToken;
 }
