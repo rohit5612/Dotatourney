@@ -31,6 +31,16 @@ function playoffRoundsFromEnd(allMatches, stageKey, roundIndex) {
   return rounds.length - 1 - ordinal;
 }
 
+function blastPairedSemifinalReceivesQuarterfinal(producer, consumer, side, allMatches) {
+  if (producer?.stageKey !== "blast-playoffs" || consumer?.stageKey !== "blast-playoffs") return false;
+  if (side !== "team2") return false;
+  if (!/^QFR/.test(String(producer.meta?.winToken || ""))) return false;
+  const producerOrd = stageRoundOrdinal(allMatches, "blast-playoffs", producer.roundIndex ?? 0);
+  const consumerOrd = stageRoundOrdinal(allMatches, "blast-playoffs", consumer.roundIndex ?? 0);
+  if (consumerOrd !== producerOrd + 1) return false;
+  return (consumer.matchIndex ?? 0) === (producer.matchIndex ?? 0);
+}
+
 function canonicalPlayoffWinToken(match, allMatches) {
   const stageKey = match?.stageKey;
   if (!isPlayoffStageKey(stageKey)) return match?.meta?.winToken || null;
@@ -147,6 +157,9 @@ function consumerSideFedByProducer(consumer, side, producer, allMatches) {
   }
 
   const structuralToken = inferFeedTokenFromStructure(producer, consumer, side, allMatches);
+  if (structuralToken === producerWinToken) {
+    if (blastPairedSemifinalReceivesQuarterfinal(producer, consumer, side, allMatches)) return true;
+  }
   if (!structuralToken || structuralToken !== producerWinToken) return false;
 
   if (feedMeta === producerWinToken || slotValue === producerWinToken) return true;

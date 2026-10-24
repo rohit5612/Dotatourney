@@ -1,8 +1,10 @@
 import {
+  blastPairedSemifinalReceivesQuarterfinal,
   buildPlayoffTokenAliasMap,
   canonicalPlayoffWinToken,
   isPlayoffStageKey,
   playoffRoundsFromEnd,
+  repairBlastSemifinalQuarterfinalFeeds,
   resolvePlayoffSlotDisplay,
   stageRoundOrdinal,
 } from "./playoffRoundUtils.js";
@@ -167,6 +169,9 @@ function consumerSideFedByProducer(consumer, side, producer, allMatches) {
   }
 
   const structuralToken = inferFeedTokenFromStructure(producer, consumer, side, allMatches);
+  if (structuralToken === producerWinToken) {
+    if (blastPairedSemifinalReceivesQuarterfinal(producer, consumer, side, allMatches)) return true;
+  }
   if (!structuralToken || structuralToken !== producerWinToken) return false;
 
   if (feedMeta === producerWinToken || slotValue === producerWinToken) return true;
@@ -182,6 +187,15 @@ function consumerSideFedByProducer(consumer, side, producer, allMatches) {
 }
 
 function slotShouldReceiveToken(match, side, token, producer, allMatches) {
+  if (
+    blastPairedSemifinalReceivesQuarterfinal(producer, match, side, allMatches) &&
+    producer.meta?.winToken === token
+  ) {
+    const feedMeta = match.meta?.[`${side}Feed`];
+    if (feedMeta && feedMeta !== token && !/^QFR1M\d+W$/.test(String(feedMeta))) return false;
+    return true;
+  }
+
   const slotValue = String(match[side] || "");
   if (!TEAM_TOKEN_REGEX.test(slotValue) || slotValue !== token) return false;
 
@@ -349,24 +363,25 @@ export function applyProgression(matches, changedMatch) {
 export function reapplyAllProgression(matches) {
   if (!matches?.length) return matches || [];
 
-  const feedMap = buildProgressionFeedMap(matches);
-  let current = resetProgressiveSlots(matches, feedMap);
+  const repaired = repairBlastSemifinalQuarterfinalFeeds(matches);
+  const feedMap = buildProgressionFeedMap(repaired);
+  let current = resetProgressiveSlots(repaired, feedMap);
 
-  const finished = [...matches]
+  const finished = [...repaired]
     .filter((match) => match.winner && match.meta?.winToken)
     .sort(compareMatchOrder);
 
   for (const finishedMatch of finished) {
-    const live = matches.find((match) => match.id === finishedMatch.id);
+    const live = repaired.find((match) => match.id === finishedMatch.id);
     if (!live) continue;
 
+    const row = current.find((match) => match.id === live.id);
+    if (!row) continue;
+
     const state = {
-      ...current.find((match) => match.id === live.id),
-      team1: live.team1,
-      team2: live.team2,
+      ...row,
       winner: live.winner,
       status: live.status,
-      meta: live.meta,
     };
 
     current = current.map((match) => (match.id === live.id ? state : match));

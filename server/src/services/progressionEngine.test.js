@@ -97,6 +97,35 @@ describe("progressionEngine", () => {
     assert.equal(corrected.find((m) => m.id === "sf1").team2, "Team Beta");
   });
 
+  it("reapplyAllProgression fills paired semifinal from QF winner when team2 token was wrong", () => {
+    const qf1 = {
+      id: "qf1",
+      stageKey: "blast-playoffs",
+      roundIndex: 0,
+      matchIndex: 0,
+      team1: "Chaos Rift",
+      team2: "Invictus",
+      winner: "Invictus",
+      status: "finished",
+      meta: { winToken: "QFR1M1W" },
+    };
+    const sf1 = {
+      id: "sf1",
+      stageKey: "blast-playoffs",
+      roundIndex: 1,
+      matchIndex: 0,
+      team1: "Warpath",
+      team2: "QFR1M2W",
+      winner: null,
+      status: "upcoming",
+      meta: { winToken: "SFR1M1W", team2Feed: "QFR1M2W" },
+    };
+    const corrected = reapplyAllProgression([qf1, sf1]);
+    const sf = corrected.find((m) => m.id === "sf1");
+    assert.equal(sf.team2, "Invictus");
+    assert.equal(sf.meta.team2Feed, "QFR1M1W");
+  });
+
   it("reapplyAllProgression fills blast QF from finished play-in win tokens", () => {
     const pi1 = {
       id: "pi1",

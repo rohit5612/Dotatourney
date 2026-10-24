@@ -152,6 +152,52 @@ export function buildStoredToCanonicalDisplayMap(matches) {
 const TEAM_TOKEN_REGEX = /^[A-Z0-9_]+$/;
 
 /**
+ * BLAST main path: QF match *i* winner feeds semifinal match *i* on team2 (group #1 on team1).
+ */
+export function blastPairedSemifinalReceivesQuarterfinal(producer, consumer, side, allMatches) {
+  if (producer?.stageKey !== "blast-playoffs" || consumer?.stageKey !== "blast-playoffs") return false;
+  if (side !== "team2") return false;
+  if (!/^QFR/.test(String(producer.meta?.winToken || ""))) return false;
+  const producerOrd = stageRoundOrdinal(allMatches, "blast-playoffs", producer.roundIndex ?? 0);
+  const consumerOrd = stageRoundOrdinal(allMatches, "blast-playoffs", consumer.roundIndex ?? 0);
+  if (consumerOrd !== producerOrd + 1) return false;
+  return (consumer.matchIndex ?? 0) === (producer.matchIndex ?? 0);
+}
+
+/** Expected QF win-token on semifinal match *i* team2. */
+export function blastSemifinalQuarterfinalFeedToken(match, allMatches) {
+  if (match?.stageKey !== "blast-playoffs") return null;
+  const rounds = distinctStageRoundIndices(allMatches, "blast-playoffs");
+  if (rounds.length < 2) return null;
+  const ord = stageRoundOrdinal(allMatches, "blast-playoffs", match.roundIndex ?? 0);
+  if (ord !== rounds.length - 2) return null;
+  const mi = match.matchIndex ?? 0;
+  return `QFR1M${mi + 1}W`;
+}
+
+/**
+ * Fix mis-seeded semifinal team2 placeholders (e.g. both rows set to QFR1M2W).
+ * @param {object[]} matches
+ */
+export function repairBlastSemifinalQuarterfinalFeeds(matches) {
+  if (!matches?.length) return matches;
+  return matches.map((match) => {
+    const expected = blastSemifinalQuarterfinalFeedToken(match, matches);
+    if (!expected) return match;
+    const team2 = String(match.team2 || "");
+    const feed = match.meta?.team2Feed;
+    const wrongQfToken = /^QFR1M\d+W$/.test(team2) && team2 !== expected;
+    const wrongFeed = typeof feed === "string" && /^QFR1M\d+W$/.test(feed) && feed !== expected;
+    if (!wrongQfToken && !wrongFeed) return match;
+    return {
+      ...match,
+      team2: expected,
+      meta: { ...(match.meta || {}), team2Feed: expected },
+    };
+  });
+}
+
+/**
  * Display label for unresolved playoff feeder slots (team1/team2 placeholders).
  * @param {string} value
  * @param {object} consumerMatch
