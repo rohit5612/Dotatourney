@@ -72,6 +72,18 @@ function compareMatchOrder(a, b) {
   return (a.matchIndex ?? 0) - (b.matchIndex ?? 0);
 }
 
+function isBlastPlayInCrossMatch(match) {
+  if (match?.stageKey !== "blast-playin") return false;
+  const key = match?.meta?.seriesRuleKey || match?.meta?.presentationSeriesRuleKey;
+  return key === "blast-playin-cross";
+}
+
+function isBlastMiddlePlayInMatch(match) {
+  if (match?.stageKey !== "blast-playin") return false;
+  const key = match?.meta?.seriesRuleKey || match?.meta?.presentationSeriesRuleKey;
+  return key === "blast-mp-semifinal";
+}
+
 function inferFeedTokenFromStructure(producer, consumer, side, allMatches) {
   const token = producer.meta?.winToken;
   if (!token || compareMatchOrder(producer, consumer) >= 0) return null;
@@ -109,20 +121,35 @@ function inferFeedTokenFromStructure(producer, consumer, side, allMatches) {
   }
 
   if (consumerRound !== producerRound + 1) return null;
+
+  if (isBlastPlayInCrossMatch(consumer) && isBlastMiddlePlayInMatch(producer)) {
+    return null;
+  }
+
   if (consumerMatch === producerMatch) return token;
   return null;
 }
 
+function isQualifierStageKey(stageKey) {
+  const key = String(stageKey || "");
+  return key === "blast-playin" || key === "blast-lastchance";
+}
+
 function consumerSideFedByProducer(consumer, side, producer, allMatches) {
-  const structuralToken = inferFeedTokenFromStructure(producer, consumer, side, allMatches);
   const producerWinToken = producer.meta?.winToken;
-  if (!producerWinToken || structuralToken !== producerWinToken) return false;
+  if (!producerWinToken) return false;
 
   const slotValue = String(consumer[side] || "");
   const feedMeta = consumer.meta?.[`${side}Feed`];
 
-  if (feedMeta === producerWinToken) return true;
-  if (slotValue === producerWinToken) return true;
+  if (isQualifierStageKey(producer.stageKey) && isPlayoffStageKey(consumer.stageKey || "")) {
+    if (feedMeta === producerWinToken || slotValue === producerWinToken) return true;
+  }
+
+  const structuralToken = inferFeedTokenFromStructure(producer, consumer, side, allMatches);
+  if (!structuralToken || structuralToken !== producerWinToken) return false;
+
+  if (feedMeta === producerWinToken || slotValue === producerWinToken) return true;
 
   const producerFeedLabel = canonicalPlayoffWinToken(producer, allMatches);
   if (producerFeedLabel && slotValue === producerFeedLabel) return true;

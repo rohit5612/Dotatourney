@@ -97,6 +97,44 @@ describe("progressionEngine", () => {
     assert.equal(corrected.find((m) => m.id === "sf1").team2, "Team Beta");
   });
 
+  it("reapplyAllProgression fills blast QF from finished play-in win tokens", () => {
+    const pi1 = {
+      id: "pi1",
+      stageKey: "blast-playin",
+      roundIndex: 0,
+      matchIndex: 0,
+      team1: "Obsidian Core",
+      team2: "Chaos Rift",
+      winner: "Chaos Rift",
+      status: "finished",
+      meta: { winToken: "PIR1M1W", seriesRuleKey: "blast-mp-semifinal" },
+    };
+    const piCross = {
+      id: "pi2",
+      stageKey: "blast-playin",
+      roundIndex: 1,
+      matchIndex: 0,
+      team1: "Mortal Oath",
+      team2: "Crimson Veil",
+      winner: "Crimson Veil",
+      status: "finished",
+      meta: { winToken: "PIR2M1W", seriesRuleKey: "blast-playin-cross" },
+    };
+    const qf = {
+      id: "qf1",
+      stageKey: "blast-playoffs",
+      roundIndex: 0,
+      matchIndex: 0,
+      team1: "PIR1M1W",
+      team2: "PIR2M2W",
+      winner: null,
+      status: "upcoming",
+      meta: { winToken: "QFR1M1W", team2Feed: "PIR2M2W" },
+    };
+    const corrected = reapplyAllProgression([pi1, piCross, qf]);
+    assert.equal(corrected.find((m) => m.id === "qf1").team1, "Chaos Rift");
+  });
+
   it("reapplyAllProgression does not feed middle Play-In winners into crossover rows", () => {
     const middle = {
       id: "pi-m0",

@@ -149,16 +149,27 @@ function resolveProgressionFeedToken(value, consumer, side, allMatches) {
   return text;
 }
 
+function isQualifierStageKey(stageKey) {
+  const key = String(stageKey || "");
+  return key === "blast-playin" || key === "blast-lastchance";
+}
+
 function consumerSideFedByProducer(consumer, side, producer, allMatches) {
-  const structuralToken = inferFeedTokenFromStructure(producer, consumer, side, allMatches);
   const producerWinToken = producer.meta?.winToken;
-  if (!producerWinToken || structuralToken !== producerWinToken) return false;
+  if (!producerWinToken) return false;
 
   const slotValue = String(consumer[side] || "");
   const feedMeta = consumer.meta?.[`${side}Feed`];
 
-  if (feedMeta === producerWinToken) return true;
-  if (slotValue === producerWinToken) return true;
+  // Play-In / Last chance → playoffs: QF slots hold PIR/LCR tokens (no structural link across stages).
+  if (isQualifierStageKey(producer.stageKey) && isPlayoffStageKey(consumer.stageKey || "")) {
+    if (feedMeta === producerWinToken || slotValue === producerWinToken) return true;
+  }
+
+  const structuralToken = inferFeedTokenFromStructure(producer, consumer, side, allMatches);
+  if (!structuralToken || structuralToken !== producerWinToken) return false;
+
+  if (feedMeta === producerWinToken || slotValue === producerWinToken) return true;
 
   const producerFeedLabel = canonicalPlayoffWinToken(producer, allMatches);
   if (producerFeedLabel && slotValue === producerFeedLabel) return true;
