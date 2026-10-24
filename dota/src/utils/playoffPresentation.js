@@ -110,14 +110,21 @@ function inferFeedTokenFromStructure(producer, consumer, side, allMatches) {
     const consumerOrd = stageRoundOrdinal(allMatches, consumer.stageKey, consumerRound);
     if (consumerOrd !== producerOrd + 1) return null;
 
-    if (
-      consumer.stageKey === "blast-playoffs" &&
-      consumerOrd === producerOrd + 1 &&
-      consumerMatch === producerMatch &&
-      /^QFR/.test(String(producer.meta?.winToken || ""))
-    ) {
-      return side === "team2" ? token : null;
+    if (consumer.stageKey === "blast-playoffs") {
+      const producerTok = String(producer.meta?.winToken || "");
+      // QF *i* → SF *i* on team2 (group #1 on team1); not a converging single-elim tree.
+      if (/^QFR/.test(producerTok) && consumerMatch === producerMatch) {
+        return side === "team2" ? token : null;
+      }
+      // SF *i* → Grand final slot *i*.
+      if (/^SFR/.test(producerTok) && consumerMatch === 0) {
+        if (side === "team1" && producerMatch === 0) return token;
+        if (side === "team2" && producerMatch === 1) return token;
+        return null;
+      }
+      return null;
     }
+
     if (consumerOrd >= 2 && consumerMatch === 0) {
       if (side === "team1" && producerMatch === 0) return token;
       if (side === "team2" && producerMatch === 1) return token;
